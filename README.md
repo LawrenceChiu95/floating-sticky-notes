@@ -19,6 +19,8 @@
 
 `0.1.9` 是首个公开源码版本，也是首个具备 Windows 自动更新能力的版本。Windows 安装包仍处于草稿状态，完成 Windows 真机安装和更新验证后才会正式发布。
 
+项目在公开前已经完成 `0.1.0` 至 `0.1.8` 的内部迭代；经过隐私清洗的版本历史见 [变更日志](CHANGELOG.md)。
+
 更新资源存放在 [`floating-sticky-notes-updates`](https://github.com/LawrenceChiu95/floating-sticky-notes-updates)。源码、Issue 和变更记录在本仓库维护。
 
 ## 从源码运行
