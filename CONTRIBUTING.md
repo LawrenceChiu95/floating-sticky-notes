@@ -1,24 +1,24 @@
-# Contributing
+# 贡献指南
 
-Thanks for helping improve Floating Sticky Notes.
+感谢你参与改进悬浮便签。
 
-## Before You Start
+## 开始之前
 
-- Search existing issues before opening a new one.
-- Small fixes do not require an issue first.
-- Open an issue before a large feature, storage-format change, installer change, or update-system change so the direction can be agreed on before implementation.
-- Report security vulnerabilities through the process in [SECURITY.md](SECURITY.md), not through a public issue.
+- 新建 Issue 前先搜索是否已有相同问题。
+- 小型修复可以直接提交 Pull Request，不要求先建 Issue。
+- 大型功能、数据格式变化、安装器变化或更新系统变化，应先建 Issue 对齐方向。
+- 安全漏洞不要提交公开 Issue，请按照 [安全策略](SECURITY.md) 私下报告。
 
-## Development Setup
+## 开发环境
 
-Use Node.js 22 and npm 10:
+使用 Node.js 22 和 npm 10：
 
 ```bash
 npm ci
 npm run dev
 ```
 
-Before submitting a pull request, run:
+提交 Pull Request 前运行：
 
 ```bash
 npm test
@@ -26,33 +26,33 @@ npm run build
 npm audit --omit=dev
 ```
 
-## Pull Requests
+## Pull Request
 
-External contributors should fork the repository, create a focused branch, and open a pull request. Repository maintainers may push directly to `main`; pull requests remain available for changes that benefit from discussion or staged review.
+外部贡献者应先 Fork 本仓库，在自己的分支中完成修改，再提交 Pull Request。仓库维护者可以直接向 `main` 推送；对于需要讨论或分阶段审查的修改，也可以主动使用 Pull Request。
 
-Keep each pull request focused on one problem. Include:
+每个 Pull Request 应只处理一个明确问题，并说明：
 
-- The user-visible problem and the chosen behavior
-- Tests for changed behavior
-- Relevant manual verification steps
-- An entry under `Unreleased` in `CHANGELOG.md` for user-visible changes
+- 要解决的用户问题和最终行为
+- 为行为变化增加的测试
+- 相关人工验证步骤
+- 用户可见变化对应的 `CHANGELOG.md`“未发布”条目
 
-Do not commit generated installers, release directories, user data, credentials, local environment files, or machine-specific paths.
+不要提交生成的安装包、release 目录、用户数据、凭据、本地环境文件或机器专属路径。
 
-## Project Boundaries
+## 项目边界
 
-- Keep runtime `name: floating-sticky-notes`, `appId: local.lawrence.floating-sticky-notes`, and `productName: 悬浮便签` unless a migration plan explicitly handles install identity and local data.
-- Keep `%APPDATA%\floating-sticky-notes` compatible across Windows updates.
-- Keep automatic updates limited to packaged Windows builds.
-- Do not add a portable Windows target; the updater supports the NSIS Setup installation path.
-- Treat native Windows behavior as unverified until it has been checked on Windows hardware or a Windows virtual machine.
+- 除非迁移方案明确处理安装身份和本地数据，否则不要修改 runtime `name: floating-sticky-notes`、`appId: local.lawrence.floating-sticky-notes` 和 `productName: 悬浮便签`。
+- Windows 更新必须继续兼容 `%APPDATA%\floating-sticky-notes`。
+- 自动更新只在 Windows 打包版本中启用。
+- 不要增加 portable Windows 构建目标；自动更新只支持 NSIS Setup 安装路径。
+- Windows 原生行为必须经过 Windows 实机或虚拟机验证，不能用 macOS 交叉构建结果代替。
 
-## Commit Messages
+## Commit 信息
 
-Write concise imperative messages, for example:
+使用简短、明确的祈使句，例如：
 
 ```text
-Fix tray update status handling
-Add checklist keyboard regression test
-Document Windows release verification
+修复托盘更新状态处理
+增加清单键盘操作回归测试
+补充 Windows 发布验证说明
 ```

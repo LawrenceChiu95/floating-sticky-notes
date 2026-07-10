@@ -1,50 +1,50 @@
-name: Bug report
-description: Report a reproducible problem in Floating Sticky Notes.
-title: "[Bug]: "
-labels: [bug]
+name: 报告 Bug
+description: 报告一个可以稳定复现的问题。
+title: "[Bug] "
+labels: [缺陷]
 body:
   - type: markdown
     attributes:
-      value: Please search existing issues before submitting a new report.
+      value: 提交前请先搜索是否已经存在相同问题。
   - type: input
     id: version
     attributes:
-      label: Version
+      label: 应用版本
       placeholder: 0.1.9
     validations:
       required: true
   - type: dropdown
     id: platform
     attributes:
-      label: Platform
+      label: 操作系统
       options:
         - Windows 11
         - Windows 10
-        - macOS Apple Silicon
-        - Other
+        - Apple Silicon macOS
+        - 其他
     validations:
       required: true
   - type: textarea
     id: steps
     attributes:
-      label: Steps to reproduce
-      description: Include the smallest reliable sequence that triggers the problem.
+      label: 复现步骤
+      description: 请提供可以稳定触发问题的最短步骤。
     validations:
       required: true
   - type: textarea
     id: expected
     attributes:
-      label: Expected behavior
+      label: 预期行为
     validations:
       required: true
   - type: textarea
     id: actual
     attributes:
-      label: Actual behavior
+      label: 实际行为
     validations:
       required: true
   - type: textarea
     id: diagnostics
     attributes:
-      label: Additional diagnostics
-      description: Add screenshots or logs after removing personal note content and local paths.
+      label: 补充信息
+      description: 可以添加截图或日志，但请先移除便签内容和本机路径等隐私信息。

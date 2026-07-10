@@ -2,7 +2,7 @@
   "name": "floating-sticky-notes",
   "version": "0.1.9",
   "private": true,
-  "description": "Windows desktop floating sticky notes for local-only notes and images.",
+  "description": "本地优先、始终置顶的 Windows 桌面便签应用。",
   "license": "MIT",
   "author": "LawrenceChiu95",
   "repository": {

@@ -1,18 +1,18 @@
-## Summary
+## 变更说明
 
-Describe the user-visible problem and the chosen behavior.
+请说明要解决的用户问题以及最终采用的行为。
 
-## Verification
+## 验证
 
 - [ ] `npm test`
 - [ ] `npm run build`
 - [ ] `npm audit --omit=dev`
-- [ ] Manual checks are described below when native or visual behavior changed
+- [ ] 如果修改了原生或视觉行为，已在下方说明人工验证结果
 
-## Change Log
+## 变更日志
 
-- [ ] `CHANGELOG.md` was updated under `Unreleased`, or this change is not user-visible
+- [ ] 已在 `CHANGELOG.md` 的“未发布”部分增加条目，或本次修改不影响用户
 
-## Native Checks
+## 原生环境检查
 
-List Windows or macOS verification performed. Write `Not applicable` when the change has no native behavior.
+请列出完成的 Windows 或 macOS 验证；与原生行为无关时填写“不适用”。

@@ -1,4 +1,4 @@
-name: CI
+name: 持续集成
 
 on:
   push:
@@ -14,27 +14,28 @@ concurrency:
 
 jobs:
   test:
+    name: 测试与构建
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
-      - name: Check out repository
+      - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      - name: 配置 Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
 
-      - name: Install dependencies
+      - name: 安装依赖
         run: npm ci
 
-      - name: Run tests
+      - name: 运行测试
         run: npm test
 
-      - name: Build application
+      - name: 构建应用
         run: npm run build
 
-      - name: Audit production dependencies
+      - name: 审计运行时依赖
         run: npm audit --omit=dev

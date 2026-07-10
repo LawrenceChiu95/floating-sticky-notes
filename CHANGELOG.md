@@ -1,35 +1,39 @@
-# Changelog
+# 变更日志
 
-All notable changes to this project are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
+本文件记录项目的重要变化。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [未发布]
 
-### Added
+### 新增
 
-- Public repository infrastructure, contribution guidance, issue forms, and CI.
+- 建立公开仓库、贡献指南、Issue 模板和持续集成检查。
+
+### 变更
+
+- 将公开文档和 GitHub 协作界面统一为中文。
 
 ## [0.1.9] - 2026-07-11
 
-### Added
+### 新增
 
-- Multiple always-on-top note windows with local persistence.
-- Plain text, editable checklists, note colors, and opacity controls.
-- Clipboard images, screenshot paste, image drag-and-drop, and image deletion.
-- System tray actions for creating notes, launch-at-login, update checks, and exit.
-- Windows automatic update checks using `electron-updater` and a generic GitHub Release feed.
-- Existing local profile compatibility without bundling profile data in the source or public installer.
-- Windows x64 NSIS Setup and unsigned Apple Silicon macOS packaging commands.
+- 支持创建多张始终置顶并保存在本地的便签。
+- 支持纯文本、可编辑待办清单、便签颜色和透明度。
+- 支持粘贴剪贴板图片与系统截图、拖入图片和删除图片。
+- 托盘菜单支持新建便签、开机启动、检查更新和退出。
+- Windows 打包版通过 `electron-updater` 和 GitHub 通用更新源检查更新。
+- 兼容既有本地 profile，但源码和公开安装包不包含任何 profile 数据。
+- 提供 Windows x64 NSIS Setup 和未签名 Apple Silicon macOS 构建命令。
 
-### Changed
+### 变更
 
-- Windows distribution uses one neutral Setup package and no portable target.
-- Long note content scrolls inside the note while the toolbar remains accessible.
+- Windows 发行方式收敛为一个中性 Setup 安装包，不再构建 portable。
+- 长内容在便签内部滚动，工具栏保持可操作。
 
-### Fixed
+### 修复
 
-- Pending note data is flushed before exit and before an updater-triggered restart.
-- Image deletion restores the previous editing focus without a native modal dialog.
-- Restored window bounds are constrained to an available display.
+- 退出应用或重启安装更新前，会先保存尚未落盘的便签数据。
+- 删除图片后恢复原有编辑焦点，不再调用原生模态确认框。
+- 恢复窗口时会把位置和尺寸限制在可用显示器范围内。
 
-[Unreleased]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.9...HEAD
+[未发布]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.9...HEAD
 [0.1.9]: https://github.com/LawrenceChiu95/floating-sticky-notes/releases/tag/v0.1.9

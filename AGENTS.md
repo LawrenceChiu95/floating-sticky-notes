@@ -1,6 +1,6 @@
-# Project Guidelines
+# 项目开发规则
 
-## Read First
+## 开工前阅读
 
 - `README.md`
 - `CONTRIBUTING.md`
@@ -8,20 +8,20 @@
 - `docs/architecture.md`
 - `docs/releasing.md`
 
-## Non-Negotiables
+## 不可随意改变的边界
 
-- Keep runtime `name: floating-sticky-notes`, `appId: local.lawrence.floating-sticky-notes`, and `productName: 悬浮便签` unless an approved migration handles installation identity and userData consequences.
-- Preserve `%APPDATA%\floating-sticky-notes` compatibility.
-- Keep Windows automatic updates on the existing public generic feed.
-- Do not add a portable Windows target.
-- Do not reintroduce `win.signAndEditExecutable: false`; it prevents Windows executable icon resources from being written.
-- Keep the global launch-at-login setting in the tray, not in each note's appearance controls.
-- Diagnose Windows native failures at the process, file-lock, registry, shortcut, resource, policy, or shell-cache layer before changing code.
-- Do not claim Windows-native behavior is verified from a macOS cross-build.
+- 除非已有获批迁移方案处理安装身份和 userData 后果，否则保持 runtime `name: floating-sticky-notes`、`appId: local.lawrence.floating-sticky-notes` 和 `productName: 悬浮便签`。
+- 保持 `%APPDATA%\floating-sticky-notes` 数据兼容。
+- Windows 自动更新继续使用现有公开通用更新源。
+- 不要增加 portable Windows 构建目标。
+- 不要重新加入 `win.signAndEditExecutable: false`，否则 Windows exe 无法写入图标资源。
+- 开机启动是全局设置，应保留在托盘菜单中，不要放进每张便签的外观面板。
+- Windows 原生问题应先判断进程、文件锁、注册表、快捷方式、资源、系统策略或 Shell 缓存中哪一层失败，再修改代码。
+- 不要把 macOS 交叉构建结果描述成 Windows 真机验证。
 
-## Verification
+## 验证要求
 
-Run before pushing:
+push 前运行：
 
 ```bash
 npm test
@@ -30,4 +30,4 @@ npm audit --omit=dev
 git diff --check
 ```
 
-For a Windows release, also run `npm run dist:win`, inspect the packaged asar, and complete the native checklist in `docs/releasing.md`.
+发布 Windows 版本前还要运行 `npm run dist:win`、检查打包后的 asar，并完成 `docs/releasing.md` 中的 Windows 真机流程。

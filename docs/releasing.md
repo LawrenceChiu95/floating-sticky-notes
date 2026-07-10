@@ -1,15 +1,15 @@
-# Releasing
+# 发布流程
 
-Source and release artifacts use separate public repositories:
+源码与安装包资源使用两个公开仓库：
 
-- Source, issues, and changelog: `LawrenceChiu95/floating-sticky-notes`
-- Windows updater assets: `LawrenceChiu95/floating-sticky-notes-updates`
+- 源码、Issue 和变更日志：`LawrenceChiu95/floating-sticky-notes`
+- Windows 更新资源：`LawrenceChiu95/floating-sticky-notes-updates`
 
-## Prepare A Version
+## 准备版本
 
-1. Update `package.json` and `package-lock.json` to the same semantic version.
-2. Move completed entries from `Unreleased` in `CHANGELOG.md` to the version and release date.
-3. Run:
+1. 将 `package.json` 和 `package-lock.json` 更新为相同的语义化版本号。
+2. 把 `CHANGELOG.md`“未发布”部分中已经完成的条目移到对应版本和发布日期下。
+3. 运行：
 
    ```bash
    npm ci
@@ -19,8 +19,8 @@ Source and release artifacts use separate public repositories:
    npm run dist:win
    ```
 
-4. Inspect the packaged asar and verify the runtime package name, version, updater feed, and expected assets.
-5. Create a draft release in the update repository and upload only:
+4. 检查打包后的 asar，确认 runtime 包名、版本、更新源和资源符合预期。
+5. 在更新仓库创建 Draft Release，只上传：
 
    ```text
    latest.yml
@@ -28,12 +28,12 @@ Source and release artifacts use separate public repositories:
    StickyNotes-Setup-<version>.exe.blockmap
    ```
 
-6. Verify installation, launch, tray behavior, local data retention, update detection, download, and restart installation on Windows.
-7. Publish the draft only after native verification passes. Publishing the release makes `releases/latest/download/latest.yml` available to installed clients.
-8. Tag the corresponding source commit and publish source release notes.
+6. 在 Windows 上验证安装、启动、托盘、本地数据保留、更新检查、下载和重启安装。
+7. 真机验证通过后再发布 Draft。发布后，已安装客户端才能访问 `releases/latest/download/latest.yml`。
+8. 为对应源码 commit 创建 tag，并发布源码 Release 说明。
 
-Never upload user data, local profiles, credentials, debug logs, or generated packages other than the three reviewed public update assets.
+禁止上传用户数据、本地 profile、凭据、调试日志，以及上述三项更新资源以外的生成包。
 
-## Rollback
+## 回退处理
 
-Keep a release as draft until verification is complete. If a published version must be withdrawn, first stop serving it as the latest release, then prepare a higher patch version with the fix. Installed clients compare semantic versions and should not rely on publishing an older version as a rollback.
+验证完成前始终保持 Draft。已经发布的版本如果需要撤回，应先停止让它成为 latest，再发布版本号更高的修复版本。客户端按照语义化版本比较更新，不应通过重新发布旧版本号来回退。

@@ -1,17 +1,17 @@
-# Security Policy
+# 安全策略
 
-## Supported Versions
+## 支持范围
 
-Security fixes are applied to the latest released version.
+安全修复会应用到最新发布版本。
 
-## Reporting a Vulnerability
+## 报告安全漏洞
 
-Do not open a public issue for a suspected vulnerability. Use GitHub's private vulnerability reporting for this repository:
+发现疑似安全漏洞时，请勿提交公开 Issue。请通过本仓库的 GitHub 私密漏洞报告入口提交：
 
-https://github.com/LawrenceChiu95/floating-sticky-notes/security/advisories/new
+<https://github.com/LawrenceChiu95/floating-sticky-notes/security/advisories/new>
 
-Include the affected version, reproduction steps, expected impact, and any suggested mitigation. Please allow time for the report to be reproduced and addressed before public disclosure.
+请提供受影响版本、复现步骤、预期影响和可能的缓解方式。在问题得到复现和修复前，请留出合理时间并避免公开披露。
 
-## Update Trust Boundary
+## 更新信任边界
 
-Windows update metadata and installers are downloaded over HTTPS from the public [`floating-sticky-notes-updates`](https://github.com/LawrenceChiu95/floating-sticky-notes-updates) repository. Release write access is restricted to maintainers. Current packages are unsigned, so Windows may show an unknown-publisher warning.
+Windows 更新元数据和安装包通过 HTTPS 从公开仓库 [`floating-sticky-notes-updates`](https://github.com/LawrenceChiu95/floating-sticky-notes-updates) 下载，Release 写权限仅限维护者。当前安装包没有代码签名，因此 Windows 可能显示“未知发布者”提示。
