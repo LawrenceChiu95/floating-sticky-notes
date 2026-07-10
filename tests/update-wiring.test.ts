@@ -13,6 +13,17 @@ describe('auto-update main-process wiring', () => {
     expect(mainSource).toContain('createUpdateController({');
   });
 
+  it('uses the manual DMG flow only for packaged macOS builds', () => {
+    expect(mainSource).toContain('shouldEnableMacManualUpdates(');
+    expect(mainSource).toContain('createMacUpdateController({');
+    expect(mainSource).toContain('createMacUpdateService({');
+    expect(mainSource).toContain("downloadsPath: app.getPath('downloads')");
+    expect(mainSource).toContain('currentVersion: app.getVersion()');
+    expect(mainSource).toContain('fetch: (input, init) => net.fetch(input, init)');
+    expect(mainSource).toContain('openPath: (filePath) => shell.openPath(filePath)');
+    expect(mainSource).toContain('window.setProgressBar(progress)');
+  });
+
   it('connects manual tray checks and silent startup checks to the controller', () => {
     expect(mainSource).toContain('checkForUpdates: () =>');
     expect(mainSource).toContain('checkManually()');
@@ -20,7 +31,11 @@ describe('auto-update main-process wiring', () => {
   });
 
   it('flushes all pending note changes before installing', () => {
-    expect(mainSource).toContain('beforeInstall: () => getNotesManager().flushPendingSaves()');
+    expect(mainSource).toContain(
+      'const beforeInstall = (): Promise<void> => getNotesManager().flushPendingSaves();'
+    );
+    expect(mainSource).toMatch(/createUpdateController\(\{[\s\S]*?beforeInstall\s*\}\)/);
+    expect(mainSource).toMatch(/createMacUpdateController\(\{[\s\S]*?beforeInstall,/);
   });
 
   it('loads local copy before windows start and exposes it through IPC', () => {

@@ -44,6 +44,8 @@ describe('package configuration', () => {
   it('uses 0.1.9 as the first auto-update release', () => {
     expect(packageJson.version).toBe('0.1.9');
     expect(packageJson.dependencies?.['electron-updater']).toBe('6.8.9');
+    expect(packageJson.dependencies?.semver).toBe('7.8.5');
+    expect(packageJson.dependencies?.yaml).toBe('2.9.0');
   });
 
   it('is MIT licensed while remaining protected from accidental npm publication', () => {
@@ -85,6 +87,14 @@ describe('package configuration', () => {
     expect(macBuildScript).toContain('release-mac');
     expect(macBuildScript).toContain('--mac');
     expect(macBuildScript).toContain('--arm64');
+    expect(macBuildScript).toContain('StickyNotes-Mac-${version}.${ext}');
+    expect(macBuildScript).toContain('--config.publish.provider=generic');
+    expect(macBuildScript).toContain('--config.publish.channel=latest');
+    expect(macBuildScript).toContain('--publish');
+    expect(macBuildScript).toContain('never');
+    expect(macBuildScript).toContain(
+      'https://github.com/LawrenceChiu95/floating-sticky-notes-updates/releases/latest/download'
+    );
   });
 
   it('keeps build outputs and local environment files out of git', () => {

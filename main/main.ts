@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, protocol, screen } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, net, protocol, screen, shell } from 'electron';
 import { is } from '@electron-toolkit/utils';
 import { autoUpdater } from 'electron-updater';
 import { existsSync, writeFileSync } from 'node:fs';
@@ -15,6 +15,11 @@ import { normalizeChecklistInput } from './checklist-input';
 import { normalizeSaveImageInput } from './image-input';
 import { IMAGE_PROTOCOL, LocalImageStorage } from './image-storage';
 import { readLocalProfile } from './local-profile';
+import {
+  createMacUpdateController,
+  shouldEnableMacManualUpdates
+} from './mac-update-controller';
+import { createMacUpdateService } from './mac-update-service';
 import { type ManagedNoteWindow, NotesManager } from './notes-manager';
 import { preventNoteWindowNavigation } from './navigation-guard';
 import type { NoteRecord } from './note-state';
@@ -214,6 +219,41 @@ function createAutoLaunchDefaultState(userDataPath: string): AutoLaunchDefaultSt
   };
 }
 
+function createPlatformUpdateController(): UpdateController | undefined {
+  const beforeInstall = (): Promise<void> => getNotesManager().flushPendingSaves();
+
+  if (shouldEnableAutoUpdates(process.platform, app.isPackaged)) {
+    return createUpdateController({
+      updater: autoUpdater,
+      dialog,
+      beforeInstall
+    });
+  }
+
+  if (shouldEnableMacManualUpdates(process.platform, app.isPackaged)) {
+    return createMacUpdateController({
+      currentVersion: app.getVersion(),
+      dialog,
+      service: createMacUpdateService({
+        downloadsPath: app.getPath('downloads'),
+        fetch: (input, init) => net.fetch(input, init),
+        openPath: (filePath) => shell.openPath(filePath)
+      }),
+      beforeInstall,
+      quit: () => app.quit(),
+      setProgress: (progress) => {
+        for (const window of BrowserWindow.getAllWindows()) {
+          if (!window.isDestroyed()) {
+            window.setProgressBar(progress);
+          }
+        }
+      }
+    });
+  }
+
+  return undefined;
+}
+
 app.whenReady().then(async () => {
   const userDataPath = app.getPath('userData');
   try {
@@ -248,20 +288,11 @@ app.whenReady().then(async () => {
     console.warn('Unable to apply default auto-launch setting', error);
   }
 
-  const updateController: UpdateController | undefined = shouldEnableAutoUpdates(
-    process.platform,
-    app.isPackaged
-  )
-    ? createUpdateController({
-        updater: autoUpdater,
-        dialog,
-        beforeInstall: () => getNotesManager().flushPendingSaves()
-      })
-    : undefined;
+  const updateController = createPlatformUpdateController();
 
-  // The tray right-click menu is the single global surface: new note, the
-  // checkable startup toggle, and quit. Startup is default-enabled once on
-  // first run; after that, this menu reflects and owns the user's choice.
+  // The tray right-click menu is the single global surface for app-level
+  // actions. Startup is default-enabled once on first run; after that, this
+  // menu reflects and owns the user's choice.
   createTray({
     getAutoLaunchEnabled: () => getAutoLaunchStatus(app).enabled,
     setAutoLaunchEnabled: (enabled) => {

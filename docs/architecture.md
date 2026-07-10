@@ -23,9 +23,13 @@
 
 每张便签对应一个透明、无边框的 `BrowserWindow`。恢复窗口时会把位置与尺寸限制在可用显示器范围内。在 Windows 上关闭最后一张便签不会终止应用，因为托盘仍然常驻；托盘的“退出”会先完成数据保存，再真正结束进程。
 
-## 自动更新
+## 更新机制
 
-只有同时满足以下条件才启用自动更新：
+更新能力只在打包应用中启用，开发环境不会请求公开更新源。Windows 与 macOS 共用同一个 GitHub Release，但读取不同的元数据文件。
+
+### Windows
+
+只有同时满足以下条件才启用 Windows 自动更新：
 
 - `process.platform === 'win32'`
 - `app.isPackaged === true`
@@ -38,4 +42,8 @@ https://github.com/LawrenceChiu95/floating-sticky-notes-updates/releases/latest/
 
 应用启动后静默检查一次更新；用户也可以从托盘手动检查。发现新版本后，下载和重启安装都需要用户确认；执行 `quitAndInstall` 前会先保存便签数据。
 
-macOS 和开发环境不会创建 updater。
+### macOS
+
+只有 `process.platform === 'darwin'` 且 `app.isPackaged === true` 时，才启用 Mac 半自动更新。Mac 不调用 `electron-updater` 的 `quitAndInstall`，而是读取同一更新源中的 `latest-mac.yml`，并只接受符合 `StickyNotes-Mac-<version>.dmg` 格式的安装镜像。
+
+应用启动后静默检查，托盘也可以手动检查。用户确认下载后，主进程把 DMG 流式写入“下载”文件夹，并校验元数据声明的文件大小和 SHA-512；校验通过后才会询问是否保存便签、打开安装镜像并退出。由于 Mac 构建未签名，用户仍需把应用拖到 Applications 并确认替换。

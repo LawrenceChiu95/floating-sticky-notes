@@ -8,6 +8,8 @@ if (process.platform !== 'darwin') {
 const projectRoot = path.resolve(__dirname, '..');
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const electronBuilder = path.join(projectRoot, 'node_modules', '.bin', 'electron-builder');
+const updateUrl =
+  'https://github.com/LawrenceChiu95/floating-sticky-notes-updates/releases/latest/download';
 
 function run(command, args) {
   execFileSync(command, args, {
@@ -22,5 +24,10 @@ run(electronBuilder, [
   '--mac',
   '--arm64',
   '--config.directories.output=release-mac',
-  '--config.dmg.artifactName=StickyNotes-Mac-${version}.${ext}'
+  '--config.dmg.artifactName=StickyNotes-Mac-${version}.${ext}',
+  '--config.publish.provider=generic',
+  `--config.publish.url=${updateUrl}`,
+  '--config.publish.channel=latest',
+  '--publish',
+  'never'
 ]);

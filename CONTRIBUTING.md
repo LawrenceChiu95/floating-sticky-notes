@@ -43,7 +43,7 @@ npm audit --omit=dev
 
 - 除非迁移方案明确处理安装身份和本地数据，否则不要修改 runtime `name: floating-sticky-notes`、`appId: local.lawrence.floating-sticky-notes` 和 `productName: 悬浮便签`。
 - Windows 更新必须继续兼容 `%APPDATA%\floating-sticky-notes`。
-- 自动更新只在 Windows 打包版本中启用。
+- Windows 打包版使用自动安装更新；macOS 打包版只自动检查、下载并校验 DMG，安装替换仍由用户完成。
 - 不要增加 portable Windows 构建目标；自动更新只支持 NSIS Setup 安装路径。
 - Windows 原生行为必须经过 Windows 实机或虚拟机验证，不能用 macOS 交叉构建结果代替。
 

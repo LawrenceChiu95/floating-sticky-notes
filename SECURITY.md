@@ -14,4 +14,4 @@
 
 ## 更新信任边界
 
-Windows 更新元数据和安装包通过 HTTPS 从公开仓库 [`floating-sticky-notes-updates`](https://github.com/LawrenceChiu95/floating-sticky-notes-updates) 下载，Release 写权限仅限维护者。当前安装包没有代码签名，因此 Windows 可能显示“未知发布者”提示。
+Windows 与 macOS 更新元数据和安装包通过 HTTPS 从公开仓库 [`floating-sticky-notes-updates`](https://github.com/LawrenceChiu95/floating-sticky-notes-updates) 下载，Release 写权限仅限维护者。下载时会校验更新元数据中的 SHA-512 和文件大小，但当前安装包没有代码签名，因此 Windows 可能显示“未知发布者”，macOS 也可能阻止或警告首次打开。

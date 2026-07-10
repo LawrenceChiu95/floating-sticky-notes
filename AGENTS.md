@@ -13,6 +13,7 @@
 - 除非已有获批迁移方案处理安装身份和 userData 后果，否则保持 runtime `name: floating-sticky-notes`、`appId: local.lawrence.floating-sticky-notes` 和 `productName: 悬浮便签`。
 - 保持 `%APPDATA%\floating-sticky-notes` 数据兼容。
 - Windows 自动更新继续使用现有公开通用更新源。
+- macOS 半自动更新继续使用同一更新源的 `latest-mac.yml`，只下载并校验 DMG，不要在未签名条件下改成 `quitAndInstall`。
 - 不要增加 portable Windows 构建目标。
 - 不要重新加入 `win.signAndEditExecutable: false`，否则 Windows exe 无法写入图标资源。
 - 开机启动是全局设置，应保留在托盘菜单中，不要放进每张便签的外观面板。
@@ -30,4 +31,4 @@ npm audit --omit=dev
 git diff --check
 ```
 
-发布 Windows 版本前还要运行 `npm run dist:win`、检查打包后的 asar，并完成 `docs/releasing.md` 中的 Windows 真机流程。
+发布 Windows 版本前还要运行 `npm run dist:win`、检查打包后的 asar，并完成 `docs/releasing.md` 中的 Windows 真机流程。发布 Mac 版本前还要运行 `npm run dist:mac`、执行 `hdiutil verify`，并完成 Apple Silicon Mac 真机流程。
