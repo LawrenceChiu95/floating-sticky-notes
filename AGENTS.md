@@ -31,4 +31,4 @@ npm audit --omit=dev
 git diff --check
 ```
 
-发布 Windows 版本前还要运行 `npm run dist:win`、检查打包后的 asar，并完成 `docs/releasing.md` 中的 Windows 真机流程。发布 Mac 版本前还要运行 `npm run dist:mac`、执行 `hdiutil verify`，并完成 Apple Silicon Mac 真机流程。
+发布 Windows 版本前还要运行 `npm run dist:win`、检查打包后的 asar、直接启动打包应用，并完成 `docs/releasing.md` 中的 Windows 真机流程。发布 Mac 版本前还要运行 `npm run dist:mac`、直接启动生成的 `.app`、执行 `hdiutil verify`，并完成 Apple Silicon Mac 真机流程。打包命令成功不能替代打包应用启动验证。
