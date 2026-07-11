@@ -1,5 +1,5 @@
 export function shouldQuitWhenAllWindowsClosed(platform: NodeJS.Platform): boolean {
-  return platform !== 'darwin';
+  return platform === 'linux';
 }
 
 export function shouldCreateWindowOnActivate(windowCount: number): boolean {

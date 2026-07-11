@@ -2,12 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { shouldCreateWindowOnActivate, shouldQuitWhenAllWindowsClosed } from '../main/app-lifecycle';
 
 describe('app lifecycle decisions', () => {
-  it('keeps the app alive on macOS when all windows are closed', () => {
+  it('keeps tray-supported desktop platforms alive when all windows are closed', () => {
     expect(shouldQuitWhenAllWindowsClosed('darwin')).toBe(false);
-  });
-
-  it('quits the app on Windows and Linux when all windows are closed', () => {
-    expect(shouldQuitWhenAllWindowsClosed('win32')).toBe(true);
+    expect(shouldQuitWhenAllWindowsClosed('win32')).toBe(false);
     expect(shouldQuitWhenAllWindowsClosed('linux')).toBe(true);
   });
 
