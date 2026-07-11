@@ -188,7 +188,7 @@ function createElectronUpdateProgressWindow(): UpdateProgressWindowPort {
     },
     close: () => {
       if (!progressWindow.isDestroyed()) {
-        progressWindow.close();
+        progressWindow.destroy();
       }
     },
     destroy: () => {

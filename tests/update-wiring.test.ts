@@ -24,6 +24,9 @@ describe('auto-update main-process wiring', () => {
     expect(mainSource).toContain('UPDATE_PROGRESS_CHANNEL');
     expect(mainSource).toContain("setWindowOpenHandler(() => ({ action: 'deny' }))");
     expect(mainSource).toContain('createUpdateProgressWindowOptions(');
+    expect(mainSource).toMatch(
+      /close:\s*\(\)\s*=>\s*\{\s*if \(!progressWindow\.isDestroyed\(\)\) \{\s*progressWindow\.destroy\(\);\s*\}\s*\}/
+    );
   });
 
   it('uses the manual DMG flow only for packaged macOS builds', () => {
