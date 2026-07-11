@@ -44,7 +44,6 @@ export function createUpdateProgressWindowOptions(
 
 export type UpdateProgressWindowPort = {
   load: () => Promise<void>;
-  inspect?: () => Promise<unknown>;
   onReady: (listener: () => void) => void;
   onClosed: (listener: () => void) => void;
   send: (snapshot: UpdateProgressSnapshot) => void;
@@ -67,20 +66,17 @@ type UpdateProgressWindowManagerOptions = {
   createWindow: () => UpdateProgressWindowPort;
   setFallbackProgress?: (progress: number) => void;
   logError?: (message: string, error: unknown) => void;
-  logDebug?: (event: string, detail?: unknown) => void;
 };
 
 export function createUpdateProgressWindowManager(
   options: UpdateProgressWindowManagerOptions
 ): UpdateProgressPresenter {
   const logError = options.logError ?? ((message, error) => console.error(message, error));
-  const logDebug = options.logDebug ?? (() => undefined);
   const setFallbackProgress = options.setFallbackProgress ?? (() => undefined);
   let activeWindow: UpdateProgressWindowPort | undefined;
   let latestSnapshot: UpdateProgressSnapshot | undefined;
   let version: string | undefined;
   let rendererReady = false;
-  let hasInspectedDeterminateSnapshot = false;
   let disposed = false;
 
   const setFallbackTaskbarProgress = (progress: number): void => {
@@ -117,14 +113,6 @@ export function createUpdateProgressWindowManager(
 
     try {
       activeWindow.send(latestSnapshot);
-      logDebug('window.send-snapshot', latestSnapshot);
-      if (latestSnapshot.percent !== undefined && !hasInspectedDeterminateSnapshot) {
-        hasInspectedDeterminateSnapshot = true;
-        void activeWindow
-          .inspect?.()
-          .then((detail) => logDebug('window.dom-inspected', detail))
-          .catch((error) => logError('Unable to inspect update progress DOM', error));
-      }
     } catch (error) {
       logError('Unable to send update progress snapshot', error);
     }
@@ -148,8 +136,6 @@ export function createUpdateProgressWindowManager(
     }
     activeWindow = window;
     rendererReady = false;
-    hasInspectedDeterminateSnapshot = false;
-    logDebug('window.created');
 
     try {
       window.onReady(() => {
@@ -158,7 +144,6 @@ export function createUpdateProgressWindowManager(
         }
 
         rendererReady = true;
-        logDebug('window.did-finish-load', { hasSnapshot: latestSnapshot !== undefined });
         sendLatestSnapshot();
       });
       window.onClosed(() => {
@@ -181,10 +166,7 @@ export function createUpdateProgressWindowManager(
       return undefined;
     }
     void Promise.resolve()
-      .then(() => {
-        logDebug('window.load-start');
-        return window.load();
-      })
+      .then(() => window.load())
       .catch((error) => {
         logError('Unable to load update progress window', error);
         if (activeWindow !== window) {
@@ -211,7 +193,6 @@ export function createUpdateProgressWindowManager(
       }
 
       version = nextVersion;
-      logDebug('presenter.showPreparing', { version });
       latestSnapshot = createPreparingSnapshot(version);
       ensureWindow();
       setSnapshotProgress(latestSnapshot);
@@ -223,7 +204,6 @@ export function createUpdateProgressWindowManager(
       }
 
       latestSnapshot = createDownloadingSnapshot(value, version);
-      logDebug('presenter.update.snapshot', latestSnapshot);
       setSnapshotProgress(latestSnapshot);
       sendLatestSnapshot();
     },
@@ -241,7 +221,6 @@ export function createUpdateProgressWindowManager(
     },
     close: () => {
       const window = activeWindow;
-      logDebug('presenter.close');
       activeWindow = undefined;
       rendererReady = false;
       latestSnapshot = undefined;

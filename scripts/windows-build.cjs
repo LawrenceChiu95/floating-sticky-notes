@@ -38,7 +38,7 @@ function getElectronBuilderInvocation(platform, projectRoot, nodeExecutable) {
   if (platform === 'win32') {
     return {
       command: nodeExecutable,
-      argsPrefix: [path.join(projectRoot, 'node_modules', 'electron-builder', 'cli.js')]
+      argsPrefix: [path.win32.join(projectRoot, 'node_modules', 'electron-builder', 'cli.js')]
     };
   }
 
@@ -52,7 +52,15 @@ function getNpmInvocation(platform, nodeExecutable) {
   if (platform === 'win32') {
     return {
       command: nodeExecutable,
-      argsPrefix: [path.join(path.dirname(nodeExecutable), 'node_modules', 'npm', 'bin', 'npm-cli.js')]
+      argsPrefix: [
+        path.win32.join(
+          path.win32.dirname(nodeExecutable),
+          'node_modules',
+          'npm',
+          'bin',
+          'npm-cli.js'
+        )
+      ]
     };
   }
 

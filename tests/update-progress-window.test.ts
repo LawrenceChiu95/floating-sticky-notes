@@ -13,7 +13,6 @@ class FakeProgressWindow implements UpdateProgressWindowPort {
   readonly close = vi.fn();
   readonly destroy = vi.fn();
   readonly load = vi.fn(async () => undefined);
-  inspect?: () => Promise<unknown>;
   private readyListener?: () => void;
   private closedListener?: () => void;
 
@@ -58,60 +57,6 @@ describe('update progress window manager', () => {
     ]);
     expect(window.show).toHaveBeenCalledTimes(1);
     expect(window.focus).toHaveBeenCalledTimes(1);
-  });
-
-  it('records the snapshot path across the window boundary', () => {
-    const window = new FakeProgressWindow();
-    const inspectedDom = { percentage: '2%', progressValue: 2 };
-    const inspect = vi.fn(async () => inspectedDom);
-    window.inspect = inspect;
-    const logDebug = vi.fn();
-    const manager = createUpdateProgressWindowManager({
-      createWindow: () => window,
-      logDebug
-    });
-
-    manager.showPreparing('0.1.11');
-    manager.update({ percent: 37.6, transferred: 10, total: 20 });
-    window.emitReady();
-
-    expect(logDebug).toHaveBeenCalledWith('presenter.showPreparing', {
-      version: '0.1.11'
-    });
-    expect(logDebug).toHaveBeenCalledWith(
-      'presenter.update.snapshot',
-      expect.objectContaining({ state: 'downloading', percent: 38 })
-    );
-    expect(logDebug).toHaveBeenCalledWith(
-      'window.did-finish-load',
-      expect.anything()
-    );
-    expect(logDebug).toHaveBeenCalledWith(
-      'window.send-snapshot',
-      expect.objectContaining({ state: 'downloading', percent: 38 })
-    );
-  });
-
-  it('inspects the renderer DOM after the first determinate snapshot', async () => {
-    const window = new FakeProgressWindow();
-    const inspect = vi.fn(async () => ({ percentage: '42%', progressValue: 42 }));
-    window.inspect = inspect;
-    const logDebug = vi.fn();
-    const manager = createUpdateProgressWindowManager({
-      createWindow: () => window,
-      logDebug
-    });
-
-    manager.showPreparing('0.1.11');
-    window.emitReady();
-    manager.update({ percent: 42 });
-    await flushMicrotasks();
-
-    expect(inspect).toHaveBeenCalledTimes(1);
-    expect(logDebug).toHaveBeenCalledWith('window.dom-inspected', {
-      percentage: '42%',
-      progressValue: 42
-    });
   });
 
   it('reuses and focuses the existing window', () => {

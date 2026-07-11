@@ -375,32 +375,6 @@ describe('update controller', () => {
     expect(progress.update).not.toHaveBeenCalled();
   });
 
-  it('records raw progress before the controller accepts it', async () => {
-    const updater = new FakeUpdater();
-    const dialog = createDialog([0]);
-    const logDebug = vi.fn();
-    const controller = createUpdateController({ updater, dialog, logDebug });
-
-    await controller.checkSilently();
-    updater.emit('update-available', { version: '0.1.10' });
-    await flushMicrotasks();
-    updater.emit('download-progress', {
-      percent: 42.5,
-      bytesPerSecond: 12,
-      transferred: 25,
-      total: 50
-    });
-
-    expect(logDebug).toHaveBeenCalledWith(
-      'electron-updater.download-progress',
-      expect.objectContaining({ percent: 42.5, transferred: 25 })
-    );
-    expect(logDebug).toHaveBeenCalledWith(
-      'update-controller.download-progress.accepted',
-      expect.objectContaining({ percent: 42.5, transferred: 25 })
-    );
-  });
-
   it('focuses the existing progress window for a manual check during download', async () => {
     const updater = new FakeUpdater();
     const dialog = createDialog([0]);

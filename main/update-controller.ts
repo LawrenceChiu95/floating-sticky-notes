@@ -49,7 +49,6 @@ type UpdateControllerOptions = {
   progress?: UpdateProgressPresenter;
   beforeInstall?: () => Promise<void>;
   logError?: (message: string, error: unknown) => void;
-  logDebug?: (event: string, detail?: unknown) => void;
 };
 
 type UpdatePhase =
@@ -79,7 +78,6 @@ export function shouldEnableAutoUpdates(platform: NodeJS.Platform, isPackaged: b
 export function createUpdateController(options: UpdateControllerOptions): UpdateController {
   const beforeInstall = options.beforeInstall ?? (async () => undefined);
   const logError = options.logError ?? ((message, error) => console.error(message, error));
-  const logDebug = options.logDebug ?? (() => undefined);
   let phase: UpdatePhase = 'idle';
   let currentOperation: UpdateOperation | undefined;
   let nextOperationId = 0;
@@ -243,18 +241,14 @@ export function createUpdateController(options: UpdateControllerOptions): Update
   });
 
   options.updater.on('download-progress', (value) => {
-    logDebug('electron-updater.download-progress', value);
     if (disposed || phase !== 'downloading' || !currentOperation) {
-      logDebug('update-controller.download-progress.ignored', { phase, disposed });
       return;
     }
 
-    logDebug('update-controller.download-progress.accepted', value);
     options.progress?.update(value);
   });
 
   options.updater.on('update-downloaded', (value) => {
-    logDebug('electron-updater.update-downloaded', value);
     if (disposed || phase !== 'downloading' || !currentOperation) {
       return;
     }
