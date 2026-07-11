@@ -5,6 +5,7 @@ import {
   type UpdateClient,
   type UpdateDialog
 } from '../main/update-controller';
+import type { UpdateProgressPresenter } from '../main/update-progress-window';
 
 type UpdateEvent =
   | 'checking-for-update'
@@ -43,6 +44,16 @@ function createDialog(responses: number[] = []) {
     })),
     showErrorBox: vi.fn((_title: string, _content: string) => undefined)
   } satisfies UpdateDialog;
+}
+
+function createProgressPresenter() {
+  return {
+    showPreparing: vi.fn(),
+    update: vi.fn(),
+    focus: vi.fn(),
+    close: vi.fn(),
+    dispose: vi.fn()
+  } satisfies UpdateProgressPresenter;
 }
 
 describe('auto-update platform policy', () => {
@@ -87,7 +98,8 @@ describe('update controller', () => {
     const updater = new FakeUpdater();
     const dialog = createDialog([0, 0]);
     const beforeInstall = vi.fn(async () => undefined);
-    const controller = createUpdateController({ updater, dialog, beforeInstall });
+    const progress = createProgressPresenter();
+    const controller = createUpdateController({ updater, dialog, beforeInstall, progress });
 
     await controller.checkSilently();
     updater.emit('update-available', { version: '0.1.10' });
@@ -103,7 +115,15 @@ describe('update controller', () => {
       })
     );
     expect(updater.downloadUpdate).toHaveBeenCalledTimes(1);
+    expect(progress.showPreparing).toHaveBeenCalledWith('0.1.10');
+    expect(progress.showPreparing.mock.invocationCallOrder[0]).toBeLessThan(
+      updater.downloadUpdate.mock.invocationCallOrder[0]
+    );
 
+    updater.emit('download-progress', { percent: 51.2 });
+    expect(progress.update).toHaveBeenCalledWith({ percent: 51.2 });
+
+    updater.emit('update-downloaded', { version: '0.1.10' });
     updater.emit('update-downloaded', { version: '0.1.10' });
     await flushMicrotasks();
 
@@ -115,11 +135,128 @@ describe('update controller', () => {
         buttons: ['重启并安装', '稍后']
       })
     );
+    expect(progress.close).toHaveBeenCalledTimes(1);
     expect(beforeInstall).toHaveBeenCalledTimes(1);
     expect(updater.quitAndInstall).toHaveBeenCalledWith(true, true);
     expect(beforeInstall.mock.invocationCallOrder[0]).toBeLessThan(
       updater.quitAndInstall.mock.invocationCallOrder[0]
     );
+  });
+
+  it('does not let an old confirmation start a download after failure', async () => {
+    const updater = new FakeUpdater();
+    let resolveUpdatePrompt: ((value: { response: number }) => void) | undefined;
+    const updatePrompt = new Promise<{ response: number }>((resolve) => {
+      resolveUpdatePrompt = resolve;
+    });
+    const dialog = {
+      showMessageBox: vi.fn(() => updatePrompt),
+      showErrorBox: vi.fn()
+    } satisfies UpdateDialog;
+    const progress = createProgressPresenter();
+    const controller = createUpdateController({ updater, dialog, progress, logError: vi.fn() });
+
+    await controller.checkSilently();
+    updater.emit('update-available', { version: '0.1.10' });
+    await flushMicrotasks();
+    updater.emit('error', new Error('metadata invalidated'));
+    resolveUpdatePrompt?.({ response: 0 });
+    await flushMicrotasks();
+
+    expect(updater.downloadUpdate).not.toHaveBeenCalled();
+    expect(progress.showPreparing).not.toHaveBeenCalled();
+  });
+
+  it('handles download rejection and updater error only once', async () => {
+    const updater = new FakeUpdater();
+    const error = new Error('offline');
+    updater.downloadUpdate.mockImplementationOnce(async () => {
+      updater.emit('error', error);
+      throw error;
+    });
+    const dialog = createDialog([0]);
+    const progress = createProgressPresenter();
+    const logError = vi.fn();
+    const controller = createUpdateController({ updater, dialog, progress, logError });
+
+    await controller.checkManually();
+    updater.emit('update-available', { version: '0.1.10' });
+    await flushMicrotasks();
+
+    expect(progress.close).toHaveBeenCalledTimes(1);
+    expect(logError).toHaveBeenCalledTimes(1);
+    expect(dialog.showErrorBox).toHaveBeenCalledTimes(1);
+    expect(dialog.showErrorBox).toHaveBeenCalledWith(
+      '下载更新失败',
+      expect.stringContaining('请稍后重试')
+    );
+  });
+
+  it('ignores progress outside the downloading phase', async () => {
+    const updater = new FakeUpdater();
+    const progress = createProgressPresenter();
+    const controller = createUpdateController({ updater, dialog: createDialog(), progress });
+
+    updater.emit('download-progress', { percent: 25 });
+    await controller.checkSilently();
+    updater.emit('download-progress', { percent: 50 });
+
+    expect(progress.update).not.toHaveBeenCalled();
+  });
+
+  it('focuses the existing progress window for a manual check during download', async () => {
+    const updater = new FakeUpdater();
+    const dialog = createDialog([0]);
+    const progress = createProgressPresenter();
+    const controller = createUpdateController({ updater, dialog, progress });
+
+    await controller.checkSilently();
+    updater.emit('update-available', { version: '0.1.10' });
+    await flushMicrotasks();
+    await controller.checkManually();
+
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(1);
+    expect(progress.focus).toHaveBeenCalledTimes(1);
+    expect(dialog.showMessageBox).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not check or download again after the install prompt is deferred', async () => {
+    const updater = new FakeUpdater();
+    const dialog = createDialog([0, 1]);
+    const progress = createProgressPresenter();
+    const controller = createUpdateController({ updater, dialog, progress });
+
+    await controller.checkManually();
+    updater.emit('update-available', { version: '0.1.10' });
+    await flushMicrotasks();
+    updater.emit('update-downloaded', { version: '0.1.10' });
+    await flushMicrotasks();
+    await controller.checkManually();
+
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(1);
+    expect(updater.downloadUpdate).toHaveBeenCalledTimes(1);
+    expect(dialog.showMessageBox).toHaveBeenLastCalledWith(
+      expect.objectContaining({ message: '更新已经下载' })
+    );
+  });
+
+  it('disposes progress UI and ignores later updater events', async () => {
+    const updater = new FakeUpdater();
+    const dialog = createDialog([0]);
+    const progress = createProgressPresenter();
+    const controller = createUpdateController({ updater, dialog, progress, logError: vi.fn() });
+
+    await controller.checkSilently();
+    updater.emit('update-available', { version: '0.1.10' });
+    await flushMicrotasks();
+    controller.dispose();
+    updater.emit('error', new Error('late failure'));
+    updater.emit('update-downloaded', { version: '0.1.10' });
+    await flushMicrotasks();
+
+    expect(progress.dispose).toHaveBeenCalledTimes(1);
+    expect(dialog.showErrorBox).not.toHaveBeenCalled();
+    expect(dialog.showMessageBox).toHaveBeenCalledTimes(1);
   });
 
   it('does not start another check while the update confirmation is open', async () => {
