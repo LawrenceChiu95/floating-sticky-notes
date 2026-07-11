@@ -178,7 +178,7 @@ function createElectronUpdateProgressWindow(): UpdateProgressWindowPort {
       return progressWindow.loadFile(join(__dirname, '../renderer/update-progress.html'));
     },
     onReady: (listener) => {
-      progressWindow.once('ready-to-show', listener);
+      progressWindow.webContents.once('did-finish-load', listener);
     },
     onClosed: (listener) => {
       progressWindow.once('closed', listener);

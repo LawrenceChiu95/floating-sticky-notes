@@ -24,6 +24,8 @@ describe('auto-update main-process wiring', () => {
     expect(mainSource).toContain('UPDATE_PROGRESS_CHANNEL');
     expect(mainSource).toContain("setWindowOpenHandler(() => ({ action: 'deny' }))");
     expect(mainSource).toContain('createUpdateProgressWindowOptions(');
+    expect(mainSource).toContain("progressWindow.webContents.once('did-finish-load', listener)");
+    expect(mainSource).not.toContain("progressWindow.once('ready-to-show', listener)");
     expect(mainSource).toMatch(
       /close:\s*\(\)\s*=>\s*\{\s*if \(!progressWindow\.isDestroyed\(\)\) \{\s*progressWindow\.destroy\(\);\s*\}\s*\}/
     );
