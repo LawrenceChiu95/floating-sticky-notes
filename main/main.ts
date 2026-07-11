@@ -1,7 +1,7 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, net, protocol, screen, shell } from 'electron';
 import { is } from '@electron-toolkit/utils';
 import electronUpdater from 'electron-updater';
-import { existsSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { shouldCreateWindowOnActivate, shouldQuitWhenAllWindowsClosed } from './app-lifecycle';
 import {
@@ -43,7 +43,10 @@ import {
 } from './window-options';
 import { createDebouncedValueAction } from '../shared/debounced-action';
 import { DEFAULT_APP_COPY, getAppCopy, type AppCopy } from '../shared/app-copy';
-import { UPDATE_PROGRESS_CHANNEL, type UpdateProgressSnapshot } from '../shared/update-progress';
+import {
+  UPDATE_PROGRESS_CHANNEL,
+  type UpdateProgressSnapshot
+} from '../shared/update-progress';
 
 let notesManager: NotesManager | undefined;
 let appCopy: AppCopy = DEFAULT_APP_COPY;
@@ -148,12 +151,14 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
   };
 }
 
-function createElectronUpdateProgressWindow(): UpdateProgressWindowPort {
+function createElectronUpdateProgressWindow(
+  logDebug: (event: string, detail?: unknown) => void
+): UpdateProgressWindowPort {
   const workArea = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
   const progressWindow = new BrowserWindow(
     createUpdateProgressWindowOptions(
       workArea,
-      join(__dirname, '../preload/updateProgressPreload.mjs'),
+      join(__dirname, '../preload/updateProgressPreload.cjs'),
       NOTE_WINDOW_ICON_PATH
     )
   );
@@ -167,6 +172,11 @@ function createElectronUpdateProgressWindow(): UpdateProgressWindowPort {
     }
   });
   progressWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  progressWindow.webContents.on('console-message', (_event, _level, message, line, sourceId) => {
+    if (message.startsWith('[update-progress-debug]')) {
+      logDebug('renderer.console', { message, line, sourceId });
+    }
+  });
 
   return {
     load: () => {
@@ -177,6 +187,20 @@ function createElectronUpdateProgressWindow(): UpdateProgressWindowPort {
       }
       return progressWindow.loadFile(join(__dirname, '../renderer/update-progress.html'));
     },
+    inspect: () =>
+      progressWindow.webContents.executeJavaScript(
+        `(() => {
+          const progress = document.getElementById('update-progress-bar');
+          return {
+            updateProgressBridge: typeof window.updateProgress,
+            status: document.getElementById('update-status')?.textContent,
+            percentage: document.getElementById('update-percentage')?.textContent,
+            progressValue: progress instanceof HTMLProgressElement ? progress.value : undefined,
+            progressHasValue: progress instanceof HTMLProgressElement ? progress.hasAttribute('value') : undefined
+          };
+        })()`,
+        true
+      ),
     onReady: (listener) => {
       progressWindow.webContents.once('did-finish-load', listener);
     },
@@ -326,25 +350,29 @@ function createAutoLaunchDefaultState(userDataPath: string): AutoLaunchDefaultSt
   };
 }
 
-function createPlatformUpdateController(): PlatformUpdateController | undefined {
+function createPlatformUpdateController(
+  logDebug: (event: string, detail?: unknown) => void
+): PlatformUpdateController | undefined {
   const beforeInstall = (): Promise<void> => getNotesManager().flushPendingSaves();
 
   if (shouldEnableAutoUpdates(process.platform, app.isPackaged)) {
     const progress = createUpdateProgressWindowManager({
-      createWindow: createElectronUpdateProgressWindow,
+      createWindow: () => createElectronUpdateProgressWindow(logDebug),
       setFallbackProgress: (progressValue) => {
         for (const window of BrowserWindow.getAllWindows()) {
           if (!window.isDestroyed()) {
             window.setProgressBar(progressValue);
           }
         }
-      }
+      },
+      logDebug
     });
     return createUpdateController({
       updater: electronUpdater.autoUpdater,
       dialog,
       beforeInstall,
-      progress
+      progress,
+      logDebug
     });
   }
 
@@ -372,12 +400,32 @@ function createPlatformUpdateController(): PlatformUpdateController | undefined 
   return undefined;
 }
 
+function createUpdateProgressDebugLogger(
+  userDataPath: string
+): (event: string, detail?: unknown) => void {
+  const logPath = join(userDataPath, 'update-progress-debug.log');
+
+  return (event, detail) => {
+    try {
+      mkdirSync(userDataPath, { recursive: true });
+      appendFileSync(
+        logPath,
+        `${new Date().toISOString()} ${event}${detail === undefined ? '' : ` ${JSON.stringify(detail)}`}\n`,
+        'utf8'
+      );
+    } catch (error) {
+      console.warn('Unable to write update progress diagnostic log', error);
+    }
+  };
+}
+
 app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) {
     return;
   }
 
   const userDataPath = app.getPath('userData');
+  const updateProgressDebugLog = createUpdateProgressDebugLogger(userDataPath);
   try {
     const localProfile = await readLocalProfile(userDataPath);
     appCopy = getAppCopy(localProfile?.displayName);
@@ -414,7 +462,7 @@ app.whenReady().then(async () => {
     console.warn('Unable to apply default auto-launch setting', error);
   }
 
-  const updateController = createPlatformUpdateController();
+  const updateController = createPlatformUpdateController(updateProgressDebugLog);
   app.once('before-quit', () => {
     updateController?.dispose?.();
   });

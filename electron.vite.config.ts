@@ -20,6 +20,9 @@ export default defineConfig({
         input: {
           preload: resolve(__dirname, 'preload/preload.ts'),
           updateProgressPreload: resolve(__dirname, 'preload/update-progress-preload.ts')
+        },
+        output: {
+          format: 'cjs'
         }
       }
     }

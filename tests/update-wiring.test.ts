@@ -19,7 +19,7 @@ describe('auto-update main-process wiring', () => {
 
   it('creates a secure ownerless progress window on the active display', () => {
     expect(mainSource).toContain('screen.getDisplayNearestPoint(screen.getCursorScreenPoint())');
-    expect(mainSource).toContain("'../preload/updateProgressPreload.mjs'");
+    expect(mainSource).toContain("'../preload/updateProgressPreload.cjs'");
     expect(mainSource).toContain("'../renderer/update-progress.html'");
     expect(mainSource).toContain('UPDATE_PROGRESS_CHANNEL');
     expect(mainSource).toContain("setWindowOpenHandler(() => ({ action: 'deny' }))");

@@ -6,6 +6,9 @@ type RendererServerConfig = {
     build?: {
       rollupOptions?: {
         input?: Record<string, string>;
+        output?: {
+          format?: string;
+        };
       };
     };
   };
@@ -37,5 +40,6 @@ describe('electron-vite renderer config', () => {
     expect(buildConfig.renderer?.build?.rollupOptions?.input).toHaveProperty(
       'updateProgress'
     );
+    expect(buildConfig.preload?.build?.rollupOptions?.output?.format).toBe('cjs');
   });
 });

@@ -13,8 +13,8 @@ describe('createNoteWindowOptions', () => {
     expect(options.height).toBe(220);
     expect(options.minWidth).toBe(200);
     expect(options.minHeight).toBe(140);
-    expect(options.icon).toMatch(/assets\/icons\/app-icon\.ico$/);
-    expect(options.webPreferences?.preload).toMatch(/preload\.mjs$/);
+    expect(options.icon).toMatch(/assets[\\/]icons[\\/]app-icon\.ico$/);
+    expect(options.webPreferences?.preload).toMatch(/preload\.cjs$/);
     expect(options.webPreferences?.contextIsolation).toBe(true);
     expect(options.webPreferences?.nodeIntegration).toBe(false);
   });

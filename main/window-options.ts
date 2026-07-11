@@ -34,7 +34,7 @@ export function createNoteWindowOptions(
     icon: NOTE_WINDOW_ICON_PATH,
     backgroundColor: '#00000000',
     webPreferences: {
-      preload: join(__dirname, '../preload/preload.mjs'),
+      preload: join(__dirname, '../preload/preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false

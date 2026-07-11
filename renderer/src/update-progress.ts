@@ -49,12 +49,27 @@ export function renderUpdateProgress(
   if (hasPercent) {
     elements.progress.value = snapshot.percent ?? 0;
     elements.percentage.textContent = `${snapshot.percent}%`;
+    reportRendered(elements);
     return;
   }
 
   elements.progress.removeAttribute('value');
   elements.percentage.textContent =
     snapshot.state === 'preparing' ? '正在连接更新服务' : '正在下载更新';
+  reportRendered(elements);
+}
+
+function reportRendered(elements: UpdateProgressElements): void {
+  const detail = {
+    status: elements.status.textContent,
+    percentage: elements.percentage.textContent,
+    progressValue: elements.progress.value
+  };
+  if (typeof document === 'undefined') {
+    return;
+  }
+
+  console.info('[update-progress-debug] renderer.rendered', detail);
 }
 
 function bindUpdateProgress(): void {

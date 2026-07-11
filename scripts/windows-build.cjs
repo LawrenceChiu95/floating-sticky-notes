@@ -6,19 +6,19 @@ const updateFeedUrl =
 
 function buildWindows({ output, artifactName, channel, extraResources = [] }) {
   const projectRoot = path.resolve(__dirname, '..');
-  const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-  const electronBuilder = path.join(
+  const npmInvocation = getNpmInvocation(process.platform, process.execPath);
+  const electronBuilderInvocation = getElectronBuilderInvocation(
+    process.platform,
     projectRoot,
-    'node_modules',
-    '.bin',
-    process.platform === 'win32' ? 'electron-builder.cmd' : 'electron-builder'
+    process.execPath
   );
 
-  run(npmCommand, ['run', 'build:icons'], projectRoot);
-  run(npmCommand, ['run', 'build'], projectRoot);
+  run(npmInvocation.command, [...npmInvocation.argsPrefix, 'run', 'build:icons'], projectRoot);
+  run(npmInvocation.command, [...npmInvocation.argsPrefix, 'run', 'build'], projectRoot);
   run(
-    electronBuilder,
+    electronBuilderInvocation.command,
     [
+      ...electronBuilderInvocation.argsPrefix,
       '--win',
       '--x64',
       `--config.directories.output=${output}`,
@@ -34,6 +34,31 @@ function buildWindows({ output, artifactName, channel, extraResources = [] }) {
   );
 }
 
+function getElectronBuilderInvocation(platform, projectRoot, nodeExecutable) {
+  if (platform === 'win32') {
+    return {
+      command: nodeExecutable,
+      argsPrefix: [path.join(projectRoot, 'node_modules', 'electron-builder', 'cli.js')]
+    };
+  }
+
+  return {
+    command: path.join(projectRoot, 'node_modules', '.bin', 'electron-builder'),
+    argsPrefix: []
+  };
+}
+
+function getNpmInvocation(platform, nodeExecutable) {
+  if (platform === 'win32') {
+    return {
+      command: nodeExecutable,
+      argsPrefix: [path.join(path.dirname(nodeExecutable), 'node_modules', 'npm', 'bin', 'npm-cli.js')]
+    };
+  }
+
+  return { command: 'npm', argsPrefix: [] };
+}
+
 function run(command, args, cwd) {
   execFileSync(command, args, {
     cwd,
@@ -42,4 +67,4 @@ function run(command, args, cwd) {
   });
 }
 
-module.exports = { buildWindows };
+module.exports = { buildWindows, getElectronBuilderInvocation, getNpmInvocation };
