@@ -54,16 +54,20 @@ type UpdateControllerOptions = {
 type UpdatePhase =
   | 'idle'
   | 'checking'
+  | 'check-complete'
   | 'awaiting-download-confirmation'
   | 'downloading'
   | 'awaiting-install-confirmation'
   | 'downloaded-deferred'
-  | 'installing';
+  | 'installing'
+  | 'failed';
 
 type UpdateOperation = {
   id: number;
   manual: boolean;
   failureHandled: boolean;
+  checkPending: boolean;
+  downloadPending: boolean;
   version?: string;
 };
 
@@ -96,6 +100,30 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     currentOperation = undefined;
   };
 
+  const settleOperationPromise = (
+    operationId: number,
+    promise: 'check' | 'download'
+  ): void => {
+    const operation = currentOperation;
+    if (!operation || operation.id !== operationId) {
+      return;
+    }
+
+    if (promise === 'check') {
+      operation.checkPending = false;
+    } else {
+      operation.downloadPending = false;
+    }
+
+    if (
+      (phase === 'failed' || phase === 'check-complete') &&
+      !operation.checkPending &&
+      !operation.downloadPending
+    ) {
+      resetToIdle();
+    }
+  };
+
   const finishFailure = (error: unknown, operationId: number | undefined): void => {
     const operation = currentOperation;
     if (
@@ -103,7 +131,7 @@ export function createUpdateController(options: UpdateControllerOptions): Update
       !operation ||
       operation.id !== operationId ||
       operation.failureHandled ||
-      !['checking', 'awaiting-download-confirmation', 'downloading'].includes(phase)
+      !['checking', 'awaiting-download-confirmation', 'downloading', 'installing'].includes(phase)
     ) {
       return;
     }
@@ -111,18 +139,29 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     operation.failureHandled = true;
     const failedPhase = phase;
     const isDownloadFailure = failedPhase === 'downloading';
-    const shouldNotify = operation.manual || isDownloadFailure;
+    const isInstallFailure = failedPhase === 'installing';
+    const shouldNotify = operation.manual || isDownloadFailure || isInstallFailure;
     if (isDownloadFailure) {
       options.progress?.close();
     }
-    resetToIdle();
+    phase = 'failed';
     logError('Auto-update failed', error);
 
     if (shouldNotify && !disposed) {
       options.dialog.showErrorBox(
-        isDownloadFailure ? '下载更新失败' : '检查更新失败',
-        '暂时无法完成更新，请稍后重试；如果仍失败，请检查网络。'
+        isInstallFailure
+          ? '安装更新失败'
+          : isDownloadFailure
+            ? '下载更新失败'
+            : '检查更新失败',
+        isInstallFailure
+          ? '便签暂时无法退出安装，请稍后再试。'
+          : '暂时无法完成更新，请稍后重试；如果仍失败，请检查网络。'
       );
+    }
+
+    if (!operation.checkPending && !operation.downloadPending) {
+      resetToIdle();
     }
   };
 
@@ -132,7 +171,10 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     }
 
     const shouldNotify = currentOperation.manual;
-    resetToIdle();
+    phase = 'check-complete';
+    if (!currentOperation.checkPending) {
+      resetToIdle();
+    }
     if (shouldNotify) {
       void options.dialog.showMessageBox({
         type: 'info',
@@ -171,15 +213,27 @@ export function createUpdateController(options: UpdateControllerOptions): Update
         }
 
         if (response !== 0) {
-          resetToIdle();
+          phase = 'check-complete';
+          if (!currentOperation?.checkPending) {
+            resetToIdle();
+          }
           return;
         }
 
         phase = 'downloading';
         options.progress?.showPreparing(version);
-        await options.updater.downloadUpdate().catch((error) => {
+        const operation = currentOperation;
+        if (!operation || operation.id !== operationId) {
+          return;
+        }
+        operation.downloadPending = true;
+        try {
+          await options.updater.downloadUpdate();
+        } catch (error) {
           finishFailure(error, operationId);
-        });
+        } finally {
+          settleOperationPromise(operationId, 'download');
+        }
       })
       .catch((error) => {
         finishFailure(error, operationId);
@@ -200,7 +254,16 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     }
 
     const info = value as UpdateInfo | undefined;
-    const version = info?.version?.trim() || currentOperation.version;
+    const receivedVersion = info?.version?.trim() || undefined;
+    const expectedVersion = currentOperation.version;
+    if (expectedVersion && receivedVersion && expectedVersion !== receivedVersion) {
+      logError('Ignoring update-downloaded for unexpected version', {
+        expectedVersion,
+        receivedVersion
+      });
+      return;
+    }
+    const version = receivedVersion || expectedVersion;
     const operationId = currentOperation.id;
     phase = 'awaiting-install-confirmation';
     options.progress?.close();
@@ -236,14 +299,7 @@ export function createUpdateController(options: UpdateControllerOptions): Update
           }
           options.updater.quitAndInstall(true, true);
         } catch (error) {
-          resetToIdle();
-          logError('Unable to prepare auto-update installation', error);
-          if (!disposed) {
-            options.dialog.showErrorBox(
-              '安装更新失败',
-              '便签暂时无法退出安装，请稍后再试。'
-            );
-          }
+          finishFailure(error, operationId);
         }
       })
       .catch((error) => {
@@ -286,10 +342,14 @@ export function createUpdateController(options: UpdateControllerOptions): Update
       message:
         phase === 'checking'
           ? '正在检查更新'
-          : phase === 'awaiting-download-confirmation' ||
-              phase === 'awaiting-install-confirmation'
-            ? '请先处理当前更新提示'
-            : '正在准备安装更新',
+          : phase === 'check-complete'
+            ? '正在结束本次更新检查'
+            : phase === 'failed'
+              ? '正在结束上一次更新操作'
+              : phase === 'awaiting-download-confirmation' ||
+                  phase === 'awaiting-install-confirmation'
+                ? '请先处理当前更新提示'
+                : '正在准备安装更新',
       noLink: true
     });
   };
@@ -310,12 +370,18 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     currentOperation = {
       id: ++nextOperationId,
       manual: isManual,
-      failureHandled: false
+      failureHandled: false,
+      checkPending: true,
+      downloadPending: false
     };
     const operationId = currentOperation.id;
-    await options.updater.checkForUpdates().catch((error) => {
+    try {
+      await options.updater.checkForUpdates();
+    } catch (error) {
       finishFailure(error, operationId);
-    });
+    } finally {
+      settleOperationPromise(operationId, 'check');
+    }
   };
 
   return {

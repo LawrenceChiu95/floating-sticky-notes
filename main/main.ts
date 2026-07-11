@@ -310,7 +310,14 @@ function createPlatformUpdateController(): PlatformUpdateController | undefined 
 
   if (shouldEnableAutoUpdates(process.platform, app.isPackaged)) {
     const progress = createUpdateProgressWindowManager({
-      createWindow: createElectronUpdateProgressWindow
+      createWindow: createElectronUpdateProgressWindow,
+      setFallbackProgress: (progressValue) => {
+        for (const window of BrowserWindow.getAllWindows()) {
+          if (!window.isDestroyed()) {
+            window.setProgressBar(progressValue);
+          }
+        }
+      }
     });
     return createUpdateController({
       updater: electronUpdater.autoUpdater,

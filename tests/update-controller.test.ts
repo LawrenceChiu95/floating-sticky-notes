@@ -143,6 +143,32 @@ describe('update controller', () => {
     );
   });
 
+  it('recovers when quitAndInstall emits an updater error', async () => {
+    const updater = new FakeUpdater();
+    const error = new Error('installer launch failed');
+    updater.quitAndInstall.mockImplementationOnce(() => {
+      updater.emit('error', error);
+    });
+    const dialog = createDialog([0, 0]);
+    const logError = vi.fn();
+    const controller = createUpdateController({ updater, dialog, logError });
+
+    await controller.checkManually();
+    updater.emit('update-available', { version: '0.1.10' });
+    await flushMicrotasks();
+    updater.emit('update-downloaded', { version: '0.1.10' });
+    await flushMicrotasks();
+
+    expect(logError).toHaveBeenCalledTimes(1);
+    expect(dialog.showErrorBox).toHaveBeenCalledWith(
+      '安装更新失败',
+      expect.stringContaining('请稍后再试')
+    );
+
+    await controller.checkManually();
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(2);
+  });
+
   it('does not let an old confirmation start a download after failure', async () => {
     const updater = new FakeUpdater();
     let resolveUpdatePrompt: ((value: { response: number }) => void) | undefined;
@@ -189,6 +215,135 @@ describe('update controller', () => {
     expect(dialog.showErrorBox).toHaveBeenCalledWith(
       '下载更新失败',
       expect.stringContaining('请稍后重试')
+    );
+  });
+
+  it('does not start a new check until a failed check promise settles', async () => {
+    const updater = new FakeUpdater();
+    let resolveCheck: (() => void) | undefined;
+    updater.checkForUpdates.mockImplementationOnce(
+      () => new Promise<undefined>((resolve) => {
+        resolveCheck = () => resolve(undefined);
+      })
+    );
+    const dialog = createDialog();
+    const controller = createUpdateController({ updater, dialog, logError: vi.fn() });
+
+    void controller.checkManually();
+    await flushMicrotasks();
+    updater.emit('error', new Error('offline'));
+    await controller.checkManually();
+
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(1);
+
+    resolveCheck?.();
+    await flushMicrotasks();
+    await controller.checkManually();
+
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not start a new check until a successful check promise settles', async () => {
+    const updater = new FakeUpdater();
+    let resolveCheck: (() => void) | undefined;
+    updater.checkForUpdates.mockImplementationOnce(
+      () => new Promise<undefined>((resolve) => {
+        resolveCheck = () => resolve(undefined);
+      })
+    );
+    const controller = createUpdateController({
+      updater,
+      dialog: createDialog(),
+      logError: vi.fn()
+    });
+
+    void controller.checkManually();
+    await flushMicrotasks();
+    updater.emit('update-not-available', { version: '0.1.10' });
+    await controller.checkManually();
+
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(1);
+
+    resolveCheck?.();
+    await flushMicrotasks();
+    await controller.checkManually();
+
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not start a new check after deferring while the check promise is pending', async () => {
+    const updater = new FakeUpdater();
+    let resolveCheck: (() => void) | undefined;
+    updater.checkForUpdates.mockImplementationOnce(
+      () => new Promise<undefined>((resolve) => {
+        resolveCheck = () => resolve(undefined);
+      })
+    );
+    const controller = createUpdateController({
+      updater,
+      dialog: createDialog([1]),
+      logError: vi.fn()
+    });
+
+    void controller.checkManually();
+    await flushMicrotasks();
+    updater.emit('update-available', { version: '0.1.10' });
+    await flushMicrotasks();
+    await controller.checkManually();
+
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(1);
+
+    resolveCheck?.();
+    await flushMicrotasks();
+    await controller.checkManually();
+
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not start a new check until a failed download promise settles', async () => {
+    const updater = new FakeUpdater();
+    let resolveDownload: (() => void) | undefined;
+    updater.downloadUpdate.mockImplementationOnce(
+      () => new Promise<never[]>((resolve) => {
+        resolveDownload = () => resolve([]);
+      })
+    );
+    const dialog = createDialog([0]);
+    const controller = createUpdateController({ updater, dialog, logError: vi.fn() });
+
+    await controller.checkManually();
+    updater.emit('update-available', { version: '0.1.10' });
+    await flushMicrotasks();
+    updater.emit('error', new Error('download interrupted'));
+    await controller.checkManually();
+
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(1);
+
+    resolveDownload?.();
+    await flushMicrotasks();
+    await controller.checkManually();
+
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(2);
+  });
+
+  it('ignores a downloaded event for a different version', async () => {
+    const updater = new FakeUpdater();
+    const dialog = createDialog([0]);
+    const progress = createProgressPresenter();
+    const logError = vi.fn();
+    const controller = createUpdateController({ updater, dialog, progress, logError });
+
+    await controller.checkManually();
+    updater.emit('update-available', { version: '0.1.10' });
+    await flushMicrotasks();
+    updater.emit('update-downloaded', { version: '0.1.9' });
+    await flushMicrotasks();
+
+    expect(progress.close).not.toHaveBeenCalled();
+    expect(dialog.showMessageBox).toHaveBeenCalledTimes(1);
+    expect(logError).toHaveBeenCalledWith(
+      'Ignoring update-downloaded for unexpected version',
+      { expectedVersion: '0.1.10', receivedVersion: '0.1.9' }
     );
   });
 

@@ -64,6 +64,7 @@ export type UpdateProgressPresenter = {
 
 type UpdateProgressWindowManagerOptions = {
   createWindow: () => UpdateProgressWindowPort;
+  setFallbackProgress?: (progress: number) => void;
   logError?: (message: string, error: unknown) => void;
 };
 
@@ -71,17 +72,38 @@ export function createUpdateProgressWindowManager(
   options: UpdateProgressWindowManagerOptions
 ): UpdateProgressPresenter {
   const logError = options.logError ?? ((message, error) => console.error(message, error));
+  const setFallbackProgress = options.setFallbackProgress ?? (() => undefined);
   let activeWindow: UpdateProgressWindowPort | undefined;
   let latestSnapshot: UpdateProgressSnapshot | undefined;
   let version: string | undefined;
   let rendererReady = false;
   let disposed = false;
 
-  const setTaskbarProgress = (
+  const setFallbackTaskbarProgress = (progress: number): void => {
+    try {
+      setFallbackProgress(progress);
+    } catch (error) {
+      logError('Unable to update fallback taskbar progress', error);
+    }
+  };
+
+  const setWindowTaskbarProgress = (
     window: UpdateProgressWindowPort,
-    snapshot: UpdateProgressSnapshot
+    progress: number
   ): void => {
-    window.setProgressBar(snapshot.percent === undefined ? 2 : snapshot.percent / 100);
+    try {
+      window.setProgressBar(progress);
+    } catch (error) {
+      logError('Unable to update progress window taskbar state', error);
+    }
+  };
+
+  const setSnapshotProgress = (snapshot: UpdateProgressSnapshot): void => {
+    const progress = snapshot.percent === undefined ? 2 : snapshot.percent / 100;
+    setFallbackTaskbarProgress(progress);
+    if (activeWindow) {
+      setWindowTaskbarProgress(activeWindow, progress);
+    }
   };
 
   const sendLatestSnapshot = (): void => {
@@ -89,7 +111,11 @@ export function createUpdateProgressWindowManager(
       return;
     }
 
-    activeWindow.send(latestSnapshot);
+    try {
+      activeWindow.send(latestSnapshot);
+    } catch (error) {
+      logError('Unable to send update progress snapshot', error);
+    }
   };
 
   const ensureWindow = (): UpdateProgressWindowPort | undefined => {
@@ -101,37 +127,61 @@ export function createUpdateProgressWindowManager(
       return activeWindow;
     }
 
-    const window = options.createWindow();
+    let window: UpdateProgressWindowPort;
+    try {
+      window = options.createWindow();
+    } catch (error) {
+      logError('Unable to create update progress window', error);
+      return undefined;
+    }
     activeWindow = window;
     rendererReady = false;
 
-    window.onReady(() => {
-      if (activeWindow !== window || disposed) {
-        return;
-      }
+    try {
+      window.onReady(() => {
+        if (activeWindow !== window || disposed) {
+          return;
+        }
 
-      rendererReady = true;
-      sendLatestSnapshot();
+        rendererReady = true;
+        sendLatestSnapshot();
+      });
+      window.onClosed(() => {
+        if (activeWindow === window) {
+          activeWindow = undefined;
+          rendererReady = false;
+        }
+      });
       window.show();
       window.focus();
-    });
-    window.onClosed(() => {
-      if (activeWindow === window) {
-        activeWindow = undefined;
-        rendererReady = false;
-      }
-    });
-    void window.load().catch((error) => {
-      logError('Unable to load update progress window', error);
-      if (activeWindow !== window) {
-        return;
-      }
-
+    } catch (error) {
+      logError('Unable to initialize update progress window', error);
       activeWindow = undefined;
       rendererReady = false;
-      window.setProgressBar(-1);
-      window.destroy();
-    });
+      try {
+        window.destroy();
+      } catch (destroyError) {
+        logError('Unable to destroy update progress window', destroyError);
+      }
+      return undefined;
+    }
+    void Promise.resolve()
+      .then(() => window.load())
+      .catch((error) => {
+        logError('Unable to load update progress window', error);
+        if (activeWindow !== window) {
+          return;
+        }
+
+        activeWindow = undefined;
+        rendererReady = false;
+        setWindowTaskbarProgress(window, -1);
+        try {
+          window.destroy();
+        } catch (destroyError) {
+          logError('Unable to destroy update progress window', destroyError);
+        }
+      });
 
     return window;
   };
@@ -144,11 +194,9 @@ export function createUpdateProgressWindowManager(
 
       version = nextVersion;
       latestSnapshot = createPreparingSnapshot(version);
-      const window = ensureWindow();
-      if (window) {
-        setTaskbarProgress(window, latestSnapshot);
-        sendLatestSnapshot();
-      }
+      ensureWindow();
+      setSnapshotProgress(latestSnapshot);
+      sendLatestSnapshot();
     },
     update: (value) => {
       if (disposed || !latestSnapshot) {
@@ -156,18 +204,20 @@ export function createUpdateProgressWindowManager(
       }
 
       latestSnapshot = createDownloadingSnapshot(value, version);
-      if (activeWindow) {
-        setTaskbarProgress(activeWindow, latestSnapshot);
-        sendLatestSnapshot();
-      }
+      setSnapshotProgress(latestSnapshot);
+      sendLatestSnapshot();
     },
     focus: () => {
       if (!activeWindow || disposed) {
         return;
       }
 
-      activeWindow.show();
-      activeWindow.focus();
+      try {
+        activeWindow.show();
+        activeWindow.focus();
+      } catch (error) {
+        logError('Unable to focus update progress window', error);
+      }
     },
     close: () => {
       const window = activeWindow;
@@ -175,9 +225,14 @@ export function createUpdateProgressWindowManager(
       rendererReady = false;
       latestSnapshot = undefined;
       version = undefined;
+      setFallbackTaskbarProgress(-1);
       if (window) {
-        window.setProgressBar(-1);
-        window.close();
+        setWindowTaskbarProgress(window, -1);
+        try {
+          window.close();
+        } catch (error) {
+          logError('Unable to close update progress window', error);
+        }
       }
     },
     dispose: () => {
@@ -191,9 +246,14 @@ export function createUpdateProgressWindowManager(
       rendererReady = false;
       latestSnapshot = undefined;
       version = undefined;
+      setFallbackTaskbarProgress(-1);
       if (window) {
-        window.setProgressBar(-1);
-        window.destroy();
+        setWindowTaskbarProgress(window, -1);
+        try {
+          window.destroy();
+        } catch (error) {
+          logError('Unable to destroy update progress window', error);
+        }
       }
     }
   };

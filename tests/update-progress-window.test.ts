@@ -46,6 +46,8 @@ describe('update progress window manager', () => {
     manager.update({ percent: 37.6 });
 
     expect(window.sent).toEqual([]);
+    expect(window.show).toHaveBeenCalledTimes(1);
+    expect(window.focus).toHaveBeenCalledTimes(1);
     expect(window.setProgressBar).toHaveBeenLastCalledWith(0.38);
 
     window.emitReady();
@@ -123,8 +125,10 @@ describe('update progress window manager', () => {
     const error = new Error('load failed');
     window.load.mockRejectedValueOnce(error);
     const logError = vi.fn();
+    const setFallbackProgress = vi.fn();
     const manager = createUpdateProgressWindowManager({
       createWindow: () => window,
+      setFallbackProgress,
       logError
     });
 
@@ -134,6 +138,69 @@ describe('update progress window manager', () => {
     expect(logError).toHaveBeenCalledWith('Unable to load update progress window', error);
     expect(window.setProgressBar).toHaveBeenLastCalledWith(-1);
     expect(window.destroy).toHaveBeenCalledTimes(1);
+
+    manager.update({ percent: 64 });
+    expect(setFallbackProgress).toHaveBeenLastCalledWith(0.64);
+  });
+
+  it('keeps downloading when creating the progress window throws', () => {
+    const error = new Error('window unavailable');
+    const setFallbackProgress = vi.fn();
+    const logError = vi.fn();
+    const manager = createUpdateProgressWindowManager({
+      createWindow: () => {
+        throw error;
+      },
+      setFallbackProgress,
+      logError
+    });
+
+    expect(() => manager.showPreparing('0.1.11')).not.toThrow();
+    manager.update({ percent: 25 });
+
+    expect(logError).toHaveBeenCalledWith('Unable to create update progress window', error);
+    expect(setFallbackProgress).toHaveBeenNthCalledWith(1, 2);
+    expect(setFallbackProgress).toHaveBeenLastCalledWith(0.25);
+  });
+
+  it('falls back when initializing the progress window throws', () => {
+    const window = new FakeProgressWindow();
+    const error = new Error('show failed');
+    window.show.mockImplementationOnce(() => {
+      throw error;
+    });
+    const setFallbackProgress = vi.fn();
+    const logError = vi.fn();
+    const manager = createUpdateProgressWindowManager({
+      createWindow: () => window,
+      setFallbackProgress,
+      logError
+    });
+
+    expect(() => manager.showPreparing()).not.toThrow();
+
+    expect(logError).toHaveBeenCalledWith('Unable to initialize update progress window', error);
+    expect(window.destroy).toHaveBeenCalledTimes(1);
+    expect(setFallbackProgress).toHaveBeenLastCalledWith(2);
+  });
+
+  it('does not let fallback taskbar errors interrupt downloading', () => {
+    const window = new FakeProgressWindow();
+    const error = new Error('taskbar unavailable');
+    const logError = vi.fn();
+    const manager = createUpdateProgressWindowManager({
+      createWindow: () => window,
+      setFallbackProgress: () => {
+        throw error;
+      },
+      logError
+    });
+
+    expect(() => manager.showPreparing()).not.toThrow();
+    expect(() => manager.update({ percent: 50 })).not.toThrow();
+
+    expect(window.setProgressBar).toHaveBeenLastCalledWith(0.5);
+    expect(logError).toHaveBeenCalledWith('Unable to update fallback taskbar progress', error);
   });
 
   it('destroys the active window and ignores new UI after dispose', () => {
