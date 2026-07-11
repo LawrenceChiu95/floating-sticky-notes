@@ -31,9 +31,19 @@ import {
   shouldEnableAutoUpdates,
   type UpdateController
 } from './update-controller';
-import { NOTE_ALWAYS_ON_TOP_LEVEL, createNoteWindowOptions } from './window-options';
+import {
+  createUpdateProgressWindowManager,
+  createUpdateProgressWindowOptions,
+  type UpdateProgressWindowPort
+} from './update-progress-window';
+import {
+  NOTE_ALWAYS_ON_TOP_LEVEL,
+  NOTE_WINDOW_ICON_PATH,
+  createNoteWindowOptions
+} from './window-options';
 import { createDebouncedValueAction } from '../shared/debounced-action';
 import { DEFAULT_APP_COPY, getAppCopy, type AppCopy } from '../shared/app-copy';
+import { UPDATE_PROGRESS_CHANNEL, type UpdateProgressSnapshot } from '../shared/update-progress';
 
 let notesManager: NotesManager | undefined;
 let appCopy: AppCopy = DEFAULT_APP_COPY;
@@ -113,6 +123,78 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
     flushPendingChanges,
     close: () => {
       noteWindow.close();
+    }
+  };
+}
+
+function createElectronUpdateProgressWindow(): UpdateProgressWindowPort {
+  const workArea = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
+  const progressWindow = new BrowserWindow(
+    createUpdateProgressWindowOptions(
+      workArea,
+      join(__dirname, '../preload/updateProgressPreload.mjs'),
+      NOTE_WINDOW_ICON_PATH
+    )
+  );
+
+  preventNoteWindowNavigation({
+    onWillNavigate: (listener) => {
+      progressWindow.webContents.on('will-navigate', listener);
+    },
+    onWillFrameNavigate: (listener) => {
+      progressWindow.webContents.on('will-frame-navigate', listener);
+    }
+  });
+  progressWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+
+  return {
+    load: () => {
+      if (is.dev && process.env.ELECTRON_RENDERER_URL) {
+        return progressWindow.loadURL(
+          `${process.env.ELECTRON_RENDERER_URL}/update-progress.html`
+        );
+      }
+      return progressWindow.loadFile(join(__dirname, '../renderer/update-progress.html'));
+    },
+    onReady: (listener) => {
+      progressWindow.once('ready-to-show', listener);
+    },
+    onClosed: (listener) => {
+      progressWindow.once('closed', listener);
+    },
+    send: (snapshot: UpdateProgressSnapshot) => {
+      if (!progressWindow.webContents.isDestroyed()) {
+        progressWindow.webContents.send(UPDATE_PROGRESS_CHANNEL, snapshot);
+      }
+    },
+    setProgressBar: (progress) => {
+      if (!progressWindow.isDestroyed()) {
+        progressWindow.setProgressBar(progress);
+      }
+    },
+    show: () => {
+      if (progressWindow.isDestroyed()) {
+        return;
+      }
+      if (progressWindow.isMinimized()) {
+        progressWindow.restore();
+      }
+      progressWindow.show();
+    },
+    focus: () => {
+      if (!progressWindow.isDestroyed()) {
+        progressWindow.focus();
+      }
+    },
+    close: () => {
+      if (!progressWindow.isDestroyed()) {
+        progressWindow.close();
+      }
+    },
+    destroy: () => {
+      if (!progressWindow.isDestroyed()) {
+        progressWindow.destroy();
+      }
     }
   };
 }
@@ -227,10 +309,14 @@ function createPlatformUpdateController(): PlatformUpdateController | undefined 
   const beforeInstall = (): Promise<void> => getNotesManager().flushPendingSaves();
 
   if (shouldEnableAutoUpdates(process.platform, app.isPackaged)) {
+    const progress = createUpdateProgressWindowManager({
+      createWindow: createElectronUpdateProgressWindow
+    });
     return createUpdateController({
       updater: electronUpdater.autoUpdater,
       dialog,
-      beforeInstall
+      beforeInstall,
+      progress
     });
   }
 
@@ -293,6 +379,9 @@ app.whenReady().then(async () => {
   }
 
   const updateController = createPlatformUpdateController();
+  app.once('before-quit', () => {
+    updateController?.dispose?.();
+  });
 
   // The tray right-click menu is the single global surface for app-level
   // actions. Startup is default-enabled once on first run; after that, this

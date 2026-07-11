@@ -1,8 +1,46 @@
+import type { BrowserWindowConstructorOptions } from 'electron';
+import type { DisplayWorkArea } from './window-options';
 import {
   createDownloadingSnapshot,
   createPreparingSnapshot,
   type UpdateProgressSnapshot
 } from '../shared/update-progress';
+
+const UPDATE_PROGRESS_WINDOW_WIDTH = 360;
+const UPDATE_PROGRESS_WINDOW_HEIGHT = 150;
+
+export function createUpdateProgressWindowOptions(
+  workArea: DisplayWorkArea,
+  preloadPath: string,
+  iconPath: string
+): BrowserWindowConstructorOptions {
+  const width = Math.min(UPDATE_PROGRESS_WINDOW_WIDTH, workArea.width);
+  const height = Math.min(UPDATE_PROGRESS_WINDOW_HEIGHT, workArea.height);
+
+  return {
+    x: workArea.x + Math.floor((workArea.width - width) / 2),
+    y: workArea.y + Math.floor((workArea.height - height) / 2),
+    width,
+    height,
+    title: '下载更新',
+    autoHideMenuBar: true,
+    backgroundColor: '#f5f1e8',
+    show: false,
+    modal: false,
+    closable: false,
+    minimizable: true,
+    maximizable: false,
+    resizable: false,
+    skipTaskbar: false,
+    icon: iconPath,
+    webPreferences: {
+      preload: preloadPath,
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  };
+}
 
 export type UpdateProgressWindowPort = {
   load: () => Promise<void>;

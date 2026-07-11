@@ -13,6 +13,17 @@ describe('auto-update main-process wiring', () => {
     );
     expect(mainSource).toContain('createUpdateController({');
     expect(mainSource).toContain('updater: electronUpdater.autoUpdater');
+    expect(mainSource).toContain('createUpdateProgressWindowManager({');
+    expect(mainSource).toContain('progress');
+  });
+
+  it('creates a secure ownerless progress window on the active display', () => {
+    expect(mainSource).toContain('screen.getDisplayNearestPoint(screen.getCursorScreenPoint())');
+    expect(mainSource).toContain("'../preload/updateProgressPreload.mjs'");
+    expect(mainSource).toContain("'../renderer/update-progress.html'");
+    expect(mainSource).toContain('UPDATE_PROGRESS_CHANNEL');
+    expect(mainSource).toContain("setWindowOpenHandler(() => ({ action: 'deny' }))");
+    expect(mainSource).toContain('createUpdateProgressWindowOptions(');
   });
 
   it('uses the manual DMG flow only for packaged macOS builds', () => {
@@ -32,11 +43,16 @@ describe('auto-update main-process wiring', () => {
     expect(mainSource).toContain('checkSilently()');
   });
 
+  it('disposes Windows update UI during app shutdown', () => {
+    expect(mainSource).toContain("app.once('before-quit'");
+    expect(mainSource).toContain('updateController?.dispose?.()');
+  });
+
   it('flushes all pending note changes before installing', () => {
     expect(mainSource).toContain(
       'const beforeInstall = (): Promise<void> => getNotesManager().flushPendingSaves();'
     );
-    expect(mainSource).toMatch(/createUpdateController\(\{[\s\S]*?beforeInstall\s*\}\)/);
+    expect(mainSource).toMatch(/createUpdateController\(\{[\s\S]*?beforeInstall,[\s\S]*?\}\)/);
     expect(mainSource).toMatch(/createMacUpdateController\(\{[\s\S]*?beforeInstall,/);
   });
 
