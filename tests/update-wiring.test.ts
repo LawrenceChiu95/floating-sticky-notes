@@ -6,11 +6,13 @@ const mainSource = readFileSync(resolve(__dirname, '../main/main.ts'), 'utf8');
 
 describe('auto-update main-process wiring', () => {
   it('uses electron-updater only for packaged Windows builds', () => {
-    expect(mainSource).toContain("from 'electron-updater'");
+    expect(mainSource).toContain("import electronUpdater from 'electron-updater';");
+    expect(mainSource).not.toContain("import { autoUpdater } from 'electron-updater';");
     expect(mainSource).toMatch(
       /shouldEnableAutoUpdates\(\s*process\.platform,\s*app\.isPackaged\s*\)/
     );
     expect(mainSource).toContain('createUpdateController({');
+    expect(mainSource).toContain('updater: electronUpdater.autoUpdater');
   });
 
   it('uses the manual DMG flow only for packaged macOS builds', () => {

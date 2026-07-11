@@ -1,6 +1,6 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, net, protocol, screen, shell } from 'electron';
 import { is } from '@electron-toolkit/utils';
-import { autoUpdater } from 'electron-updater';
+import electronUpdater from 'electron-updater';
 import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { shouldCreateWindowOnActivate, shouldQuitWhenAllWindowsClosed } from './app-lifecycle';
@@ -224,7 +224,7 @@ function createPlatformUpdateController(): UpdateController | undefined {
 
   if (shouldEnableAutoUpdates(process.platform, app.isPackaged)) {
     return createUpdateController({
-      updater: autoUpdater,
+      updater: electronUpdater.autoUpdater,
       dialog,
       beforeInstall
     });
