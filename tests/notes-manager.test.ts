@@ -68,6 +68,34 @@ describe('NotesManager', () => {
     expect(savedDocuments).toEqual([]);
   });
 
+  it('recreates only note windows that the user has closed', async () => {
+    const createdWindows: CreatedWindow[] = [];
+    const notes = ['note-1', 'note-2'].map((id) =>
+      createDefaultNote({ id, now: '2026-07-05T10:00:00.000Z' })
+    );
+    const manager = new NotesManager({
+      storage: {
+        load: async () => ({ version: 1, notes }),
+        save: async () => undefined
+      },
+      createWindow: createWindowFactory(createdWindows)
+    });
+
+    await manager.start();
+    createdWindows[0].window.triggerClosed();
+
+    expect(manager.restoreClosedNotes()).toBe(1);
+    expect(createdWindows.map(({ note }) => note.id)).toEqual([
+      'note-1',
+      'note-2',
+      'note-1'
+    ]);
+    expect(createdWindows[1].window.showCount).toBe(1);
+    expect(manager.restoreClosedNotes()).toBe(0);
+    expect(createdWindows[1].window.showCount).toBe(2);
+    expect(createdWindows[2].window.showCount).toBe(1);
+  });
+
   it('creates, windows, and saves a new note below the note limit', async () => {
     const savedDocuments: NotesDocument[] = [];
     const createdWindows: CreatedWindow[] = [];
@@ -806,7 +834,9 @@ type TestWindow = ManagedNoteWindow & {
   bounds: NoteRecord['bounds'];
   closed: boolean;
   flushCount: number;
+  showCount: number;
   triggerBoundsChanged: () => Promise<void>;
+  triggerClosed: () => void;
 };
 
 function createImageRecord(id: string) {
@@ -843,18 +873,25 @@ function createWindowFactory(
 
   return (note) => {
     let boundsChangedListener: (() => void | Promise<void>) | undefined;
+    let closeListener: (() => void) | undefined;
     const window: TestWindow = {
       webContentsId: nextWebContentsId,
       bounds: note.bounds,
       closed: false,
       flushCount: 0,
+      showCount: 0,
       getBounds: () => window.bounds,
       onBoundsChanged: (listener) => {
         boundsChangedListener = listener;
       },
-      onClose: () => undefined,
+      onClose: (listener) => {
+        closeListener = listener;
+      },
       close: () => {
         window.closed = true;
+      },
+      show: () => {
+        window.showCount += 1;
       },
       flushPendingChanges: async () => {
         window.flushCount += 1;
@@ -862,6 +899,9 @@ function createWindowFactory(
       },
       triggerBoundsChanged: async () => {
         await boundsChangedListener?.();
+      },
+      triggerClosed: () => {
+        closeListener?.();
       }
     };
 

@@ -7,7 +7,7 @@ import {
 } from '../shared/update-progress';
 
 const UPDATE_PROGRESS_WINDOW_WIDTH = 360;
-const UPDATE_PROGRESS_WINDOW_HEIGHT = 150;
+const UPDATE_PROGRESS_WINDOW_HEIGHT = 180;
 
 export function createUpdateProgressWindowOptions(
   workArea: DisplayWorkArea,

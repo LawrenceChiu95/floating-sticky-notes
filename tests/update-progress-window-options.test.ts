@@ -11,9 +11,9 @@ describe('update progress window options', () => {
 
     expect(options).toMatchObject({
       x: 520,
-      y: 375,
+      y: 360,
       width: 360,
-      height: 150,
+      height: 180,
       show: false,
       modal: false,
       closable: false,

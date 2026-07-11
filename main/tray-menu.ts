@@ -9,6 +9,7 @@ export type TrayMenuDeps = {
   getAutoLaunchEnabled: () => boolean;
   setAutoLaunchEnabled: (enabled: boolean) => void;
   createNote: () => void;
+  restoreNotes: () => void;
   checkForUpdates?: () => void;
   quit: () => void;
 };
@@ -26,6 +27,11 @@ export function buildTrayMenuTemplate(deps: TrayMenuDeps): TrayMenuItemTemplate[
       label: '新建便签',
       type: 'normal',
       click: () => deps.createNote()
+    },
+    {
+      label: '显示所有便签',
+      type: 'normal',
+      click: () => deps.restoreNotes()
     },
     {
       label: '开机时启动',

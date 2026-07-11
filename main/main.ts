@@ -47,7 +47,22 @@ import { UPDATE_PROGRESS_CHANNEL, type UpdateProgressSnapshot } from '../shared/
 
 let notesManager: NotesManager | undefined;
 let appCopy: AppCopy = DEFAULT_APP_COPY;
+let restoreNotesWhenReady = false;
 const AUTO_LAUNCH_DEFAULT_MARKER = '.auto-launch-default-applied';
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (!hasSingleInstanceLock) {
+  app.quit();
+}
+
+app.on('second-instance', () => {
+  if (notesManager) {
+    notesManager.restoreClosedNotes();
+    return;
+  }
+
+  restoreNotesWhenReady = true;
+});
 
 type PlatformUpdateController = Pick<UpdateController, 'checkManually' | 'checkSilently'> & {
   dispose?: () => void;
@@ -121,6 +136,12 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
       noteWindow.on('closed', listener);
     },
     flushPendingChanges,
+    show: () => {
+      if (noteWindow.isMinimized()) {
+        noteWindow.restore();
+      }
+      noteWindow.show();
+    },
     close: () => {
       noteWindow.close();
     }
@@ -352,6 +373,10 @@ function createPlatformUpdateController(): PlatformUpdateController | undefined 
 }
 
 app.whenReady().then(async () => {
+  if (!hasSingleInstanceLock) {
+    return;
+  }
+
   const userDataPath = app.getPath('userData');
   try {
     const localProfile = await readLocalProfile(userDataPath);
@@ -378,6 +403,10 @@ app.whenReady().then(async () => {
     })
   );
   await notesManager.start();
+  if (restoreNotesWhenReady) {
+    notesManager.restoreClosedNotes();
+    restoreNotesWhenReady = false;
+  }
 
   try {
     ensureAutoLaunchDefaultEnabled(app, createAutoLaunchDefaultState(userDataPath));
@@ -400,6 +429,9 @@ app.whenReady().then(async () => {
     },
     createNote: () => {
       void getNotesManager().createNote();
+    },
+    restoreNotes: () => {
+      getNotesManager().restoreClosedNotes();
     },
     ...(updateController
       ? {

@@ -256,14 +256,18 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     const info = value as UpdateInfo | undefined;
     const receivedVersion = info?.version?.trim() || undefined;
     const expectedVersion = currentOperation.version;
-    if (expectedVersion && receivedVersion && expectedVersion !== receivedVersion) {
-      logError('Ignoring update-downloaded for unexpected version', {
-        expectedVersion,
-        receivedVersion
-      });
+    if (!expectedVersion || !receivedVersion || expectedVersion !== receivedVersion) {
+      finishFailure(
+        {
+          reason: 'unexpected-downloaded-version',
+          expectedVersion,
+          receivedVersion
+        },
+        currentOperation.id
+      );
       return;
     }
-    const version = receivedVersion || expectedVersion;
+    const version = receivedVersion;
     const operationId = currentOperation.id;
     phase = 'awaiting-install-confirmation';
     options.progress?.close();

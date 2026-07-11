@@ -326,26 +326,42 @@ describe('update controller', () => {
     expect(updater.checkForUpdates).toHaveBeenCalledTimes(2);
   });
 
-  it('ignores a downloaded event for a different version', async () => {
-    const updater = new FakeUpdater();
-    const dialog = createDialog([0]);
-    const progress = createProgressPresenter();
-    const logError = vi.fn();
-    const controller = createUpdateController({ updater, dialog, progress, logError });
+  it.each([undefined, '0.1.9'])(
+    'fails a downloaded event whose version is %s',
+    async (receivedVersion) => {
+      const updater = new FakeUpdater();
+      const dialog = createDialog([0]);
+      const progress = createProgressPresenter();
+      const logError = vi.fn();
+      const controller = createUpdateController({ updater, dialog, progress, logError });
 
-    await controller.checkManually();
-    updater.emit('update-available', { version: '0.1.10' });
-    await flushMicrotasks();
-    updater.emit('update-downloaded', { version: '0.1.9' });
-    await flushMicrotasks();
+      await controller.checkManually();
+      updater.emit('update-available', { version: '0.1.10' });
+      await flushMicrotasks();
+      updater.emit(
+        'update-downloaded',
+        receivedVersion === undefined ? {} : { version: receivedVersion }
+      );
+      await flushMicrotasks();
 
-    expect(progress.close).not.toHaveBeenCalled();
-    expect(dialog.showMessageBox).toHaveBeenCalledTimes(1);
-    expect(logError).toHaveBeenCalledWith(
-      'Ignoring update-downloaded for unexpected version',
-      { expectedVersion: '0.1.10', receivedVersion: '0.1.9' }
-    );
-  });
+      expect(progress.close).toHaveBeenCalledTimes(1);
+      expect(dialog.showMessageBox).toHaveBeenCalledTimes(1);
+      expect(dialog.showErrorBox).toHaveBeenCalledWith(
+        '下载更新失败',
+        expect.stringContaining('请稍后重试')
+      );
+      expect(logError).toHaveBeenCalledWith(
+        'Auto-update failed',
+        expect.objectContaining({
+          expectedVersion: '0.1.10',
+          receivedVersion
+        })
+      );
+
+      await controller.checkManually();
+      expect(updater.checkForUpdates).toHaveBeenCalledTimes(2);
+    }
+  );
 
   it('ignores progress outside the downloading phase', async () => {
     const updater = new FakeUpdater();

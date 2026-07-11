@@ -17,6 +17,7 @@ export type ManagedNoteWindow = {
   onBoundsChanged: (listener: () => void | Promise<void>) => void;
   onClose: (listener: () => void) => void;
   flushPendingChanges: () => Promise<void>;
+  show: () => void;
   close: () => void;
 };
 
@@ -115,6 +116,23 @@ export class NotesManager {
     for (const note of this.notesById.values()) {
       this.createWindowForNote(note);
     }
+  }
+
+  restoreClosedNotes(): number {
+    let restoredCount = 0;
+
+    for (const note of this.notesById.values()) {
+      const existingWindow = this.windowsByNoteId.get(note.id);
+      if (existingWindow) {
+        existingWindow.show();
+        continue;
+      }
+
+      this.createWindowForNote(note);
+      restoredCount += 1;
+    }
+
+    return restoredCount;
   }
 
   async createNote(): Promise<CreateNoteResult> {

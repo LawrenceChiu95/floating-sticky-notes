@@ -15,6 +15,7 @@ function createDeps(overrides: Partial<TrayMenuDeps> = {}): TrayMenuDeps {
     getAutoLaunchEnabled: () => false,
     setAutoLaunchEnabled: () => undefined,
     createNote: () => undefined,
+    restoreNotes: () => undefined,
     checkForUpdates: () => undefined,
     quit: () => undefined,
     ...overrides
@@ -26,11 +27,12 @@ function findItem(template: TrayMenuItem[], label: string): TrayMenuItem | undef
 }
 
 describe('tray menu template', () => {
-  it('contains 新建便签, 检查更新, a checkable 开机时启动, and 退出', () => {
+  it('contains note recovery, update, startup, and exit actions', () => {
     const template = buildTrayMenuTemplate(createDeps());
     const labels = template.map((item) => item.label);
 
     expect(labels).toContain('新建便签');
+    expect(labels).toContain('显示所有便签');
     expect(labels).toContain('检查更新');
     expect(labels).toContain('开机时启动');
     expect(labels).toContain('退出');
@@ -83,19 +85,22 @@ describe('tray menu template', () => {
     ]);
   });
 
-  it('routes 新建便签, 检查更新, and 退出 to the injected actions', () => {
+  it('routes note, update, and exit actions to the injected callbacks', () => {
     const createNote = vi.fn();
+    const restoreNotes = vi.fn();
     const checkForUpdates = vi.fn();
     const quit = vi.fn();
     const template = buildTrayMenuTemplate(
-      createDeps({ createNote, checkForUpdates, quit } as Partial<TrayMenuDeps>)
+      createDeps({ createNote, restoreNotes, checkForUpdates, quit } as Partial<TrayMenuDeps>)
     );
 
     findItem(template, '新建便签')?.click?.({});
+    findItem(template, '显示所有便签')?.click?.({});
     findItem(template, '检查更新')?.click?.({});
     findItem(template, '退出')?.click?.({});
 
     expect(createNote).toHaveBeenCalledTimes(1);
+    expect(restoreNotes).toHaveBeenCalledTimes(1);
     expect(checkForUpdates).toHaveBeenCalledTimes(1);
     expect(quit).toHaveBeenCalledTimes(1);
   });
@@ -118,6 +123,12 @@ describe('tray wiring', () => {
   it('creates the tray from the main process on app ready', () => {
     expect(mainSource).toContain("from './tray'");
     expect(mainSource).toContain('createTray(');
+  });
+
+  it('uses one app instance and restores closed notes from a second launch', () => {
+    expect(mainSource).toContain('app.requestSingleInstanceLock()');
+    expect(mainSource).toContain("app.on('second-instance'");
+    expect(mainSource).toContain('restoreClosedNotes()');
   });
 
   it('uses the packaged tray icon asset instead of an inline placeholder', () => {
