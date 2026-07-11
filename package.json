@@ -1,6 +1,6 @@
 {
   "name": "floating-sticky-notes",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "private": true,
   "description": "本地优先、始终置顶的桌面便签应用。",
   "license": "MIT",

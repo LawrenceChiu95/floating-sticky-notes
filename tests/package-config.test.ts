@@ -41,8 +41,8 @@ const packageJson = JSON.parse(
 };
 
 describe('package configuration', () => {
-  it('uses 0.1.9 as the first auto-update release', () => {
-    expect(packageJson.version).toBe('0.1.9');
+  it('uses the current release version and pinned updater dependencies', () => {
+    expect(packageJson.version).toBe('0.1.10');
     expect(packageJson.dependencies?.['electron-updater']).toBe('6.8.9');
     expect(packageJson.dependencies?.semver).toBe('7.8.5');
     expect(packageJson.dependencies?.yaml).toBe('2.9.0');

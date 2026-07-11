@@ -4,6 +4,8 @@
 
 ## [未发布]
 
+## [0.1.10] - 2026-07-11
+
 ### 新增
 
 - 建立公开仓库、贡献指南、Issue 模板和持续集成检查。
@@ -93,5 +95,6 @@
 - 提供待办清单、图片、颜色和透明度等核心功能。
 - 开始接入系统托盘与开机启动能力。
 
-[未发布]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.9...HEAD
+[未发布]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.10...HEAD
+[0.1.10]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/LawrenceChiu95/floating-sticky-notes/releases/tag/v0.1.9
