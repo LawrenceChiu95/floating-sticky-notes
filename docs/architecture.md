@@ -42,6 +42,10 @@ https://github.com/LawrenceChiu95/floating-sticky-notes-updates/releases/latest/
 
 应用启动后静默检查一次更新；用户也可以从托盘手动检查。发现新版本后，下载和重启安装都需要用户确认；执行 `quitAndInstall` 前会先保存便签数据。
 
+用户确认下载后，更新控制器通过窄 presenter 接口驱动独立的进度窗口。该窗口使用自己的 preload 和 renderer，只能接收只读进度快照，不具备便签读写 IPC 权限。控制器按 operation ID 和显式阶段接受 `download-progress`、`update-downloaded` 与错误事件，忽略迟到或重复事件；详细设计见 [`docs/superpowers/specs/2026-07-11-windows-update-progress-design.md`](superpowers/specs/2026-07-11-windows-update-progress-design.md)。
+
+Windows 关闭全部便签窗口后仍由系统托盘常驻。只有托盘“退出”、明确执行安装或系统退出才结束进程，避免进度窗口关闭时触发 `autoInstallOnAppQuit` 并绕过安装确认。
+
 ### macOS
 
 只有 `process.platform === 'darwin'` 且 `app.isPackaged === true` 时，才启用 Mac 半自动更新。Mac 不调用 `electron-updater` 的 `quitAndInstall`，而是读取同一更新源中的 `latest-mac.yml`，并只接受符合 `StickyNotes-Mac-<version>.dmg` 格式的安装镜像。
