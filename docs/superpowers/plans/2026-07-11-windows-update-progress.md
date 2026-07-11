@@ -1,5 +1,7 @@
 # Windows Update Progress Implementation Plan
 
+> 历史实施计划：任务已按后续 review 和 Windows 真机诊断完成。计划中的 preload `.mjs` 路径已经被真机证据推翻，最终实现必须使用 CommonJS `.cjs`；当前状态与剩余验证以仓库根目录 `HANDOFF.md` 为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 为 Windows 自动更新增加独立、非模态且可最小化的下载进度窗口，并修复关闭全部便签时意外退出安装的问题。

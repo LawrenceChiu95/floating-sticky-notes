@@ -2,6 +2,7 @@
 
 ## 开工前阅读
 
+- `HANDOFF.md`
 - `README.md`
 - `CONTRIBUTING.md`
 - `CHANGELOG.md`
@@ -19,6 +20,7 @@
 - 开机启动是全局设置，应保留在托盘菜单中，不要放进每张便签的外观面板。
 - Windows 原生问题应先判断进程、文件锁、注册表、快捷方式、资源、系统策略或 Shell 缓存中哪一层失败，再修改代码。
 - 不要把 macOS 交叉构建结果描述成 Windows 真机验证。
+- 两个启用 `sandbox: true` 的 preload 必须继续构建为 CommonJS，并使用 `.cjs` 路径加载；修改 Electron 或 electron-vite 构建配置后必须检查打包产物，不能只看源码测试。
 
 ## 验证要求
 
