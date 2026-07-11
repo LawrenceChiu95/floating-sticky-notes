@@ -39,6 +39,10 @@ let notesManager: NotesManager | undefined;
 let appCopy: AppCopy = DEFAULT_APP_COPY;
 const AUTO_LAUNCH_DEFAULT_MARKER = '.auto-launch-default-applied';
 
+type PlatformUpdateController = Pick<UpdateController, 'checkManually' | 'checkSilently'> & {
+  dispose?: () => void;
+};
+
 protocol.registerSchemesAsPrivileged([
   {
     scheme: IMAGE_PROTOCOL,
@@ -219,7 +223,7 @@ function createAutoLaunchDefaultState(userDataPath: string): AutoLaunchDefaultSt
   };
 }
 
-function createPlatformUpdateController(): UpdateController | undefined {
+function createPlatformUpdateController(): PlatformUpdateController | undefined {
   const beforeInstall = (): Promise<void> => getNotesManager().flushPendingSaves();
 
   if (shouldEnableAutoUpdates(process.platform, app.isPackaged)) {

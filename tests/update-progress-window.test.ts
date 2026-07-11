@@ -98,7 +98,7 @@ describe('update progress window manager', () => {
     const firstWindow = new FakeProgressWindow();
     const secondWindow = new FakeProgressWindow();
     const createWindow = vi
-      .fn<() => UpdateProgressWindowPort>()
+      .fn((): UpdateProgressWindowPort => firstWindow)
       .mockReturnValueOnce(firstWindow)
       .mockReturnValueOnce(secondWindow);
     const manager = createUpdateProgressWindowManager({ createWindow });

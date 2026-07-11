@@ -2,9 +2,21 @@ import { describe, expect, it } from 'vitest';
 import config from '../electron.vite.config';
 
 type RendererServerConfig = {
+  preload?: {
+    build?: {
+      rollupOptions?: {
+        input?: Record<string, string>;
+      };
+    };
+  };
   renderer?: {
     server?: {
       hmr?: boolean;
+    };
+    build?: {
+      rollupOptions?: {
+        input?: Record<string, string>;
+      };
     };
   };
 };
@@ -14,5 +26,16 @@ describe('electron-vite renderer config', () => {
     const rendererConfig = config as unknown as RendererServerConfig;
 
     expect(rendererConfig.renderer?.server?.hmr).toBe(false);
+  });
+
+  it('builds independent update progress preload and renderer entries', () => {
+    const buildConfig = config as unknown as RendererServerConfig;
+
+    expect(buildConfig.preload?.build?.rollupOptions?.input).toHaveProperty(
+      'updateProgressPreload'
+    );
+    expect(buildConfig.renderer?.build?.rollupOptions?.input).toHaveProperty(
+      'updateProgress'
+    );
   });
 });

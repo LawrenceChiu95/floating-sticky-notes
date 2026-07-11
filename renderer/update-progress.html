@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:;"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>下载更新</title>
+    <link rel="stylesheet" href="/src/update-progress.css" />
+  </head>
+  <body>
+    <main class="update-progress" aria-live="polite">
+      <div class="update-progress__heading">悬浮便签更新</div>
+      <div id="update-status" class="update-progress__status">正在准备下载…</div>
+      <progress id="update-progress-bar" max="100"></progress>
+      <div id="update-percentage" class="update-progress__percentage">正在连接更新服务</div>
+      <p class="update-progress__hint">下载期间可以继续使用便签</p>
+    </main>
+    <script type="module" src="/src/update-progress.ts"></script>
+  </body>
+</html>

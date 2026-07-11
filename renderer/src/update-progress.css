@@ -1,0 +1,56 @@
+:root {
+  color: #26231f;
+  background: #f5f1e8;
+  font-family:
+    "Segoe UI",
+    "Microsoft YaHei UI",
+    sans-serif;
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  margin: 0;
+  overflow: hidden;
+}
+
+.update-progress {
+  display: grid;
+  gap: 9px;
+  padding: 18px 20px 16px;
+}
+
+.update-progress__heading {
+  color: #5e574d;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.update-progress__status {
+  overflow: hidden;
+  font-size: 15px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+progress {
+  width: 100%;
+  height: 8px;
+  accent-color: #d49a3a;
+}
+
+.update-progress__percentage,
+.update-progress__hint {
+  margin: 0;
+  color: #746b60;
+  font-size: 12px;
+}
+
+.update-progress__percentage {
+  font-variant-numeric: tabular-nums;
+}

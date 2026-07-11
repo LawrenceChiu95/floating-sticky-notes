@@ -18,7 +18,8 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: {
-          preload: resolve(__dirname, 'preload/preload.ts')
+          preload: resolve(__dirname, 'preload/preload.ts'),
+          updateProgressPreload: resolve(__dirname, 'preload/update-progress-preload.ts')
         }
       }
     }
@@ -32,7 +33,8 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: {
-          index: resolve(__dirname, 'renderer/index.html')
+          index: resolve(__dirname, 'renderer/index.html'),
+          updateProgress: resolve(__dirname, 'renderer/update-progress.html')
         }
       }
     }
