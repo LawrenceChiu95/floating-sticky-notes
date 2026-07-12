@@ -7,9 +7,9 @@
 - 已公开发布的最新版本：`0.1.10`。
 - 当前开发中的下一版本：计划为 `0.1.11`，但源码版本号暂时仍保持 `0.1.10`，只在发布收口时统一升级。
 - 公开源码仓库：`/Users/lawrence/Desktop/My Life/工具/floating-sticky-notes`。
-- 当前分支：`fix/dependency-alerts`。
-- 当前工作区：包含尚未提交的依赖安全升级、测试适配与验证闸门同步；不得在收口前切换分支。
-- `main` 与 `origin/main` 已包含 Issue #1 的更新进度功能和便签命名提交 `feat(note): 支持便签命名`；远端 `feat/note-naming` 分支仍指向该功能提交。
+- 当前分支：`main`。
+- 当前工作区：干净。
+- `main` 与 `origin/main` 已包含 Issue #1 的更新进度、便签命名和开发工具链安全修复；远端功能分支保留各自提交。
 - 当前目录名为“悬浮便签”的私有仓库只是只读历史归档，不得在其中继续开发。
 
 ## 0.1.11 功能范围
@@ -124,12 +124,14 @@ git log -3 --oneline --decorate
 
 任何分支存在未提交改动时都不要切换到下一功能；任何功能尚未合入 `main` 时都不要只靠另一个分支“顺带带入”。这样每个功能都能独立审查、回退，同时最终仍进入同一个 `0.1.11`。
 
-GitHub 在 2026-07-12 推送 `main` 时报告的 12 个 Dependabot 警报全部位于 development scope：Vitest 1 条 critical、Vite 3 条、esbuild 1 条、tar 7 条。当前安全分支已把 `vitest` 升到 `^3.2.6`、`vite` 升到 `^6.4.3`、`electron-vite` 升到 `3.1.0`、`electron-builder` 升到 `^26.15.3`，实际解析到的 `esbuild 0.25.12` 与 `tar 7.5.20` 均超过修复线；完整 `npm audit` 和 `npm audit --omit=dev` 都为 0。
+GitHub 在 2026-07-10 首次为公开仓库创建的 12 个 Dependabot 警报全部位于 development scope：Vitest 1 条 critical、Vite 3 条、esbuild 1 条、tar 7 条。安全修复已把 `vitest` 升到 `^3.2.6`、`vite` 升到 `^6.4.3`、`electron-vite` 升到 `3.1.0`、`electron-builder` 升到 `^26.15.3`，实际解析到的 `esbuild 0.25.12` 与 `tar 7.5.20` 均超过修复线；完整 `npm audit` 和 `npm audit --omit=dev` 都为 0。
 
-升级验证统一使用 Node 22.22.0 / npm 10.9.4。`npm ci`、39 个测试文件共 207 项测试、TypeScript 与 Vite 6 构建、Mac DMG、`hdiutil verify`、Mac 打包应用隔离 profile 启动、Windows NSIS Setup 交叉构建、Windows/Mac asar runtime 身份和两个 `.cjs` preload 检查均通过。Windows 安装、图标、任务栏和更新行为仍必须在 Windows 真机验证，不能用 Mac 交叉构建代替。GitHub 警报要等安全分支合入默认分支后才能确认自动关闭。
+升级验证统一使用 Node 22.22.0 / npm 10.9.4。`npm ci`、39 个测试文件共 207 项测试、TypeScript 与 Vite 6 构建、Mac DMG、`hdiutil verify`、Mac 打包应用隔离 profile 启动、Windows NSIS Setup 交叉构建、Windows/Mac asar runtime 身份和两个 `.cjs` preload 检查均通过。Windows 安装、图标、任务栏和更新行为仍必须在 Windows 真机验证，不能用 Mac 交叉构建代替。
+
+安全提交 `fix(deps): 修复开发工具链安全警报` 已推送并 fast-forward 合入 `main`。GitHub 在 2026-07-12 重扫后把 12 条警报全部标记为 `fixed`，没有通过 dismiss 隐藏；当前开放 Dependabot 警报为 0。CI、项目规范和发布清单现统一运行完整 `npm audit`，防止开发依赖漏洞再次被 `--omit=dev` 掩盖。
 
 ## 下一窗口入口
 
 建议直接说：
 
-> 请先阅读 `AGENTS.md` 和 `HANDOFF.md`，确认位于公开源码仓库的 `fix/dependency-alerts`。先完成依赖安全升级的全部闸门、Codex + Opus 双重 review、提交、push 与合入，并确认 GitHub Dependabot 警报关闭。随后从最新 `main` 新建 `feat/about`；用户已选择自定义关于窗口，先按 brainstorming 流程完成视觉与交互设计并获得确认，再制定实现计划和写代码。不要在功能分支升级版本号或发布。
+> 请先阅读 `AGENTS.md` 和 `HANDOFF.md`，确认位于公开源码仓库的最新 `main` 且工作区干净，然后新建 `feat/about`。用户已选择自定义关于窗口；先按 brainstorming 流程完成视觉与交互设计并获得确认，再制定实现计划和写代码。不要在功能分支升级版本号或发布。
