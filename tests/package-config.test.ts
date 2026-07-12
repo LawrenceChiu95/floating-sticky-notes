@@ -10,6 +10,7 @@ const packageJson = JSON.parse(
   license?: string;
   engines?: Record<string, string>;
   dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
   scripts?: Record<string, string>;
   build?: {
     appId?: string;
@@ -46,6 +47,13 @@ describe('package configuration', () => {
     expect(packageJson.dependencies?.['electron-updater']).toBe('6.8.9');
     expect(packageJson.dependencies?.semver).toBe('7.8.5');
     expect(packageJson.dependencies?.yaml).toBe('2.9.0');
+  });
+
+  it('keeps the development and packaging toolchain above patched security baselines', () => {
+    expect(packageJson.devDependencies?.['electron-builder']).toBe('^26.15.3');
+    expect(packageJson.devDependencies?.['electron-vite']).toBe('3.1.0');
+    expect(packageJson.devDependencies?.vite).toBe('^6.4.3');
+    expect(packageJson.devDependencies?.vitest).toBe('^3.2.6');
   });
 
   it('is MIT licensed while remaining protected from accidental npm publication', () => {

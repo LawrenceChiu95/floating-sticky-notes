@@ -65,7 +65,7 @@ describe('macOS update service', () => {
       `    size: ${bytes.length}`
     ].join('\n');
     const fetch = vi
-      .fn<[string, RequestInit?], Promise<Response>>()
+      .fn<(input: string, init?: RequestInit) => Promise<Response>>()
       .mockResolvedValueOnce(new Response(yaml, { status: 200 }))
       .mockResolvedValueOnce(new Response(bytes, { status: 200 }));
     const openPath = vi.fn(async () => '');

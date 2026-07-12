@@ -15,7 +15,7 @@
    npm ci
    npm test
    npm run build
-   npm audit --omit=dev
+   npm audit
    npm run dist:win
    npm run dist:mac
    ```

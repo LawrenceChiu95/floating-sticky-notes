@@ -29,7 +29,7 @@ push 前运行：
 ```bash
 npm test
 npm run build
-npm audit --omit=dev
+npm audit
 git diff --check
 ```
 

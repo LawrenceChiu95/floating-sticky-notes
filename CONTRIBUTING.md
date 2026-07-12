@@ -23,7 +23,7 @@ npm run dev
 ```bash
 npm test
 npm run build
-npm audit --omit=dev
+npm audit
 ```
 
 ## Pull Request

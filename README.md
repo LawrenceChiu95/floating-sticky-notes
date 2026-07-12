@@ -46,7 +46,7 @@ npm run dev
 ```bash
 npm test
 npm run build
-npm audit --omit=dev
+npm audit
 ```
 
 ## 构建安装包

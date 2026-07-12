@@ -6,7 +6,7 @@
 
 - [ ] `npm test`
 - [ ] `npm run build`
-- [ ] `npm audit --omit=dev`
+- [ ] `npm audit`
 - [ ] 如果修改了原生或视觉行为，已在下方说明人工验证结果
 
 ## 变更日志

@@ -37,5 +37,5 @@ jobs:
       - name: 构建应用
         run: npm run build
 
-      - name: 审计运行时依赖
-        run: npm audit --omit=dev
+      - name: 审计完整依赖树
+        run: npm audit
