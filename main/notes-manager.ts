@@ -10,6 +10,7 @@ import {
 } from './note-state';
 import type { NoteImageStorage, SaveImageInput } from './image-storage';
 import type { NotesDocument } from './storage';
+import { getNoteWindowTitle, normalizeNoteName } from '../shared/note-name';
 
 export type ManagedNoteWindow = {
   webContentsId: number;
@@ -18,6 +19,7 @@ export type ManagedNoteWindow = {
   onClose: (listener: () => void) => void;
   flushPendingChanges: () => Promise<void>;
   show: () => void;
+  setTitle: (title: string) => void;
   close: () => void;
 };
 
@@ -185,9 +187,10 @@ export class NotesManager {
       return undefined;
     }
 
-    note.name = name;
+    note.name = normalizeNoteName(name);
     note.updatedAt = this.now();
     await this.persist();
+    this.windowsByNoteId.get(note.id)?.setTitle(getNoteWindowTitle(note.name));
 
     return this.toNoteView(note);
   }
@@ -353,6 +356,7 @@ export class NotesManager {
 
   private createWindowForNote(note: NoteRecord): ManagedNoteWindow {
     const noteWindow = this.createWindow(note);
+    noteWindow.setTitle(getNoteWindowTitle(note.name));
     this.windowsByNoteId.set(note.id, noteWindow);
     this.noteIdByWebContentsId.set(noteWindow.webContentsId, note.id);
 

@@ -15,6 +15,7 @@ import type { NoteChecklistItemRecord } from '../../main/note-state';
 import { DEFAULT_APP_COPY } from '../../shared/app-copy';
 import { DEFAULT_NOTE_COLOR, DEFAULT_NOTE_OPACITY, NOTE_COLORS } from '../../shared/note-appearance';
 import { createDebouncedValueAction, type DebouncedValueAction } from '../../shared/debounced-action';
+import { limitNoteNameLength } from '../../shared/note-name';
 import {
   applyChecklistBackspace,
   applyChecklistEnter,
@@ -25,8 +26,22 @@ import {
   shouldShowChecklistAddEntry
 } from './checklist-entry';
 import { isImageDropFile } from './image-drop';
+import {
+  applySavedNoteName,
+  beginNoteNameSave,
+  cancelNoteNameEditing,
+  createNoteNamingState,
+  failNoteNameSave,
+  getNoteNameKeyAction,
+  getNoteNamePresentation,
+  startNoteNameEditing,
+  updateNoteNameDraft
+} from './note-naming';
 import { getPreloadStatus } from './preload-status';
 import './styles.css';
+
+const STATUS_MESSAGE_DURATION_MS = 2000;
+const PERSISTENT_STATUS_MESSAGES = new Set(['读取失败']);
 
 function App(): JSX.Element {
   const preloadStatus = getPreloadStatus(window);
@@ -38,12 +53,20 @@ function App(): JSX.Element {
   const [isAppearanceOpen, setIsAppearanceOpen] = useState(false);
   const [isImageDragActive, setIsImageDragActive] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
+  const [nameStatusMessage, setNameStatusMessage] = useState('');
+  const [isNameConfirmationVisible, setIsNameConfirmationVisible] = useState(false);
   const [appCopy, setAppCopy] = useState(DEFAULT_APP_COPY);
+  const [noteNaming, setNoteNaming] = useState(() => createNoteNamingState(''));
   const [pendingImageDelete, setPendingImageDelete] = useState<{
     imageId: string;
     focusTarget: ChecklistFocusTarget;
   }>();
   const saveContentRef = useRef<DebouncedValueAction<string>>();
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
+  const isNameEditingRef = useRef(false);
+  const isNameSavingRef = useRef(false);
+  const nameStatusTimeoutRef = useRef<number>();
+  const nameConfirmationTimeoutRef = useRef<number>();
   const noteInputRef = useRef<HTMLTextAreaElement | null>(null);
   const checklistInputRefs = useRef(new Map<string, HTMLInputElement>());
   const pendingFocusRestoreRef = useRef<ChecklistFocusTarget>();
@@ -78,6 +101,7 @@ function App(): JSX.Element {
         }
 
         setContent(note?.content ?? '');
+        setNoteNaming(createNoteNamingState(note?.name ?? ''));
         setChecklist(note?.checklist ?? []);
         setImages(note?.images ?? []);
         setColor(note?.color ?? DEFAULT_NOTE_COLOR);
@@ -119,10 +143,137 @@ function App(): JSX.Element {
     focusEditingTarget(focusTarget);
   });
 
+  useEffect(() => {
+    if (!noteNaming.isEditing || statusMessage) {
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      nameInputRef.current?.focus();
+      nameInputRef.current?.select();
+    });
+  }, [noteNaming.isEditing, statusMessage]);
+
+  useEffect(() => {
+    if (!statusMessage || PERSISTENT_STATUS_MESSAGES.has(statusMessage)) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setStatusMessage('');
+    }, STATUS_MESSAGE_DURATION_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [statusMessage]);
+
+  useEffect(() => {
+    return () => {
+      if (nameStatusTimeoutRef.current !== undefined) {
+        window.clearTimeout(nameStatusTimeoutRef.current);
+      }
+      if (nameConfirmationTimeoutRef.current !== undefined) {
+        window.clearTimeout(nameConfirmationTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const handleContentChange = (event: ChangeEvent<HTMLTextAreaElement>): void => {
     const nextContent = event.target.value;
     setContent(nextContent);
     saveContentRef.current?.schedule(nextContent);
+  };
+
+  const handleStartNameEditing = (): void => {
+    if (isNameSavingRef.current) {
+      return;
+    }
+
+    isNameEditingRef.current = true;
+    setNoteNaming(startNoteNameEditing);
+  };
+
+  const showNameSaveFailure = (): void => {
+    if (nameStatusTimeoutRef.current !== undefined) {
+      window.clearTimeout(nameStatusTimeoutRef.current);
+    }
+
+    setNameStatusMessage('保存失败');
+    nameStatusTimeoutRef.current = window.setTimeout(() => {
+      setNameStatusMessage('');
+      nameStatusTimeoutRef.current = undefined;
+    }, STATUS_MESSAGE_DURATION_MS);
+  };
+
+  const showNameConfirmation = (name: string): void => {
+    if (nameConfirmationTimeoutRef.current !== undefined) {
+      window.clearTimeout(nameConfirmationTimeoutRef.current);
+    }
+
+    if (!name) {
+      setIsNameConfirmationVisible(false);
+      nameConfirmationTimeoutRef.current = undefined;
+      return;
+    }
+
+    setIsNameConfirmationVisible(true);
+    nameConfirmationTimeoutRef.current = window.setTimeout(() => {
+      setIsNameConfirmationVisible(false);
+      nameConfirmationTimeoutRef.current = undefined;
+    }, 1500);
+  };
+
+  const handleNameSubmit = (): void => {
+    if (!isNameEditingRef.current) {
+      return;
+    }
+
+    isNameEditingRef.current = false;
+    isNameSavingRef.current = true;
+    const draft = noteNaming.draft;
+    setNoteNaming(beginNoteNameSave);
+
+    void window.stickyNotes
+      .updateName(draft)
+      .then((note) => {
+        isNameSavingRef.current = false;
+
+        if (note) {
+          setNoteNaming((state) => applySavedNoteName(state, note.name));
+          setNameStatusMessage('');
+          showNameConfirmation(note.name);
+          return;
+        }
+
+        setNoteNaming(failNoteNameSave);
+        showNameSaveFailure();
+      })
+      .catch(() => {
+        isNameSavingRef.current = false;
+        setNoteNaming(failNoteNameSave);
+        showNameSaveFailure();
+      });
+  };
+
+  const handleCancelNameEditing = (): void => {
+    isNameEditingRef.current = false;
+    setNoteNaming(cancelNoteNameEditing);
+  };
+
+  const handleNameKeyDown = (event: KeyboardEvent<HTMLInputElement>): void => {
+    const action = getNoteNameKeyAction(event.key, event.nativeEvent.isComposing);
+
+    if (!action) {
+      return;
+    }
+
+    event.preventDefault();
+
+    if (action === 'submit') {
+      handleNameSubmit();
+      return;
+    }
+
+    handleCancelNameEditing();
   };
 
   const rememberChecklistInput = (itemId: string, element: HTMLInputElement | null): void => {
@@ -424,6 +575,13 @@ function App(): JSX.Element {
     appCopy.checklistItemPlaceholder
   );
   const showChecklistAddEntry = shouldShowChecklistAddEntry(checklist.length);
+  const namePresentation = getNoteNamePresentation(
+    noteNaming,
+    statusMessage || nameStatusMessage
+  );
+  const nameConfirmationClass = isNameConfirmationVisible
+    ? ' note-name-hit-area--confirming'
+    : '';
 
   return (
     <main
@@ -437,9 +595,46 @@ function App(): JSX.Element {
     >
       <div className="drag-bar">
         <span className="drag-grip" aria-hidden="true" />
-        <span className="status-label" aria-live="polite">
-          {statusMessage}
-        </span>
+        <div className="status-label" aria-live="polite">
+          {namePresentation.kind === 'status' ? namePresentation.text : null}
+          {namePresentation.kind === 'editor' ? (
+            <input
+              ref={nameInputRef}
+              className="note-name-input"
+              type="text"
+              aria-label="便签名称"
+              value={noteNaming.draft}
+              onChange={(event) =>
+                setNoteNaming((state) =>
+                  updateNoteNameDraft(state, limitNoteNameLength(event.target.value))
+                )
+              }
+              onKeyDown={handleNameKeyDown}
+              onBlur={handleNameSubmit}
+            />
+          ) : null}
+          {namePresentation.kind === 'name' ? (
+            <span
+              className={`note-name-hit-area note-name-hit-area--named${nameConfirmationClass}`}
+              onDoubleClick={handleStartNameEditing}
+            >
+              <span className="note-name" title={namePresentation.title}>
+                {namePresentation.text}
+              </span>
+            </span>
+          ) : null}
+          {namePresentation.kind === 'empty' ? (
+            <span
+              className={`note-name-hit-area${nameConfirmationClass}`}
+              onDoubleClick={handleStartNameEditing}
+            >
+              <span
+                className="note-name note-name--empty"
+                data-hint={namePresentation.hint}
+              />
+            </span>
+          ) : null}
+        </div>
         <div className="toolbar" aria-label="便签工具">
           <button type="button" title="新建便签" aria-label="新建便签" onClick={handleCreateNote}>
             <Plus size={15} strokeWidth={2} />

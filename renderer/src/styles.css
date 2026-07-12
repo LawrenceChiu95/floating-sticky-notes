@@ -23,6 +23,7 @@ body,
 }
 
 button,
+input,
 textarea {
   font: inherit;
 }
@@ -57,6 +58,15 @@ textarea {
 
 .drag-grip {
   flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 20px;
+}
+
+.drag-grip::after {
+  content: '';
   width: 26px;
   height: 3px;
   border-radius: 999px;
@@ -70,9 +80,65 @@ textarea {
   color: rgba(111, 106, 96, 0.9);
   font-size: 12px;
   line-height: 20px;
+  text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.note-name-hit-area {
+  -webkit-app-region: no-drag;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  min-width: 72px;
+  max-width: 96px;
+  height: 20px;
+  padding: 0 8px;
+  vertical-align: top;
+  cursor: text;
+  opacity: 0;
+  pointer-events: auto;
+  transition: opacity 120ms ease;
+}
+
+.note-name-hit-area:hover,
+.note-name-hit-area--confirming {
+  opacity: 1;
+}
+
+.note-name-hit-area--named {
+  min-width: 0;
+}
+
+.note-name {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-name--empty::after {
+  content: attr(data-hint);
+  color: rgba(111, 106, 96, 0.64);
+}
+
+.note-name-input {
+  -webkit-app-region: no-drag;
+  width: 100%;
+  height: 20px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  color: inherit;
+  background: transparent;
+  font-size: 12px;
+  line-height: 20px;
+  text-align: center;
 }
 
 .toolbar {

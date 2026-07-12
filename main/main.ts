@@ -92,6 +92,9 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
     }
   });
   noteWindow.setAlwaysOnTop(true, NOTE_ALWAYS_ON_TOP_LEVEL);
+  noteWindow.on('page-title-updated', (event) => {
+    event.preventDefault();
+  });
 
   noteWindow.once('ready-to-show', () => {
     noteWindow.show();
@@ -141,6 +144,9 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
         noteWindow.restore();
       }
       noteWindow.show();
+    },
+    setTitle: (title) => {
+      noteWindow.setTitle(title);
     },
     close: () => {
       noteWindow.close();

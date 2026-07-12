@@ -30,6 +30,7 @@ describe('NotesManager', () => {
       now: '2026-07-05T10:00:00.000Z'
     });
     expect(createdWindows.map(({ note }) => note)).toEqual([defaultNote]);
+    expect(createdWindows[0].window.titles).toEqual(['悬浮便签']);
     expect(savedDocuments).toEqual([
       {
         version: 1,
@@ -129,6 +130,10 @@ describe('NotesManager', () => {
       ok: true,
       note: newNote
     });
+    expect(createdWindows.map(({ window }) => window.titles)).toEqual([
+      ['悬浮便签'],
+      ['悬浮便签']
+    ]);
     expect(createdWindows.map(({ note }) => note.id)).toEqual(['note-1', 'note-2']);
     expect(savedDocuments).toEqual([
       {
@@ -287,6 +292,39 @@ describe('NotesManager', () => {
         ]
       }
     ]);
+    expect(createdWindows[0].window.titles).toEqual(['悬浮便签', '工作']);
+  });
+
+  it.each([
+    ['trims surrounding whitespace', '  工作计划  ', '工作计划'],
+    ['saves whitespace-only names as empty', '   ', ''],
+    ['keeps names at the sixty-character boundary', 'a'.repeat(60), 'a'.repeat(60)],
+    ['truncates names longer than sixty characters', 'a'.repeat(61), 'a'.repeat(60)],
+    ['does not split an emoji at the sixty-character boundary', `${'a'.repeat(59)}😀`, `${'a'.repeat(59)}😀`],
+    ['counts emoji as one character when truncating', '😀'.repeat(61), '😀'.repeat(60)]
+  ])('%s', async (_description, input, expectedName) => {
+    const savedDocuments: NotesDocument[] = [];
+    const createdWindows: CreatedWindow[] = [];
+    const note = createDefaultNote({
+      id: 'note-1',
+      now: '2026-07-05T10:00:00.000Z'
+    });
+    const manager = new NotesManager({
+      storage: {
+        load: async () => ({ version: 1, notes: [note] }),
+        save: async (document) => {
+          savedDocuments.push(document);
+        }
+      },
+      createWindow: createWindowFactory(createdWindows),
+      now: () => '2026-07-05T10:02:00.000Z'
+    });
+
+    await manager.start();
+    const result = await manager.updateNameForWebContents(1, input);
+
+    expect(result?.name).toBe(expectedName);
+    expect(savedDocuments.at(-1)?.notes[0]?.name).toBe(expectedName);
   });
 
   it('serializes overlapping content saves so the latest edit wins', async () => {
@@ -835,6 +873,7 @@ type TestWindow = ManagedNoteWindow & {
   closed: boolean;
   flushCount: number;
   showCount: number;
+  titles: string[];
   triggerBoundsChanged: () => Promise<void>;
   triggerClosed: () => void;
 };
@@ -880,6 +919,7 @@ function createWindowFactory(
       closed: false,
       flushCount: 0,
       showCount: 0,
+      titles: [],
       getBounds: () => window.bounds,
       onBoundsChanged: (listener) => {
         boundsChangedListener = listener;
@@ -892,6 +932,9 @@ function createWindowFactory(
       },
       show: () => {
         window.showCount += 1;
+      },
+      setTitle: (title) => {
+        window.titles.push(title);
       },
       flushPendingChanges: async () => {
         window.flushCount += 1;

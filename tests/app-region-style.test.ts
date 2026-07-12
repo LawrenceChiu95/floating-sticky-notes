@@ -11,7 +11,11 @@ describe('sticky note app-region CSS contract', () => {
 
   it('keeps toolbar controls and the text input out of the drag region', () => {
     expect(styles).toMatch(/\.toolbar\s*{[^}]*-webkit-app-region:\s*no-drag;/s);
+    expect(styles).toMatch(/\.note-name-hit-area\s*{[^}]*-webkit-app-region:\s*no-drag;/s);
+    expect(styles).toMatch(/\.note-name-input\s*{[^}]*-webkit-app-region:\s*no-drag;/s);
     expect(styles).toMatch(/\.note-input\s*{[^}]*-webkit-app-region:\s*no-drag;/s);
+    expect(styles).not.toMatch(/\.status-label\s*{[^}]*-webkit-app-region:\s*no-drag;/s);
+    expect(styles).not.toMatch(/\.note-name-hit-area[^}]*-webkit-app-region:\s*drag;/s);
   });
 
   it('keeps the visible note shell aligned with the real window bounds', () => {
