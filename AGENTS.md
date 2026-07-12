@@ -2,7 +2,6 @@
 
 ## 开工前阅读
 
-- `HANDOFF.md`
 - `README.md`
 - `CONTRIBUTING.md`
 - `CHANGELOG.md`

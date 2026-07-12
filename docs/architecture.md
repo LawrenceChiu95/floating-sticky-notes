@@ -44,7 +44,7 @@ https://github.com/LawrenceChiu95/floating-sticky-notes-updates/releases/latest/
 
 应用启动后静默检查一次更新；用户也可以从托盘手动检查。发现新版本后，下载和重启安装都需要用户确认；执行 `quitAndInstall` 前会先保存便签数据。
 
-用户确认下载后，更新控制器通过窄 presenter 接口驱动独立的进度窗口。该窗口使用自己的 preload 和 renderer，只能接收只读进度快照，不具备便签读写 IPC 权限。控制器按 operation ID 和显式阶段接受 `download-progress`、`update-downloaded` 与错误事件，忽略迟到或重复事件；详细设计见 [`docs/superpowers/specs/2026-07-11-windows-update-progress-design.md`](superpowers/specs/2026-07-11-windows-update-progress-design.md)。
+用户确认下载后，更新控制器通过窄 presenter 接口驱动独立的进度窗口。该窗口使用自己的 preload 和 renderer，只能接收只读进度快照，不具备便签读写 IPC 权限。控制器按 operation ID 和显式阶段接受 `download-progress`、`update-downloaded` 与错误事件，忽略迟到或重复事件；详细设计见 [`docs/design/windows-update-progress.md`](design/windows-update-progress.md)。
 
 便签窗口与更新进度窗口都启用 Electron sandbox。electron-vite 必须把两个 preload 构建为 CommonJS，并由主进程加载 `.cjs` 文件；沙箱 preload 若输出为带 import 的 ESM，bridge 不会执行，renderer 只能停留在默认准备状态。
 
