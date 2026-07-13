@@ -44,6 +44,12 @@ describe('note naming renderer wiring', () => {
     expect(appSource).not.toContain('if (!noteNaming.isEditing || statusMessage)');
   });
 
+  it('does not steal focus after a blurred name save fails', () => {
+    expect(appSource).not.toContain(
+      'requestAnimationFrame(() => nameInputRef.current?.focus())'
+    );
+  });
+
   it('does not reveal names from whole-note hover state', () => {
     expect(appSource).not.toContain('isNoteHovered');
     expect(appSource).not.toContain('onMouseEnter={() => setIsNoteHovered(true)}');

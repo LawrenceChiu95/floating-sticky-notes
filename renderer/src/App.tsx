@@ -198,12 +198,10 @@ function App(): JSX.Element {
         }
 
         setNoteNaming(failNoteNameSave);
-        requestAnimationFrame(() => nameInputRef.current?.focus());
       })
       .catch(() => {
         isNameSavingRef.current = false;
         setNoteNaming(failNoteNameSave);
-        requestAnimationFrame(() => nameInputRef.current?.focus());
       });
   };
 
