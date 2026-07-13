@@ -23,22 +23,25 @@ describe('note naming renderer wiring', () => {
     expect(appSource).not.toContain('maxLength={MAX_NOTE_NAME_LENGTH}');
   });
 
-  it('keeps name-save feedback separate from unrelated temporary status', () => {
-    expect(appSource).toContain("const [nameStatusMessage, setNameStatusMessage] = useState('')");
-    expect(appSource).toContain('window.setTimeout');
-    expect(appSource).toContain('statusMessage || nameStatusMessage');
-    expect(appSource).toContain('}, STATUS_MESSAGE_DURATION_MS);');
-    expect(appSource).toMatch(
-      /if \(!statusMessage \|\| PERSISTENT_STATUS_MESSAGES\.has\(statusMessage\)\)[\s\S]*window\.setTimeout\(\(\) => \{\s*setStatusMessage\(''\);[\s\S]*STATUS_MESSAGE_DURATION_MS/
-    );
-    expect(appSource).toContain("const PERSISTENT_STATUS_MESSAGES = new Set(['读取失败'])");
+  it('keeps the editor mounted while saving and exposes failure accessibly', () => {
+    expect(appSource).toContain('aria-busy={noteNaming.isSaving}');
+    expect(appSource).toContain('aria-invalid={noteNaming.hasSaveError}');
+    expect(appSource).toContain('note-name-input--error');
+    expect(appSource).toContain('name-save-error');
+    expect(appSource).toContain('保存失败');
+    expect(appSource).not.toContain('isNameConfirmationVisible');
+    expect(appSource).not.toContain('nameConfirmationTimeoutRef');
+    expect(appSource).not.toContain('note-name-hit-area--confirming');
   });
 
-  it('briefly confirms a saved name before returning to the hidden state', () => {
-    expect(appSource).toContain('isNameConfirmationVisible');
-    expect(appSource).toContain('nameConfirmationTimeoutRef');
-    expect(appSource).toContain('note-name-hit-area--confirming');
-    expect(appSource).toContain('}, 1500)');
+  it('prevents duplicate submits while a name save is pending', () => {
+    expect(appSource).toContain('if (!isNameEditingRef.current || isNameSavingRef.current)');
+    expect(appSource).toContain('readOnly={noteNaming.isSaving}');
+  });
+
+  it('does not let unrelated status block name-input focus', () => {
+    expect(appSource).toContain('if (!noteNaming.isEditing)');
+    expect(appSource).not.toContain('if (!noteNaming.isEditing || statusMessage)');
   });
 
   it('does not reveal names from whole-note hover state', () => {
