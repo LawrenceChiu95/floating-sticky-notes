@@ -19,13 +19,11 @@
 
 ## 项目状态
 
-`0.1.9` 是首个公开源码版本，也是首个具备 Windows 自动更新能力的版本。
+当前正式版本为 [`0.1.11`](https://github.com/LawrenceChiu95/floating-sticky-notes/releases/tag/v0.1.11)。本版本支持为每张便签设置可选名称，并在任务栏和 Alt-Tab 中区分窗口；Windows 下载更新时会显示独立、非阻塞的进度窗口，关闭全部便签后托盘和更新流程仍会继续运行。
 
-`0.1.10` 增加 macOS 半自动更新：打包版会在启动后静默检查，托盘也可以手动检查；发现新版本后，应用会在用户确认后下载并校验 DMG，随后打开安装镜像。由于当前 Mac 包未签名，最后仍需用户手动拖到 Applications 并确认替换。旧版 Mac 用户需要先手动安装一次 `0.1.10`。
+Windows x64 Setup 和 Apple Silicon Mac DMG 可从 [`floating-sticky-notes-updates v0.1.11`](https://github.com/LawrenceChiu95/floating-sticky-notes-updates/releases/tag/v0.1.11) 下载。Windows 可以在应用内完成检查、下载和重启安装；macOS 会下载并校验 DMG、打开安装镜像，用户仍需手动拖到 Applications 并确认替换。当前安装包均未签名，系统可能显示未知发布者或安全提示。
 
-`0.1.10` 已发布到公开更新源。Windows 已完成 `0.1.9` 到 `0.1.10` 的真机检查、下载和重启安装闭环。下一版本已实现 [Issue #1](https://github.com/LawrenceChiu95/floating-sticky-notes/issues/1) 的非阻塞下载进度窗口，并通过 Windows 本地限速更新验证；正式线上更新和覆盖安装仍需在发布前按 [发布流程](docs/releasing.md) 验证。Mac 已完成安装、启动和托盘入口验证，完整的更新下载流程仍需后续版本配合验证。
-
-项目在公开前已经完成 `0.1.0` 至 `0.1.8` 的内部迭代；经过隐私清洗的版本历史见 [变更日志](CHANGELOG.md)。
+`0.1.9` 是首个公开源码版本，也是首个具备 Windows 自动更新能力的版本；`0.1.10` 增加了 macOS 半自动更新。项目在公开前已经完成 `0.1.0` 至 `0.1.8` 的内部迭代；完整且经过隐私清洗的版本历史见 [变更日志](CHANGELOG.md)。
 
 更新资源存放在 [`floating-sticky-notes-updates`](https://github.com/LawrenceChiu95/floating-sticky-notes-updates)。源码、Issue 和变更记录在本仓库维护。
 
