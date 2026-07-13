@@ -22,7 +22,8 @@ describe('note naming state', () => {
       name: '工作',
       draft: '工作计划',
       isEditing: true,
-      isSaving: false
+      isSaving: false,
+      hasSaveError: false
     });
   });
 
@@ -36,7 +37,8 @@ describe('note naming state', () => {
       name: '工作',
       draft: '工作',
       isEditing: false,
-      isSaving: false
+      isSaving: false,
+      hasSaveError: false
     });
   });
 
@@ -50,22 +52,48 @@ describe('note naming state', () => {
       name: '工作',
       draft: '工作',
       isEditing: false,
-      isSaving: false
+      isSaving: false,
+      hasSaveError: false
     });
   });
 
-  it('does not start a second edit while a name save is pending', () => {
+  it('keeps the draft editor mounted while a name save is pending', () => {
     const saving = beginNoteNameSave(
       updateNoteNameDraft(startNoteNameEditing(createNoteNamingState('工作')), '工作计划')
     );
 
+    expect(saving).toEqual({
+      name: '工作',
+      draft: '工作计划',
+      isEditing: true,
+      isSaving: true,
+      hasSaveError: false
+    });
     expect(startNoteNameEditing(saving)).toBe(saving);
+  });
+
+  it('keeps the failed draft available for retry', () => {
+    const saving = beginNoteNameSave(
+      updateNoteNameDraft(startNoteNameEditing(createNoteNamingState('工作')), '工作计划')
+    );
+
     expect(failNoteNameSave(saving)).toEqual({
       name: '工作',
-      draft: '工作',
-      isEditing: false,
-      isSaving: false
+      draft: '工作计划',
+      isEditing: true,
+      isSaving: false,
+      hasSaveError: true
     });
+  });
+
+  it('clears a save error when the user changes the draft', () => {
+    const failed = failNoteNameSave(
+      beginNoteNameSave(
+        updateNoteNameDraft(startNoteNameEditing(createNoteNamingState('工作')), '工作计划')
+      )
+    );
+
+    expect(updateNoteNameDraft(failed, '新计划').hasSaveError).toBe(false);
   });
 });
 

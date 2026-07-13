@@ -3,6 +3,7 @@ export type NoteNamingState = {
   draft: string;
   isEditing: boolean;
   isSaving: boolean;
+  hasSaveError: boolean;
 };
 
 export type NoteNamePresentation =
@@ -16,7 +17,8 @@ export function createNoteNamingState(name: string): NoteNamingState {
     name,
     draft: name,
     isEditing: false,
-    isSaving: false
+    isSaving: false,
+    hasSaveError: false
   };
 }
 
@@ -28,14 +30,16 @@ export function startNoteNameEditing(state: NoteNamingState): NoteNamingState {
   return {
     ...state,
     draft: state.name,
-    isEditing: true
+    isEditing: true,
+    hasSaveError: false
   };
 }
 
 export function updateNoteNameDraft(state: NoteNamingState, draft: string): NoteNamingState {
   return {
     ...state,
-    draft
+    draft,
+    hasSaveError: false
   };
 }
 
@@ -44,25 +48,26 @@ export function cancelNoteNameEditing(state: NoteNamingState): NoteNamingState {
     name: state.name,
     draft: state.name,
     isEditing: false,
-    isSaving: false
+    isSaving: false,
+    hasSaveError: false
   };
 }
 
 export function beginNoteNameSave(state: NoteNamingState): NoteNamingState {
   return {
-    name: state.name,
-    draft: state.name,
-    isEditing: false,
-    isSaving: true
+    ...state,
+    isEditing: true,
+    isSaving: true,
+    hasSaveError: false
   };
 }
 
 export function failNoteNameSave(state: NoteNamingState): NoteNamingState {
   return {
-    name: state.name,
-    draft: state.name,
-    isEditing: false,
-    isSaving: false
+    ...state,
+    isEditing: true,
+    isSaving: false,
+    hasSaveError: true
   };
 }
 
@@ -71,7 +76,8 @@ export function applySavedNoteName(state: NoteNamingState, name: string): NoteNa
     name,
     draft: name,
     isEditing: false,
-    isSaving: false
+    isSaving: false,
+    hasSaveError: false
   };
 }
 

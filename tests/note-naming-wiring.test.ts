@@ -23,22 +23,31 @@ describe('note naming renderer wiring', () => {
     expect(appSource).not.toContain('maxLength={MAX_NOTE_NAME_LENGTH}');
   });
 
-  it('keeps name-save feedback separate from unrelated temporary status', () => {
-    expect(appSource).toContain("const [nameStatusMessage, setNameStatusMessage] = useState('')");
-    expect(appSource).toContain('window.setTimeout');
-    expect(appSource).toContain('statusMessage || nameStatusMessage');
-    expect(appSource).toContain('}, STATUS_MESSAGE_DURATION_MS);');
-    expect(appSource).toMatch(
-      /if \(!statusMessage \|\| PERSISTENT_STATUS_MESSAGES\.has\(statusMessage\)\)[\s\S]*window\.setTimeout\(\(\) => \{\s*setStatusMessage\(''\);[\s\S]*STATUS_MESSAGE_DURATION_MS/
-    );
-    expect(appSource).toContain("const PERSISTENT_STATUS_MESSAGES = new Set(['读取失败'])");
+  it('keeps the editor mounted while saving and exposes failure accessibly', () => {
+    expect(appSource).toContain('aria-busy={noteNaming.isSaving}');
+    expect(appSource).toContain('aria-invalid={noteNaming.hasSaveError}');
+    expect(appSource).toContain('note-name-input--error');
+    expect(appSource).toContain('name-save-error');
+    expect(appSource).toContain('保存失败');
+    expect(appSource).not.toContain('isNameConfirmationVisible');
+    expect(appSource).not.toContain('nameConfirmationTimeoutRef');
+    expect(appSource).not.toContain('note-name-hit-area--confirming');
   });
 
-  it('briefly confirms a saved name before returning to the hidden state', () => {
-    expect(appSource).toContain('isNameConfirmationVisible');
-    expect(appSource).toContain('nameConfirmationTimeoutRef');
-    expect(appSource).toContain('note-name-hit-area--confirming');
-    expect(appSource).toContain('}, 1500)');
+  it('prevents duplicate submits while a name save is pending', () => {
+    expect(appSource).toContain('if (!isNameEditingRef.current || isNameSavingRef.current)');
+    expect(appSource).toContain('readOnly={noteNaming.isSaving}');
+  });
+
+  it('does not let unrelated status block name-input focus', () => {
+    expect(appSource).toContain('if (!noteNaming.isEditing)');
+    expect(appSource).not.toContain('if (!noteNaming.isEditing || statusMessage)');
+  });
+
+  it('does not steal focus after a blurred name save fails', () => {
+    expect(appSource).not.toContain(
+      'requestAnimationFrame(() => nameInputRef.current?.focus())'
+    );
   });
 
   it('does not reveal names from whole-note hover state', () => {
@@ -59,19 +68,27 @@ describe('note naming renderer wiring', () => {
 });
 
 describe('note naming styles', () => {
-  it('keeps saved names muted, single-line, and ellipsized', () => {
-    expect(styles).toMatch(/\.status-label\s*{[^}]*font-size:\s*12px;/s);
-    expect(styles).toMatch(/\.status-label\s*{[^}]*text-overflow:\s*ellipsis;/s);
-    expect(styles).toMatch(/\.status-label\s*{[^}]*white-space:\s*nowrap;/s);
+  it('uses the approved quiet hierarchy for saved names', () => {
+    expect(styles).toMatch(
+      /\.note-name-hit-area--named\s+\.note-name\s*{[^}]*color:\s*rgba\(43, 42, 39, 0\.82\);/s
+    );
+    expect(styles).toMatch(
+      /\.note-name-hit-area--named\s+\.note-name\s*{[^}]*font-weight:\s*600;/s
+    );
+    expect(appSource).toContain('className="status-message"');
+    expect(styles).not.toMatch(/\.status-label\s*{[^}]*text-overflow:\s*ellipsis;/s);
+    expect(styles).toMatch(/\.status-message\s*{[^}]*text-overflow:\s*ellipsis;/s);
+    expect(styles).toMatch(/\.status-message\s*{[^}]*white-space:\s*nowrap;/s);
   });
 
-  it('keeps names hidden until the note is hovered or a save is being confirmed', () => {
+  it('keeps saved names visible and empty hints hover-only', () => {
     expect(styles).toMatch(/\.note-name-hit-area\s*{[^}]*-webkit-app-region:\s*no-drag;/s);
     expect(styles).toMatch(/\.note-name-hit-area\s*{[^}]*opacity:\s*0;/s);
     expect(styles).toMatch(/\.note-name-hit-area\s*{[^}]*pointer-events:\s*auto;/s);
     expect(styles).toMatch(
-      /\.note-name-hit-area:hover,\s*\.note-name-hit-area--confirming\s*{[^}]*opacity:\s*1;/s
+      /\.note-name-hit-area:hover\s*{[^}]*background:\s*rgba\(43, 42, 39, 0\.07\);/s
     );
+    expect(styles).toMatch(/\.note-name-hit-area--named\s*{[^}]*opacity:\s*1;/s);
     expect(styles).toMatch(/\.note-name--empty::after\s*{[^}]*content:\s*attr\(data-hint\);/s);
     expect(styles).not.toMatch(/\.note-shell:hover[^,{]*\.note-name-hit-area/);
   });
@@ -79,14 +96,46 @@ describe('note naming styles', () => {
   it('uses an adaptive transparent name hit area and keeps a reliable drag grip', () => {
     expect(appSource).toContain('note-name-hit-area');
     expect(styles).toMatch(/\.drag-grip\s*{[^}]*width:\s*40px;/s);
-    expect(styles).toMatch(/\.note-name-hit-area\s*{[^}]*min-width:\s*72px;/s);
-    expect(styles).toMatch(/\.note-name-hit-area\s*{[^}]*max-width:\s*96px;/s);
+    expect(styles).toMatch(
+      /\.status-label\s*{[^}]*--note-name-min-width:\s*min\(72px,\s*100%\);/s
+    );
+    expect(styles).toMatch(
+      /\.status-label\s*{[^}]*--note-name-max-width:\s*min\(160px,\s*100%\);/s
+    );
+    expect(styles).toMatch(
+      /\.note-name-hit-area\s*{[^}]*min-width:\s*var\(--note-name-min-width\);/s
+    );
+    expect(styles).toMatch(
+      /\.note-name-hit-area\s*{[^}]*max-width:\s*var\(--note-name-max-width\);/s
+    );
     expect(styles).toMatch(/\.note-name-hit-area\s*{[^}]*cursor:\s*text;/s);
-    expect(styles).toMatch(/\.note-name-hit-area--named\s*{[^}]*min-width:\s*0;/s);
+    expect(styles).not.toMatch(/\.note-name-hit-area--named\s*{[^}]*min-width:/s);
   });
 
-  it('uses a transparent borderless input while editing', () => {
+  it('leaves room for five Chinese characters at the default window width', () => {
+    expect(styles).toMatch(/\.status-label\s*{[^}]*padding:\s*0;/s);
+    expect(styles).toMatch(/\.status-message\s*{[^}]*padding:\s*0 7px;/s);
+    expect(styles).toMatch(/\.note-name-hit-area\s*{[^}]*padding:\s*0 6px;/s);
+    expect(styles).toMatch(/\.note-name-input\s*{[^}]*padding:\s*0 6px;/s);
+  });
+
+  it('keeps editing typography aligned with the saved name', () => {
     expect(styles).toMatch(/\.note-name-input\s*{[^}]*border:\s*0;/s);
-    expect(styles).toMatch(/\.note-name-input\s*{[^}]*background:\s*transparent;/s);
+    expect(styles).toMatch(
+      /\.note-name-input\s*{[^}]*background:\s*rgba\(43, 42, 39, 0\.07\);/s
+    );
+    expect(styles).toMatch(/\.note-name-input\s*{[^}]*font-size:\s*12px;/s);
+    expect(styles).toMatch(/\.note-name-input\s*{[^}]*font-weight:\s*600;/s);
+    expect(styles).toMatch(/\.note-name-input\s*{[^}]*field-sizing:\s*content;/s);
+    expect(styles).toMatch(/\.note-name-input\s*{[^}]*width:\s*auto;/s);
+    expect(styles).toMatch(
+      /\.note-name-input\s*{[^}]*min-width:\s*var\(--note-name-min-width\);/s
+    );
+    expect(styles).toMatch(
+      /\.note-name-input\s*{[^}]*max-width:\s*var\(--note-name-max-width\);/s
+    );
+    expect(styles).toMatch(
+      /\.note-name-input--error\s*{[^}]*outline:\s*1px solid rgba\(185, 28, 28, 0\.55\);/s
+    );
   });
 });
