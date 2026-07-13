@@ -16,8 +16,19 @@ describe('sticky note app-region CSS contract', () => {
     expect(styles).toMatch(/\.note-input\s*{[^}]*-webkit-app-region:\s*no-drag;/s);
     expect(styles).not.toMatch(/\.status-label\s*{[^}]*-webkit-app-region:\s*no-drag;/s);
     expect(styles).not.toMatch(/\.note-name-hit-area[^}]*-webkit-app-region:\s*drag;/s);
-    expect(styles).toMatch(/\.note-name-hit-area\s*{[^}]*max-width:\s*96px;/s);
+    expect(styles).toMatch(
+      /\.note-name-hit-area\s*{[^}]*max-width:\s*var\(--note-name-max-width\);/s
+    );
     expect(styles).toMatch(/\.drag-grip\s*{[^}]*width:\s*40px;/s);
+  });
+
+  it('keeps all toolbar controls inside the minimum-width window', () => {
+    expect(styles).toMatch(
+      /@media\s*\(max-width:\s*220px\)\s*{[^}]*\.toolbar\s*{[^}]*gap:\s*0;/s
+    );
+    expect(styles).toMatch(
+      /@media\s*\(max-width:\s*220px\)[\s\S]*?\.toolbar button\s*{[^}]*width:\s*26px;/s
+    );
   });
 
   it('keeps the visible note shell aligned with the real window bounds', () => {

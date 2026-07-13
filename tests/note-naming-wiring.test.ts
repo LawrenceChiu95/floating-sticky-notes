@@ -96,10 +96,27 @@ describe('note naming styles', () => {
   it('uses an adaptive transparent name hit area and keeps a reliable drag grip', () => {
     expect(appSource).toContain('note-name-hit-area');
     expect(styles).toMatch(/\.drag-grip\s*{[^}]*width:\s*40px;/s);
-    expect(styles).toMatch(/\.note-name-hit-area\s*{[^}]*min-width:\s*72px;/s);
-    expect(styles).toMatch(/\.note-name-hit-area\s*{[^}]*max-width:\s*96px;/s);
+    expect(styles).toMatch(
+      /\.status-label\s*{[^}]*--note-name-min-width:\s*min\(72px,\s*100%\);/s
+    );
+    expect(styles).toMatch(
+      /\.status-label\s*{[^}]*--note-name-max-width:\s*min\(160px,\s*100%\);/s
+    );
+    expect(styles).toMatch(
+      /\.note-name-hit-area\s*{[^}]*min-width:\s*var\(--note-name-min-width\);/s
+    );
+    expect(styles).toMatch(
+      /\.note-name-hit-area\s*{[^}]*max-width:\s*var\(--note-name-max-width\);/s
+    );
     expect(styles).toMatch(/\.note-name-hit-area\s*{[^}]*cursor:\s*text;/s);
-    expect(styles).toMatch(/\.note-name-hit-area--named\s*{[^}]*min-width:\s*0;/s);
+    expect(styles).not.toMatch(/\.note-name-hit-area--named\s*{[^}]*min-width:/s);
+  });
+
+  it('leaves room for five Chinese characters at the default window width', () => {
+    expect(styles).toMatch(/\.status-label\s*{[^}]*padding:\s*0;/s);
+    expect(styles).toMatch(/\.status-message\s*{[^}]*padding:\s*0 7px;/s);
+    expect(styles).toMatch(/\.note-name-hit-area\s*{[^}]*padding:\s*0 6px;/s);
+    expect(styles).toMatch(/\.note-name-input\s*{[^}]*padding:\s*0 6px;/s);
   });
 
   it('keeps editing typography aligned with the saved name', () => {
@@ -109,6 +126,14 @@ describe('note naming styles', () => {
     );
     expect(styles).toMatch(/\.note-name-input\s*{[^}]*font-size:\s*12px;/s);
     expect(styles).toMatch(/\.note-name-input\s*{[^}]*font-weight:\s*600;/s);
+    expect(styles).toMatch(/\.note-name-input\s*{[^}]*field-sizing:\s*content;/s);
+    expect(styles).toMatch(/\.note-name-input\s*{[^}]*width:\s*auto;/s);
+    expect(styles).toMatch(
+      /\.note-name-input\s*{[^}]*min-width:\s*var\(--note-name-min-width\);/s
+    );
+    expect(styles).toMatch(
+      /\.note-name-input\s*{[^}]*max-width:\s*var\(--note-name-max-width\);/s
+    );
     expect(styles).toMatch(
       /\.note-name-input--error\s*{[^}]*outline:\s*1px solid rgba\(185, 28, 28, 0\.55\);/s
     );
