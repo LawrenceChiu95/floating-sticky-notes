@@ -75,8 +75,10 @@ describe('note naming styles', () => {
     expect(styles).toMatch(
       /\.note-name-hit-area--named\s+\.note-name\s*{[^}]*font-weight:\s*600;/s
     );
-    expect(styles).toMatch(/\.status-label\s*{[^}]*text-overflow:\s*ellipsis;/s);
-    expect(styles).toMatch(/\.status-label\s*{[^}]*white-space:\s*nowrap;/s);
+    expect(appSource).toContain('className="status-message"');
+    expect(styles).not.toMatch(/\.status-label\s*{[^}]*text-overflow:\s*ellipsis;/s);
+    expect(styles).toMatch(/\.status-message\s*{[^}]*text-overflow:\s*ellipsis;/s);
+    expect(styles).toMatch(/\.status-message\s*{[^}]*white-space:\s*nowrap;/s);
   });
 
   it('keeps saved names visible and empty hints hover-only', () => {

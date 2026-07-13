@@ -82,6 +82,12 @@ textarea {
   line-height: 20px;
   text-align: center;
   overflow: hidden;
+  white-space: nowrap;
+}
+
+.status-message {
+  display: block;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

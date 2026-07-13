@@ -545,7 +545,9 @@ function App(): JSX.Element {
       <div className="drag-bar">
         <span className="drag-grip" aria-hidden="true" />
         <div className="status-label" aria-live="polite">
-          {namePresentation.kind === 'status' ? namePresentation.text : null}
+          {namePresentation.kind === 'status' ? (
+            <span className="status-message">{namePresentation.text}</span>
+          ) : null}
           {namePresentation.kind === 'editor' ? (
             <>
               <input
