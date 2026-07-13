@@ -62,19 +62,25 @@ describe('note naming renderer wiring', () => {
 });
 
 describe('note naming styles', () => {
-  it('keeps saved names muted, single-line, and ellipsized', () => {
-    expect(styles).toMatch(/\.status-label\s*{[^}]*font-size:\s*12px;/s);
+  it('uses the approved quiet hierarchy for saved names', () => {
+    expect(styles).toMatch(
+      /\.note-name-hit-area--named\s+\.note-name\s*{[^}]*color:\s*rgba\(43, 42, 39, 0\.82\);/s
+    );
+    expect(styles).toMatch(
+      /\.note-name-hit-area--named\s+\.note-name\s*{[^}]*font-weight:\s*600;/s
+    );
     expect(styles).toMatch(/\.status-label\s*{[^}]*text-overflow:\s*ellipsis;/s);
     expect(styles).toMatch(/\.status-label\s*{[^}]*white-space:\s*nowrap;/s);
   });
 
-  it('keeps names hidden until the note is hovered or a save is being confirmed', () => {
+  it('keeps saved names visible and empty hints hover-only', () => {
     expect(styles).toMatch(/\.note-name-hit-area\s*{[^}]*-webkit-app-region:\s*no-drag;/s);
     expect(styles).toMatch(/\.note-name-hit-area\s*{[^}]*opacity:\s*0;/s);
     expect(styles).toMatch(/\.note-name-hit-area\s*{[^}]*pointer-events:\s*auto;/s);
     expect(styles).toMatch(
-      /\.note-name-hit-area:hover,\s*\.note-name-hit-area--confirming\s*{[^}]*opacity:\s*1;/s
+      /\.note-name-hit-area:hover\s*{[^}]*background:\s*rgba\(43, 42, 39, 0\.07\);/s
     );
+    expect(styles).toMatch(/\.note-name-hit-area--named\s*{[^}]*opacity:\s*1;/s);
     expect(styles).toMatch(/\.note-name--empty::after\s*{[^}]*content:\s*attr\(data-hint\);/s);
     expect(styles).not.toMatch(/\.note-shell:hover[^,{]*\.note-name-hit-area/);
   });
@@ -88,8 +94,15 @@ describe('note naming styles', () => {
     expect(styles).toMatch(/\.note-name-hit-area--named\s*{[^}]*min-width:\s*0;/s);
   });
 
-  it('uses a transparent borderless input while editing', () => {
+  it('keeps editing typography aligned with the saved name', () => {
     expect(styles).toMatch(/\.note-name-input\s*{[^}]*border:\s*0;/s);
-    expect(styles).toMatch(/\.note-name-input\s*{[^}]*background:\s*transparent;/s);
+    expect(styles).toMatch(
+      /\.note-name-input\s*{[^}]*background:\s*rgba\(43, 42, 39, 0\.07\);/s
+    );
+    expect(styles).toMatch(/\.note-name-input\s*{[^}]*font-size:\s*12px;/s);
+    expect(styles).toMatch(/\.note-name-input\s*{[^}]*font-weight:\s*600;/s);
+    expect(styles).toMatch(
+      /\.note-name-input--error\s*{[^}]*outline:\s*1px solid rgba\(185, 28, 28, 0\.55\);/s
+    );
   });
 });
