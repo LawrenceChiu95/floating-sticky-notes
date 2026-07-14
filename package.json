@@ -19,6 +19,67 @@
   },
   "main": "out/main/main.js",
   "type": "module",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build:icons": "electron scripts/build-windows-icons.cjs",
+    "build:mac-icons": "node scripts/build-mac-icons.cjs",
+    "build": "tsc --noEmit && electron-vite build",
+    "dist:win": "node scripts/build-windows.cjs",
+    "dist:mac": "npm run build:mac-icons && node scripts/build-mac.cjs",
+    "preview": "electron-vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "build": {
+    "appId": "local.lawrence.floating-sticky-notes",
+    "productName": "悬浮便签",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "assets/icons/tray-icon.png",
+      "assets/icons/app-icon.ico",
+      "assets/icons/app-icon.icns",
+      "package.json"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "assets/icons/**"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icons/app-icon.ico"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "assets/icons/app-icon.icns",
+      "category": "public.app-category.productivity"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "installerIcon": "assets/icons/app-icon.ico",
+      "uninstallerIcon": "assets/icons/app-icon.ico",
+      "include": "build/installer.nsh",
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false
+    }
+  },
   "dependencies": {
     "@electron-toolkit/preload": "3.0.1",
     "@electron-toolkit/utils": "3.0.0",
@@ -28,5 +89,21 @@
     "react-dom": "18.2.0",
     "semver": "7.8.5",
     "yaml": "2.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "20.14.10",
+    "@types/react": "18.2.66",
+    "@types/react-dom": "18.2.22",
+    "@types/semver": "7.7.1",
+    "@vitejs/plugin-react": "^4.7.0",
+    "autoprefixer": "10.4.19",
+    "electron": "41.7.1",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "3.1.0",
+    "postcss": "^8.5.16",
+    "tailwindcss": "3.4.4",
+    "typescript": "5.4.5",
+    "vite": "^6.4.3",
+    "vitest": "^3.2.6"
   }
 }
