@@ -3,7 +3,11 @@ import { describe, expect, it } from 'vitest';
 // The Windows build runs from Node, where spawning npm.cmd directly fails with
 // EINVAL on Node 22. Exercise the invocation choice without starting a build.
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { getNpmInvocation, getElectronBuilderInvocation } = require('../scripts/windows-build.cjs') as {
+const {
+  getNpmInvocation,
+  getElectronBuilderInvocation,
+  getPublishChannel
+} = require('../scripts/windows-build.cjs') as {
   getNpmInvocation?: (platform: NodeJS.Platform, nodeExecutable: string) => {
     command: string;
     argsPrefix: string[];
@@ -12,6 +16,7 @@ const { getNpmInvocation, getElectronBuilderInvocation } = require('../scripts/w
     command: string;
     argsPrefix: string[];
   };
+  getPublishChannel?: (version: string) => string;
 };
 
 describe('Windows build command', () => {
@@ -35,5 +40,12 @@ describe('Windows build command', () => {
       command: 'C:\\Program Files\\nodejs\\node.exe',
       argsPrefix: ['C:\\project\\node_modules\\electron-builder\\cli.js']
     });
+  });
+
+  it('derives the update channel from the package version', () => {
+    expect(getPublishChannel).toBeTypeOf('function');
+    expect(getPublishChannel?.('0.1.13-rc.1')).toBe('rc');
+    expect(getPublishChannel?.('0.1.13-beta.2')).toBe('beta');
+    expect(getPublishChannel?.('0.1.13')).toBe('latest');
   });
 });

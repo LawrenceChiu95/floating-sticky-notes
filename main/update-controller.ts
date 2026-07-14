@@ -15,6 +15,7 @@ export type UpdateInfo = {
 export type UpdateClient = {
   autoDownload: boolean;
   autoInstallOnAppQuit: boolean;
+  disableWebInstaller: boolean;
   on: (event: UpdateEvent, listener: (value: unknown) => void) => unknown;
   checkForUpdates: () => Promise<unknown>;
   downloadUpdate: () => Promise<unknown>;
@@ -86,6 +87,7 @@ export function createUpdateController(options: UpdateControllerOptions): Update
 
   options.updater.autoDownload = false;
   options.updater.autoInstallOnAppQuit = true;
+  options.updater.disableWebInstaller = true;
 
   const isCurrent = (operationId: number, expectedPhase: UpdatePhase): boolean => {
     return (

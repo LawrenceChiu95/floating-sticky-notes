@@ -18,6 +18,7 @@ type UpdateEvent =
 class FakeUpdater implements UpdateClient {
   autoDownload = true;
   autoInstallOnAppQuit = false;
+  disableWebInstaller = false;
   readonly checkForUpdates = vi.fn(async () => undefined);
   readonly downloadUpdate = vi.fn(async () => []);
   readonly quitAndInstall = vi.fn();
@@ -73,6 +74,7 @@ describe('update controller', () => {
 
     expect(updater.autoDownload).toBe(false);
     expect(updater.autoInstallOnAppQuit).toBe(true);
+    expect(updater.disableWebInstaller).toBe(true);
   });
 
   it('reports an up-to-date result after a manual check', async () => {

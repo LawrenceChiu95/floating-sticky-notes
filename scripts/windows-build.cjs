@@ -1,8 +1,8 @@
 const { execFileSync } = require('node:child_process');
 const path = require('node:path');
 
-const updateFeedUrl =
-  'https://github.com/LawrenceChiu95/floating-sticky-notes-updates/releases/latest/download';
+const updateOwner = 'LawrenceChiu95';
+const updateRepository = 'floating-sticky-notes-updates';
 
 function buildWindows({ output, artifactName, channel, extraResources = [] }) {
   const projectRoot = path.resolve(__dirname, '..');
@@ -23,8 +23,9 @@ function buildWindows({ output, artifactName, channel, extraResources = [] }) {
       '--x64',
       `--config.directories.output=${output}`,
       `--config.nsis.artifactName=${artifactName}`,
-      '--config.publish.provider=generic',
-      `--config.publish.url=${updateFeedUrl}`,
+      '--config.publish.provider=github',
+      `--config.publish.owner=${updateOwner}`,
+      `--config.publish.repo=${updateRepository}`,
       `--config.publish.channel=${channel}`,
       ...extraResources.map((resource) => `--config.extraResources=${resource}`),
       '--publish',
@@ -46,6 +47,11 @@ function getElectronBuilderInvocation(platform, projectRoot, nodeExecutable) {
     command: path.join(projectRoot, 'node_modules', '.bin', 'electron-builder'),
     argsPrefix: []
   };
+}
+
+function getPublishChannel(version) {
+  const prereleaseChannel = /^\d+\.\d+\.\d+-([0-9A-Za-z-]+)/.exec(version)?.[1];
+  return prereleaseChannel || 'latest';
 }
 
 function getNpmInvocation(platform, nodeExecutable) {
@@ -75,4 +81,9 @@ function run(command, args, cwd) {
   });
 }
 
-module.exports = { buildWindows, getElectronBuilderInvocation, getNpmInvocation };
+module.exports = {
+  buildWindows,
+  getElectronBuilderInvocation,
+  getNpmInvocation,
+  getPublishChannel
+};

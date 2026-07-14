@@ -37,6 +37,8 @@
    StickyNotes-Mac-<version>.dmg.blockmap
    ```
 
+   Windows 构建使用 GitHub provider，构建配置固定指向 `LawrenceChiu95/floating-sticky-notes-updates`，不再使用 `releases/latest/download` 作为 Windows feed。正式版本必须保留每个 Windows Setup 的 `.exe.blockmap`；删除旧 blockmap 会让后续差分更新回退为完整下载。
+
 8. 在 Windows 上验证安装、启动、托盘和本地数据保留；在 Apple Silicon Mac 上验证 DMG、启动、托盘和本地数据保留。Draft 资源不能通过 `releases/latest/download` 访问，因此这一阶段不能冒充线上更新闭环已经完成。
 9. 真机基础验证通过后发布 Draft，并明确将该 Release 标记为 GitHub 的 latest，然后最后上传：
 
@@ -46,6 +48,8 @@
    ```
 
    这两个文件是更新开关：上传后，Windows 和 Mac 客户端才会分别发现新版本。
+
+   在正式版本前验证 Windows provider 时，使用两个连续的预发布版本（例如 `0.1.13-rc.1` -> `0.1.13-rc.2`）：直接运行标准 Windows 构建命令，脚本会根据版本号自动生成 `rc.yml`；上传它到对应预发布 Release，并确认旧、新 blockmap 都来自各自的 `releases/download/v<version>/` 目录。RC 验证通过后把版本号改为正式版本，脚本会自动生成 `latest.yml`。
 10. 立即用上一正式版本验证线上更新。Windows 使用足够慢的测试下载或限速代理，完成以下检查：
     - 确认下载后立即出现进度窗口，并从不定状态连续切换到百分比。
     - 下载期间便签仍可编辑、创建和关闭；关闭全部便签后托盘与进度仍存活。
@@ -57,6 +61,8 @@
     - 覆盖多显示器和 100%/125%/150% DPI，确认窗口首次出现时位于当前显示器可见范围内，状态、进度条、百分比和提示文字均不被标题栏裁切。
     - 为便签命名后，确认名称持久化并出现在任务栏和 Alt-Tab；空名称回退为“悬浮便签”。确认非空名称常驻显示，悬停名称时出现弱底色，空名称只在中央热区悬停时显示“双击命名”；同时检查普通双击编辑、Enter、失焦、Esc、保存失败保留草稿、窄窗口截断和窗口拖动。
     - 选择“重启并安装”后完成退出和安装，并确认本地便签与图片保留。
+
+    对首次切换到 GitHub provider 的版本，上一正式版升级时允许出现一次旧客户端的 blockmap 404 和完整下载；这不代表新 provider 失效。真正的差分验收应使用已安装的切换后版本升级到下一个版本，并确认没有 blockmap 404、没有多段 Range 501，也没有 fallback 到完整下载。
 11. Mac 应完成检查、下载、SHA-512 校验、打开 DMG 和退出，并由用户拖入 Applications 完成替换，同时确认本地便签保留；还要确认非空名称常驻显示，悬停名称时出现弱底色，空名称只在中央热区悬停时显示“双击命名”，并验证普通单指双击进入命名而不触发系统标题栏缩放，以及 Enter、失焦、Esc、保存失败保留草稿、窄窗口截断和窗口拖动。
 12. 为对应源码 commit 创建 tag，并发布源码 Release 说明。
 

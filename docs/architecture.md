@@ -36,11 +36,15 @@
 - `process.platform === 'win32'`
 - `app.isPackaged === true`
 
-`electron-updater` 使用以下通用更新源：
+`electron-updater` 使用更新仓库 `LawrenceChiu95/floating-sticky-notes-updates` 的 GitHub provider。它按 Release tag 读取安装包和 blockmap，例如：
 
 ```text
-https://github.com/LawrenceChiu95/floating-sticky-notes-updates/releases/latest/download
+https://github.com/LawrenceChiu95/floating-sticky-notes-updates/releases/download/v0.1.13/StickyNotes-Setup-0.1.13.exe
 ```
+
+GitHub provider 会关闭不兼容的多段 Range 请求，但保留单段 Range 的差分下载；每个正式 Windows Release 的 `.exe.blockmap` 必须长期保留。`latest.yml` 仍由最新正式 Release 提供，旧版本的 blockmap 则从对应的版本 Release 目录读取。`0.1.12` 及更早客户端仍使用旧的通用源，升级到首次切换 provider 的版本时可能先回退一次完整下载；切换完成后才进入干净的差分链。
+
+构建脚本根据 `package.json` 的版本号自动选择通道：`0.1.13-rc.1` 生成 `rc.yml`，正式版本生成 `latest.yml`。RC 验证使用两个连续的预发布版本验证差分下载，不依赖额外环境变量；正式构建继续使用 `latest`。
 
 应用启动后静默检查一次更新；用户也可以从托盘手动检查。发现新版本后，下载和重启安装都需要用户确认；执行 `quitAndInstall` 前会先保存便签数据。
 

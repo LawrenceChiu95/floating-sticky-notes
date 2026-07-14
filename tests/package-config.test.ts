@@ -43,7 +43,7 @@ const packageJson = JSON.parse(
 
 describe('package configuration', () => {
   it('uses the current release version and pinned updater dependencies', () => {
-    expect(packageJson.version).toBe('0.1.12');
+    expect(packageJson.version).toBe('0.1.13-rc.1');
     expect(packageJson.dependencies?.['electron-updater']).toBe('6.8.9');
     expect(packageJson.dependencies?.semver).toBe('7.8.5');
     expect(packageJson.dependencies?.yaml).toBe('2.9.0');
@@ -62,7 +62,7 @@ describe('package configuration', () => {
     expect(packageJson.engines).toEqual({ node: '>=22 <23', npm: '>=10 <11' });
   });
 
-  it('has one public Windows build and one generic Mac build', () => {
+  it('has one public GitHub Windows build and one generic Mac build', () => {
     expect(packageJson.scripts?.['build:icons']).toBe('electron scripts/build-windows-icons.cjs');
     expect(packageJson.scripts?.['dist:win']).toBe('node scripts/build-windows.cjs');
     expect(packageJson.scripts?.['dist:win:custom']).toBeUndefined();
@@ -75,15 +75,18 @@ describe('package configuration', () => {
 
     const publicBuildScript = readFileSync(resolve(__dirname, '../scripts/build-windows.cjs'), 'utf8');
     expect(publicBuildScript).toContain('StickyNotes-Setup-${version}.${ext}');
-    expect(publicBuildScript).toContain("channel: 'latest'");
+    expect(publicBuildScript).toContain('getPublishChannel(version)');
 
     const buildHelper = readFileSync(resolve(__dirname, '../scripts/windows-build.cjs'), 'utf8');
     expect(buildHelper).toContain('--config.nsis.artifactName=');
     expect(buildHelper).not.toContain('portable');
-    expect(buildHelper).toContain(
-      'https://github.com/LawrenceChiu95/floating-sticky-notes-updates/releases/latest/download'
-    );
-    expect(buildHelper).toContain('--config.publish.provider=generic');
+    expect(buildHelper).toContain("const updateOwner = 'LawrenceChiu95';");
+    expect(buildHelper).toContain("const updateRepository = 'floating-sticky-notes-updates';");
+    expect(buildHelper).toContain('--config.publish.provider=github');
+    expect(buildHelper).toContain('--config.publish.owner=');
+    expect(buildHelper).toContain('--config.publish.repo=');
+    expect(buildHelper).not.toContain('--config.publish.url=');
+    expect(buildHelper).not.toContain('releases/latest/download');
     expect(buildHelper).toContain('--config.publish.channel=');
     expect(buildHelper).toContain('--publish');
     expect(buildHelper).toContain('never');
