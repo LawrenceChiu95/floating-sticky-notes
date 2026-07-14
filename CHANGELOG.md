@@ -4,6 +4,8 @@
 
 ## [未发布]
 
+## [0.1.12] - 2026-07-14
+
 ### 修复
 
 - 已命名便签现在会在顶部常驻显示名称，并增强字重与悬停反馈；名称保存失败时不再丢失待保存内容。
@@ -119,7 +121,8 @@
 - 提供待办清单、图片、颜色和透明度等核心功能。
 - 开始接入系统托盘与开机启动能力。
 
-[未发布]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.11...HEAD
+[未发布]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.12...HEAD
+[0.1.12]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.11...v0.1.12
 [0.1.11]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.10...v0.1.11
 [0.1.10]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/LawrenceChiu95/floating-sticky-notes/releases/tag/v0.1.9
