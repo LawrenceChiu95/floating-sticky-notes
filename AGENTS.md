@@ -2,6 +2,7 @@
 
 ## 开工前阅读
 
+- `HANDOFF.md`（若本地存在）
 - `README.md`
 - `CONTRIBUTING.md`
 - `CHANGELOG.md`

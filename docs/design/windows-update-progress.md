@@ -4,7 +4,7 @@
 
 Windows 用户确认“下载更新”后，现有确认框立即关闭，直到下载完成前都没有持续可见的反馈。用户容易误以为下载没有开始或应用失去响应。
 
-本设计处理 [Issue #1](https://github.com/LawrenceChiu95/floating-sticky-notes/issues/1)：为 Windows 自动更新增加小型、非模态的下载进度窗口，同时保持便签可用，并继续复用现有 `electron-updater` 更新源和安装流程。
+本设计处理 [Issue #1](https://github.com/LawrenceChiu95/floating-sticky-notes/issues/1)：为 Windows 自动更新增加小型、非模态的下载进度窗口，同时保持便签可用，并继续复用 `electron-updater` 和现有 NSIS 安装流程。
 
 ## 目标
 
@@ -18,7 +18,8 @@ Windows 用户确认“下载更新”后，现有确认框立即关闭，直到
 
 ## 非目标
 
-- 不改变公开通用更新源、更新元数据或 NSIS 安装方式。
+- 不在进度窗口模块中决定更新 provider 或元数据发布方式；这些由更新架构和发布流程管理。
+- 不改变 NSIS 安装方式。
 - 不改变 macOS 的半自动 DMG 更新流程。
 - 不提供暂停或取消下载；`electron-updater` 当前流程没有对应的可靠能力。
 - 不在进度窗口中增加发布说明、设置或其他更新管理功能。

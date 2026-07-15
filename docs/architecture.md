@@ -39,10 +39,10 @@
 `electron-updater` 使用更新仓库 `LawrenceChiu95/floating-sticky-notes-updates` 的 GitHub provider。它按 Release tag 读取安装包和 blockmap，例如：
 
 ```text
-https://github.com/LawrenceChiu95/floating-sticky-notes-updates/releases/download/v0.1.13/StickyNotes-Setup-0.1.13.exe
+https://github.com/LawrenceChiu95/floating-sticky-notes-updates/releases/download/v<version>/StickyNotes-Setup-<version>.exe
 ```
 
-GitHub provider 会关闭不兼容的多段 Range 请求，但保留单段 Range 的差分下载；每个正式 Windows Release 的 `.exe.blockmap` 必须长期保留。`latest.yml` 仍由最新正式 Release 提供，旧版本的 blockmap 则从对应的版本 Release 目录读取。`0.1.12` 及更早客户端仍使用旧的通用源，升级到首次切换 provider 的版本时可能先回退一次完整下载；切换完成后才进入干净的差分链。
+GitHub provider 会关闭不兼容的多段 Range 请求，但保留单段 Range 的差分下载；每个正式 Windows Release 的 `.exe.blockmap` 必须长期保留。`latest.yml` 仍由最新正式 Release 提供，旧版本的 blockmap 则从对应的版本 Release 目录读取。`0.1.13` 是首个切换到 GitHub provider 的正式版本；`0.1.12` 及更早客户端的首次迁移仍可能由旧通用源回退为完整下载。诊断与真机证据见 [`debug-log/windows-differential-update-2026-07-15.md`](../debug-log/windows-differential-update-2026-07-15.md)。
 
 构建脚本根据 `package.json` 的版本号自动选择通道：`0.1.13-rc.1` 生成 `rc.yml`，正式版本生成 `latest.yml`。RC 验证使用两个连续的预发布版本验证差分下载，不依赖额外环境变量；正式构建继续使用 `latest`。
 
