@@ -8,6 +8,14 @@
 - `CHANGELOG.md`
 - `docs/architecture.md`
 - `docs/releasing.md`
+- 涉及需求、Bug、用户反馈、实现、验证、版本或发布时，另读 `docs/project-management.md`
+
+## 对话式项目管理
+
+- 用户只需在聊天中描述反馈、灵感、决定、进展和验证结果；AI 负责搜索重复项、分类、维护 GitHub Issue，并同步 `HANDOFF.md`。
+- 涉及项目事项时，开工前检查相关 GitHub Issue 与 `HANDOFF.md`；收尾前检查状态、证据、版本归属和下一步是否已同步。
+- 默认静默维护，完成后只给一行回执。只有产品取舍、信息无法可靠推断、公开敏感内容、发布或不可逆操作需要询问用户。
+- 实现、自动验证、产物验证、目标环境验证、发布和监测必须分开记录，不得互相推导；细则以 `docs/project-management.md` 为准。
 
 ## 不可随意改变的边界
 
