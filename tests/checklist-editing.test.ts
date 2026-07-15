@@ -2,9 +2,33 @@ import { describe, expect, it } from 'vitest';
 import {
   applyChecklistBackspace,
   applyChecklistEnter,
+  getChecklistKeyAction,
+  normalizeChecklistText,
   type ChecklistFocusTarget
 } from '../renderer/src/checklist-editing';
 import type { NoteChecklistItemRecord } from '../main/note-state';
+
+describe('checklist text normalization', () => {
+  it('keeps each checklist item single-paragraph when multiline text is pasted', () => {
+    expect(normalizeChecklistText('第一行\n第二行\r\n第三行')).toBe('第一行第二行第三行');
+  });
+});
+
+describe('checklist keyboard actions', () => {
+  it('ignores Enter and Backspace while an IME composition is active', () => {
+    expect(getChecklistKeyAction('Enter', true)).toBeUndefined();
+    expect(getChecklistKeyAction('Backspace', true)).toBeUndefined();
+  });
+
+  it('handles Enter and Backspace after the IME composition ends', () => {
+    expect(getChecklistKeyAction('Enter', false)).toBe('enter');
+    expect(getChecklistKeyAction('Backspace', false)).toBe('backspace');
+  });
+
+  it('ignores unrelated keys', () => {
+    expect(getChecklistKeyAction('Tab')).toBeUndefined();
+  });
+});
 
 describe('checklist keyboard editing', () => {
   it('inserts a new empty item after a non-empty item when pressing Enter', () => {

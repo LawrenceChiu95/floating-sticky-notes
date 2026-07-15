@@ -19,6 +19,31 @@ type CreateChecklistItemOptions = {
   now: () => string;
 };
 
+export type ChecklistKeyAction = 'enter' | 'backspace';
+
+export function normalizeChecklistText(text: string): string {
+  return text.replace(/[\r\n]/g, '');
+}
+
+export function getChecklistKeyAction(
+  key: string,
+  isComposing = false
+): ChecklistKeyAction | undefined {
+  if (isComposing) {
+    return undefined;
+  }
+
+  if (key === 'Enter') {
+    return 'enter';
+  }
+
+  if (key === 'Backspace') {
+    return 'backspace';
+  }
+
+  return undefined;
+}
+
 export function applyChecklistEnter(
   checklist: NoteChecklistItemRecord[],
   itemId: string,

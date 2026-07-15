@@ -392,7 +392,7 @@ textarea {
 .checklist-item {
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr) 22px;
-  align-items: center;
+  align-items: start;
   gap: 6px;
   min-height: 28px;
 }
@@ -400,19 +400,28 @@ textarea {
 .checklist-checkbox {
   width: 15px;
   height: 15px;
-  margin: 0;
+  margin: 4px 0 0;
   accent-color: #2563eb;
 }
 
 .checklist-input {
+  field-sizing: content;
   min-width: 0;
   width: 100%;
+  min-height: 28px;
+  max-height: none;
+  overflow: hidden;
+  resize: none;
   border: 0;
   border-bottom: 1px solid rgba(43, 42, 39, 0.09);
   padding: 3px 0 4px;
   color: #2b2a27;
   background: transparent;
+  font-family: inherit;
   font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 
 .checklist-input::placeholder {
@@ -435,6 +444,7 @@ textarea {
   justify-content: center;
   width: 22px;
   height: 22px;
+  margin-top: 1px;
   padding: 0;
   border: 0;
   border-radius: 8px;
