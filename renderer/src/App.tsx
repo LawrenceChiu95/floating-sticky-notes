@@ -19,6 +19,8 @@ import { limitNoteNameLength } from '../../shared/note-name';
 import {
   applyChecklistBackspace,
   applyChecklistEnter,
+  getChecklistKeyAction,
+  normalizeChecklistText,
   type ChecklistFocusTarget
 } from './checklist-editing';
 import {
@@ -64,7 +66,7 @@ function App(): JSX.Element {
   const isNameEditingRef = useRef(false);
   const isNameSavingRef = useRef(false);
   const noteInputRef = useRef<HTMLTextAreaElement | null>(null);
-  const checklistInputRefs = useRef(new Map<string, HTMLInputElement>());
+  const checklistInputRefs = useRef(new Map<string, HTMLTextAreaElement>());
   const pendingFocusRestoreRef = useRef<ChecklistFocusTarget>();
   const lastEditingTargetRef = useRef<{ type: 'note' } | { type: 'checklist'; itemId: string }>({
     type: 'note'
@@ -231,7 +233,10 @@ function App(): JSX.Element {
     handleCancelNameEditing();
   };
 
-  const rememberChecklistInput = (itemId: string, element: HTMLInputElement | null): void => {
+  const rememberChecklistInput = (
+    itemId: string,
+    element: HTMLTextAreaElement | null
+  ): void => {
     if (element) {
       checklistInputRefs.current.set(itemId, element);
       return;
@@ -336,10 +341,12 @@ function App(): JSX.Element {
   };
 
   const handleChecklistKeyDown = (
-    event: KeyboardEvent<HTMLInputElement>,
+    event: KeyboardEvent<HTMLTextAreaElement>,
     itemId: string
   ): void => {
-    if (event.key === 'Enter') {
+    const action = getChecklistKeyAction(event.key, event.nativeEvent.isComposing);
+
+    if (action === 'enter') {
       event.preventDefault();
       const result = applyChecklistEnter(checklist, itemId, {
         createId: createClientId,
@@ -352,7 +359,7 @@ function App(): JSX.Element {
     }
 
     if (
-      event.key === 'Backspace' &&
+      action === 'backspace' &&
       event.currentTarget.value.length === 0 &&
       event.currentTarget.selectionStart === 0 &&
       event.currentTarget.selectionEnd === 0
@@ -716,9 +723,9 @@ function App(): JSX.Element {
                   aria-label="完成"
                   onChange={(event) => handleChecklistCheckedChange(item.id, event.target.checked)}
                 />
-                <input
+                <textarea
                   className="checklist-input"
-                  type="text"
+                  rows={1}
                   value={item.text}
                   placeholder={appCopy.checklistItemPlaceholder}
                   aria-label="事项内容"
@@ -730,7 +737,9 @@ function App(): JSX.Element {
                     };
                   }}
                   onKeyDown={(event) => handleChecklistKeyDown(event, item.id)}
-                  onChange={(event) => handleChecklistTextChange(item.id, event.target.value)}
+                  onChange={(event) =>
+                    handleChecklistTextChange(item.id, normalizeChecklistText(event.target.value))
+                  }
                 />
                 <button
                   type="button"
