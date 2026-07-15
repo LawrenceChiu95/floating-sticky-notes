@@ -24,6 +24,14 @@ import { type ManagedNoteWindow, NotesManager } from './notes-manager';
 import { preventNoteWindowNavigation } from './navigation-guard';
 import type { NoteRecord } from './note-state';
 import { createClosePersistenceHandler, createQuitPersistenceHandler } from './persistence-lifecycle';
+import {
+  createReleaseFeedbackController,
+  type ReleaseFeedbackController
+} from './release-feedback';
+import {
+  createReleaseFeedbackStateStore,
+  RELEASE_FEEDBACK_STATE_FILENAME
+} from './release-feedback-state';
 import { JsonNotesStorage } from './storage';
 import { createTray } from './tray';
 import {
@@ -44,9 +52,11 @@ import {
 import { createDebouncedValueAction } from '../shared/debounced-action';
 import { DEFAULT_APP_COPY, getAppCopy, type AppCopy } from '../shared/app-copy';
 import { UPDATE_PROGRESS_CHANNEL, type UpdateProgressSnapshot } from '../shared/update-progress';
+import { BUILT_RELEASE_NOTES } from './generated/release-notes';
 
 let notesManager: NotesManager | undefined;
 let appCopy: AppCopy = DEFAULT_APP_COPY;
+let releaseFeedbackController: ReleaseFeedbackController | undefined;
 let restoreNotesWhenReady = false;
 const AUTO_LAUNCH_DEFAULT_MARKER = '.auto-launch-default-applied';
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
@@ -384,6 +394,22 @@ app.whenReady().then(async () => {
   }
 
   const userDataPath = app.getPath('userData');
+  const notesPath = join(userDataPath, 'notes.json');
+  const autoLaunchMarkerPath = join(userDataPath, AUTO_LAUNCH_DEFAULT_MARKER);
+  const hadExistingInstallation =
+    existsSync(notesPath) || existsSync(autoLaunchMarkerPath);
+  releaseFeedbackController = createReleaseFeedbackController({
+    currentVersion: app.getVersion(),
+    isPackaged: app.isPackaged,
+    hadExistingInstallation,
+    releaseNotes: BUILT_RELEASE_NOTES,
+    stateStore: createReleaseFeedbackStateStore({
+      filePath: join(userDataPath, RELEASE_FEEDBACK_STATE_FILENAME)
+    }),
+    dialog
+  });
+  await releaseFeedbackController.initialize();
+
   try {
     const localProfile = await readLocalProfile(userDataPath);
     appCopy = getAppCopy(localProfile?.displayName);
@@ -394,7 +420,7 @@ app.whenReady().then(async () => {
   protocol.handle(IMAGE_PROTOCOL, (request) => imageStorage.createImageResponse(request.url));
 
   notesManager = new NotesManager({
-    storage: new JsonNotesStorage(join(userDataPath, 'notes.json')),
+    storage: new JsonNotesStorage(notesPath),
     imageStorage,
     createWindow: createElectronNoteWindow
   });
@@ -422,6 +448,7 @@ app.whenReady().then(async () => {
 
   const updateController = createPlatformUpdateController();
   app.once('before-quit', () => {
+    releaseFeedbackController?.beginQuit();
     updateController?.dispose?.();
   });
 
@@ -446,10 +473,16 @@ app.whenReady().then(async () => {
           }
         }
       : {}),
+    currentVersion: app.getVersion(),
+    showCurrentRelease: () => {
+      void releaseFeedbackController?.showCurrentRelease();
+    },
     quit: () => {
       app.quit();
     }
   });
+
+  await releaseFeedbackController.showAutomaticallyIfNeeded();
 
   if (updateController) {
     void updateController.checkSilently();

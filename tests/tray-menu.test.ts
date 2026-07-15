@@ -17,6 +17,8 @@ function createDeps(overrides: Partial<TrayMenuDeps> = {}): TrayMenuDeps {
     createNote: () => undefined,
     restoreNotes: () => undefined,
     checkForUpdates: () => undefined,
+    currentVersion: '0.1.14',
+    showCurrentRelease: () => undefined,
     quit: () => undefined,
     ...overrides
   } as TrayMenuDeps;
@@ -27,7 +29,7 @@ function findItem(template: TrayMenuItem[], label: string): TrayMenuItem | undef
 }
 
 describe('tray menu template', () => {
-  it('contains note recovery, update, startup, and exit actions', () => {
+  it('contains note recovery, update, current version, startup, and exit actions', () => {
     const template = buildTrayMenuTemplate(createDeps());
     const labels = template.map((item) => item.label);
 
@@ -35,6 +37,7 @@ describe('tray menu template', () => {
     expect(labels).toContain('显示所有便签');
     expect(labels).toContain('检查更新');
     expect(labels).toContain('开机时启动');
+    expect(labels).toContain('版本 0.1.14');
     expect(labels).toContain('退出');
     expect(findItem(template, '开机时启动')?.type).toBe('checkbox');
   });
@@ -85,23 +88,32 @@ describe('tray menu template', () => {
     ]);
   });
 
-  it('routes note, update, and exit actions to the injected callbacks', () => {
+  it('routes note, update, release, and exit actions to the injected callbacks', () => {
     const createNote = vi.fn();
     const restoreNotes = vi.fn();
     const checkForUpdates = vi.fn();
+    const showCurrentRelease = vi.fn();
     const quit = vi.fn();
     const template = buildTrayMenuTemplate(
-      createDeps({ createNote, restoreNotes, checkForUpdates, quit } as Partial<TrayMenuDeps>)
+      createDeps({
+        createNote,
+        restoreNotes,
+        checkForUpdates,
+        showCurrentRelease,
+        quit
+      } as Partial<TrayMenuDeps>)
     );
 
     findItem(template, '新建便签')?.click?.({});
     findItem(template, '显示所有便签')?.click?.({});
     findItem(template, '检查更新')?.click?.({});
+    findItem(template, '版本 0.1.14')?.click?.({});
     findItem(template, '退出')?.click?.({});
 
     expect(createNote).toHaveBeenCalledTimes(1);
     expect(restoreNotes).toHaveBeenCalledTimes(1);
     expect(checkForUpdates).toHaveBeenCalledTimes(1);
+    expect(showCurrentRelease).toHaveBeenCalledTimes(1);
     expect(quit).toHaveBeenCalledTimes(1);
   });
 
@@ -110,6 +122,18 @@ describe('tray menu template', () => {
     delete (deps as Partial<TrayMenuDeps>).checkForUpdates;
 
     expect(findItem(buildTrayMenuTemplate(deps), '检查更新')).toBeUndefined();
+  });
+
+  it('adds only one compact version item before the separator', () => {
+    const template = buildTrayMenuTemplate(createDeps());
+    const versionItems = template.filter((item) => item.label?.startsWith('版本 '));
+    const versionIndex = template.findIndex((item) => item.label === '版本 0.1.14');
+    const separatorIndex = template.findIndex((item) => item.type === 'separator');
+
+    expect(versionItems).toHaveLength(1);
+    expect(versionIndex).toBe(separatorIndex - 1);
+    expect(template.some((item) => item.label?.includes('关于'))).toBe(false);
+    expect(template.some((item) => item.label?.includes('查看本版更新'))).toBe(false);
   });
 
   it('names the tray 悬浮便签', () => {
