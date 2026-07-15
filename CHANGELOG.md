@@ -4,6 +4,8 @@
 
 ## [未发布]
 
+## [0.1.13] - 2026-07-15
+
 ### 变更
 
 - Windows 自动更新改用同一公开更新仓库的 GitHub provider，恢复按版本读取 blockmap 的差分下载。
@@ -125,7 +127,8 @@
 - 提供待办清单、图片、颜色和透明度等核心功能。
 - 开始接入系统托盘与开机启动能力。
 
-[未发布]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.12...HEAD
+[未发布]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.13...HEAD
+[0.1.13]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.12...v0.1.13
 [0.1.12]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.11...v0.1.12
 [0.1.11]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.10...v0.1.11
 [0.1.10]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.9...v0.1.10

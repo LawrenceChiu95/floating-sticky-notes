@@ -43,7 +43,7 @@ const packageJson = JSON.parse(
 
 describe('package configuration', () => {
   it('uses the current release version and pinned updater dependencies', () => {
-    expect(packageJson.version).toBe('0.1.13-rc.2');
+    expect(packageJson.version).toBe('0.1.13');
     expect(packageJson.dependencies?.['electron-updater']).toBe('6.8.9');
     expect(packageJson.dependencies?.semver).toBe('7.8.5');
     expect(packageJson.dependencies?.yaml).toBe('2.9.0');
