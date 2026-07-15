@@ -4,9 +4,11 @@
 
 ## [未发布]
 
+## [0.1.14] - 2026-07-16
+
 ### 新增
 
-- 待办清单已实现一层可选子任务，可用 Tab / Shift+Tab 调整层级，并提供父任务行上的可发现鼠标入口；该功能尚未完成打包应用验收或发布。
+- 待办清单支持一层可选子任务，可用 Tab / Shift+Tab 调整层级，并提供父任务行上的轻量鼠标入口。
 
 ### 修复
 
@@ -139,7 +141,8 @@
 - 提供待办清单、图片、颜色和透明度等核心功能。
 - 开始接入系统托盘与开机启动能力。
 
-[未发布]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.13...HEAD
+[未发布]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.14...HEAD
+[0.1.14]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.13...v0.1.14
 [0.1.13]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.12...v0.1.13
 [0.1.12]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.11...v0.1.12
 [0.1.11]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.10...v0.1.11
