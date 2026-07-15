@@ -11,6 +11,8 @@ export type TrayMenuDeps = {
   createNote: () => void;
   restoreNotes: () => void;
   checkForUpdates?: () => void;
+  currentVersion: string;
+  showCurrentRelease: () => void;
   quit: () => void;
 };
 
@@ -53,6 +55,11 @@ export function buildTrayMenuTemplate(deps: TrayMenuDeps): TrayMenuItemTemplate[
   }
 
   template.push(
+    {
+      label: `版本 ${deps.currentVersion}`,
+      type: 'normal',
+      click: () => deps.showCurrentRelease()
+    },
     { type: 'separator' },
     {
       label: '退出',

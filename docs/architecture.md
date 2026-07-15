@@ -61,3 +61,9 @@ Windows 关闭全部便签窗口后仍由系统托盘常驻。只有托盘“退
 只有 `process.platform === 'darwin'` 且 `app.isPackaged === true` 时，才启用 Mac 半自动更新。Mac 不调用 `electron-updater` 的 `quitAndInstall`，而是读取同一更新源中的 `latest-mac.yml`，并只接受符合 `StickyNotes-Mac-<version>.dmg` 格式的安装镜像。
 
 应用启动后静默检查，托盘也可以手动检查。用户确认下载后，主进程把 DMG 流式写入“下载”文件夹，并校验元数据声明的文件大小和 SHA-512；校验通过后才会询问是否保存便签、打开安装镜像并退出。由于 Mac 构建未签名，用户仍需把应用拖到 Applications 并确认替换。
+
+## 版本更新反馈
+
+版本反馈使用独立的 `release-feedback.json` 保存已展示的稳定版本，不修改 `notes.json`。主进程在便签初始化和一次性开机启动 marker 创建前捕获旧安装痕迹；全新安装先建立当前版本基线，老用户升级则在便签窗口恢复后展示一次。托盘版本入口与自动路径共用原生信息对话框和离线生成的结构化内容，手动查看不改变已读状态；退出开始后不再创建新的反馈对话框。
+
+`CHANGELOG.md` 是唯一人工内容源。`predev` 和 `prebuild` 运行 `scripts/build-release-notes.cjs`，按稳定核心版本提取章节并生成 `main/generated/release-notes.ts`，随后由主进程 bundle 打入应用。运行时不读取仓库 Markdown，也不联网获取 Release 文案。

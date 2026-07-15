@@ -64,6 +64,8 @@ describe('package configuration', () => {
 
   it('has one public GitHub Windows build and one generic Mac build', () => {
     expect(packageJson.scripts?.['build:icons']).toBe('electron scripts/build-windows-icons.cjs');
+    expect(packageJson.scripts?.predev).toBe('node scripts/build-release-notes.cjs');
+    expect(packageJson.scripts?.prebuild).toBe('node scripts/build-release-notes.cjs');
     expect(packageJson.scripts?.['dist:win']).toBe('node scripts/build-windows.cjs');
     expect(packageJson.scripts?.['dist:win:custom']).toBeUndefined();
     expect(packageJson.scripts?.['dist:win:standard']).toBeUndefined();

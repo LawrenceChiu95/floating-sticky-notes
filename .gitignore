@@ -5,6 +5,7 @@ dist-electron/
 release/
 release-mac/
 out/
+/main/generated/
 coverage/
 .env
 .env.*

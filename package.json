@@ -20,9 +20,11 @@
   "main": "out/main/main.js",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/build-release-notes.cjs",
     "dev": "electron-vite dev",
     "build:icons": "electron scripts/build-windows-icons.cjs",
     "build:mac-icons": "node scripts/build-mac-icons.cjs",
+    "prebuild": "node scripts/build-release-notes.cjs",
     "build": "tsc --noEmit && electron-vite build",
     "dist:win": "node scripts/build-windows.cjs",
     "dist:mac": "npm run build:mac-icons && node scripts/build-mac.cjs",
