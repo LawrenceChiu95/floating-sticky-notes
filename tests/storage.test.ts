@@ -149,6 +149,62 @@ describe('JsonNotesStorage', () => {
     });
   });
 
+  it('loads old flat checklist data and repairs invalid hierarchy without losing content', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'floating-notes-storage-'));
+    const filePath = join(dir, 'notes.json');
+    const storage = new JsonNotesStorage(filePath);
+    const note = createDefaultNote({
+      id: 'note-1',
+      now: '2026-07-15T00:00:00.000Z'
+    });
+    note.checklist = [
+      {
+        id: 'parent',
+        text: '目标',
+        checked: false,
+        createdAt: '2026-07-15T00:01:00.000Z',
+        updatedAt: '2026-07-15T00:01:00.000Z'
+      },
+      {
+        id: 'child',
+        text: '步骤',
+        checked: true,
+        parentId: 'parent',
+        createdAt: '2026-07-15T00:02:00.000Z',
+        updatedAt: '2026-07-15T00:02:00.000Z'
+      },
+      {
+        id: 'orphan',
+        text: '孤立内容',
+        checked: false,
+        parentId: 'missing',
+        createdAt: '2026-07-15T00:03:00.000Z',
+        updatedAt: '2026-07-15T00:03:00.000Z'
+      }
+    ];
+    await writeFile(
+      filePath,
+      `${JSON.stringify({ version: 1, notes: [note] }, null, 2)}\n`,
+      'utf8'
+    );
+
+    const loaded = await storage.load();
+
+    expect(loaded.notes[0].checklist).toEqual([
+      note.checklist[0],
+      note.checklist[1],
+      {
+        id: 'orphan',
+        text: '孤立内容',
+        checked: false,
+        createdAt: '2026-07-15T00:03:00.000Z',
+        updatedAt: '2026-07-15T00:03:00.000Z'
+      }
+    ]);
+    await storage.save(loaded);
+    await expect(storage.load()).resolves.toEqual(loaded);
+  });
+
   it('normalizes malformed individual notes without discarding the whole document', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'floating-notes-storage-'));
     const filePath = join(dir, 'notes.json');

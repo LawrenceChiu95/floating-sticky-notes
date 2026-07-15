@@ -1,6 +1,7 @@
 import { CheckSquare, ImagePlus, Palette, Plus, Trash2, X } from 'lucide-react';
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
@@ -11,16 +12,23 @@ import {
 } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { NoteImageView } from '../../main/notes-manager';
+import { groupChecklist } from '../../main/checklist-hierarchy';
 import type { NoteChecklistItemRecord } from '../../main/note-state';
 import { DEFAULT_APP_COPY } from '../../shared/app-copy';
 import { DEFAULT_NOTE_COLOR, DEFAULT_NOTE_OPACITY, NOTE_COLORS } from '../../shared/note-appearance';
 import { createDebouncedValueAction, type DebouncedValueAction } from '../../shared/debounced-action';
 import { limitNoteNameLength } from '../../shared/note-name';
 import {
+  applyChecklistAddSubtask,
   applyChecklistBackspace,
+  applyChecklistDelete,
   applyChecklistEnter,
+  applyChecklistIndent,
+  applyChecklistOutdent,
   getChecklistKeyAction,
+  getChecklistShortcutHint,
   normalizeChecklistText,
+  type ChecklistShortcutHint,
   type ChecklistFocusTarget
 } from './checklist-editing';
 import {
@@ -49,6 +57,7 @@ function App(): JSX.Element {
   const preloadStatus = getPreloadStatus(window);
   const [content, setContent] = useState('');
   const [checklist, setChecklist] = useState<NoteChecklistItemRecord[]>([]);
+  const checklistRef = useRef<NoteChecklistItemRecord[]>([]);
   const [images, setImages] = useState<NoteImageView[]>([]);
   const [color, setColor] = useState<string>(DEFAULT_NOTE_COLOR);
   const [opacity, setOpacity] = useState(DEFAULT_NOTE_OPACITY);
@@ -100,7 +109,9 @@ function App(): JSX.Element {
 
         setContent(note?.content ?? '');
         setNoteNaming(createNoteNamingState(note?.name ?? ''));
-        setChecklist(note?.checklist ?? []);
+        const nextChecklist = note?.checklist ?? [];
+        checklistRef.current = nextChecklist;
+        setChecklist(nextChecklist);
         setImages(note?.images ?? []);
         setColor(note?.color ?? DEFAULT_NOTE_COLOR);
         setOpacity(note?.opacity ?? DEFAULT_NOTE_OPACITY);
@@ -282,11 +293,13 @@ function App(): JSX.Element {
   };
 
   const saveChecklist = (nextChecklist: NoteChecklistItemRecord[]): void => {
+    checklistRef.current = nextChecklist;
     setChecklist(nextChecklist);
     window.stickyNotes
       .updateChecklist(nextChecklist)
       .then((note) => {
         if (note) {
+          checklistRef.current = note.checklist;
           setChecklist(note.checklist);
           setStatusMessage('');
           return;
@@ -322,6 +335,16 @@ function App(): JSX.Element {
     focusEditingTarget(focus);
   };
 
+  const handleAddChecklistSubtask = (parentId: string): void => {
+    const result = applyChecklistAddSubtask(checklist, parentId, {
+      createId: createClientId,
+      now: () => new Date().toISOString()
+    });
+    saveChecklist(result.checklist);
+    lastEditingTargetRef.current = result.focus;
+    focusEditingTarget(result.focus);
+  };
+
   const handleChecklistTextChange = (itemId: string, text: string): void => {
     const now = new Date().toISOString();
     saveChecklist(
@@ -336,15 +359,38 @@ function App(): JSX.Element {
     );
   };
 
+  const handleChecklistBlur = (item: NoteChecklistItemRecord): void => {
+    const currentItem = checklistRef.current.find((candidate) => candidate.id === item.id);
+
+    if (currentItem?.parentId && currentItem.text.trim().length === 0) {
+      saveChecklist(applyChecklistDelete(checklistRef.current, item.id));
+    }
+  };
+
   const handleDeleteChecklistItem = (itemId: string): void => {
-    saveChecklist(checklist.filter((item) => item.id !== itemId));
+    saveChecklist(applyChecklistDelete(checklist, itemId));
   };
 
   const handleChecklistKeyDown = (
     event: KeyboardEvent<HTMLTextAreaElement>,
     itemId: string
   ): void => {
-    const action = getChecklistKeyAction(event.key, event.nativeEvent.isComposing);
+    const action = getChecklistKeyAction(
+      event.key,
+      event.nativeEvent.isComposing,
+      event.shiftKey
+    );
+
+    if (action === 'indent' || action === 'outdent') {
+      event.preventDefault();
+      const result = action === 'indent'
+        ? applyChecklistIndent(checklist, itemId)
+        : applyChecklistOutdent(checklist, itemId);
+      saveChecklist(result.checklist);
+      lastEditingTargetRef.current = result.focus;
+      focusEditingTarget(result.focus);
+      return;
+    }
 
     if (action === 'enter') {
       event.preventDefault();
@@ -537,6 +583,7 @@ function App(): JSX.Element {
     appCopy.checklistItemPlaceholder
   );
   const showChecklistAddEntry = shouldShowChecklistAddEntry(checklist.length);
+  const checklistGroups = useMemo(() => groupChecklist(checklist), [checklist]);
   const namePresentation = getNoteNamePresentation(noteNaming, statusMessage);
 
   return (
@@ -713,46 +760,59 @@ function App(): JSX.Element {
           </div>
         ) : null}
         {checklist.length > 0 ? (
-          <div className="checklist" aria-label="勾选事项">
-            {checklist.map((item) => (
-              <div key={item.id} className="checklist-item">
-                <input
-                  className="checklist-checkbox"
-                  type="checkbox"
-                  checked={item.checked}
-                  aria-label="完成"
-                  onChange={(event) => handleChecklistCheckedChange(item.id, event.target.checked)}
-                />
-                <textarea
-                  className="checklist-input"
-                  rows={1}
-                  value={item.text}
-                  placeholder={appCopy.checklistItemPlaceholder}
-                  aria-label="事项内容"
-                  ref={(element) => rememberChecklistInput(item.id, element)}
-                  onFocus={() => {
-                    lastEditingTargetRef.current = {
-                      type: 'checklist',
-                      itemId: item.id
-                    };
-                  }}
-                  onKeyDown={(event) => handleChecklistKeyDown(event, item.id)}
-                  onChange={(event) =>
-                    handleChecklistTextChange(item.id, normalizeChecklistText(event.target.value))
-                  }
-                />
-                <button
-                  type="button"
-                  className="checklist-delete"
-                  title="删除事项"
-                  aria-label="删除事项"
-                  onClick={() => handleDeleteChecklistItem(item.id)}
-                >
-                  <X size={13} strokeWidth={2.2} />
-                </button>
-              </div>
+          <ul className="checklist" aria-label="勾选事项">
+            {checklistGroups.map(({ parent, children }) => (
+              <li key={parent.id} className="checklist-group">
+                <div className="checklist-parent">
+                  <ChecklistItemRow
+                    item={parent}
+                    isParent
+                    hasChildren={children.length > 0}
+                    shortcutHint={getChecklistShortcutHint(checklist, parent.id)}
+                    placeholder={appCopy.checklistItemPlaceholder}
+                    rememberInput={rememberChecklistInput}
+                    onFocus={(itemId) => {
+                      lastEditingTargetRef.current = {
+                        type: 'checklist',
+                        itemId
+                      };
+                    }}
+                    onKeyDown={handleChecklistKeyDown}
+                    onTextChange={handleChecklistTextChange}
+                    onCheckedChange={handleChecklistCheckedChange}
+                    onBlur={handleChecklistBlur}
+                    onDelete={handleDeleteChecklistItem}
+                    onAddSubtask={handleAddChecklistSubtask}
+                  />
+                </div>
+                {children.length > 0 ? (
+                  <ul className="checklist-children" aria-label="子任务">
+                    {children.map((child) => (
+                      <li key={child.id} className="checklist-child">
+                        <ChecklistItemRow
+                          item={child}
+                          shortcutHint={getChecklistShortcutHint(checklist, child.id)}
+                          placeholder={appCopy.checklistItemPlaceholder}
+                          rememberInput={rememberChecklistInput}
+                          onFocus={(itemId) => {
+                            lastEditingTargetRef.current = {
+                              type: 'checklist',
+                              itemId
+                            };
+                          }}
+                          onKeyDown={handleChecklistKeyDown}
+                          onTextChange={handleChecklistTextChange}
+                          onCheckedChange={handleChecklistCheckedChange}
+                          onBlur={handleChecklistBlur}
+                          onDelete={handleDeleteChecklistItem}
+                        />
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </li>
             ))}
-          </div>
+          </ul>
         ) : null}
         {showChecklistAddEntry ? (
           <button
@@ -783,6 +843,93 @@ function App(): JSX.Element {
         />
       </div>
     </main>
+  );
+}
+
+function ChecklistItemRow({
+  item,
+  isParent = false,
+  hasChildren = false,
+  shortcutHint,
+  placeholder,
+  rememberInput,
+  onFocus,
+  onKeyDown,
+  onTextChange,
+  onCheckedChange,
+  onBlur,
+  onDelete,
+  onAddSubtask
+}: {
+  item: NoteChecklistItemRecord;
+  isParent?: boolean;
+  hasChildren?: boolean;
+  shortcutHint?: ChecklistShortcutHint;
+  placeholder: string;
+  rememberInput: (itemId: string, element: HTMLTextAreaElement | null) => void;
+  onFocus: (itemId: string) => void;
+  onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>, itemId: string) => void;
+  onTextChange: (itemId: string, text: string) => void;
+  onCheckedChange: (itemId: string, checked: boolean) => void;
+  onBlur: (item: NoteChecklistItemRecord) => void;
+  onDelete: (itemId: string) => void;
+  onAddSubtask?: (parentId: string) => void;
+}): JSX.Element {
+  const inputLabel = item.parentId
+    ? `子任务内容${shortcutHint === 'outdent' ? '，按 Shift+Tab 取消子任务层级' : ''}`
+    : `事项内容${shortcutHint === 'indent' ? '，按 Tab 创建子任务' : ''}`;
+  const rowClassName = [
+    'checklist-item',
+    item.parentId ? 'checklist-item--child' : '',
+    hasChildren ? 'checklist-item--has-children' : ''
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  return (
+    <div className={rowClassName}>
+      <input
+        className="checklist-checkbox"
+        type="checkbox"
+        checked={item.checked}
+        aria-label="完成"
+        onChange={(event) => onCheckedChange(item.id, event.target.checked)}
+      />
+      <div className="checklist-actions">
+        {isParent && onAddSubtask ? (
+          <button
+            type="button"
+            className="checklist-add checklist-add--subtask"
+            title="添加子任务（Tab）"
+            aria-label={`为${item.text.trim() || '此事项'}添加子任务（Tab）`}
+            onClick={() => onAddSubtask(item.id)}
+          >
+            <Plus size={14} strokeWidth={2.2} />
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="checklist-delete"
+          title="删除事项"
+          aria-label="删除事项"
+          onClick={() => onDelete(item.id)}
+        >
+          <X size={13} strokeWidth={2.2} />
+        </button>
+      </div>
+      <textarea
+        className="checklist-input"
+        rows={1}
+        value={item.text}
+        placeholder={placeholder}
+        aria-label={inputLabel}
+        ref={(element) => rememberInput(item.id, element)}
+        onFocus={() => onFocus(item.id)}
+        onBlur={() => onBlur(item)}
+        onKeyDown={(event) => onKeyDown(event, item.id)}
+        onChange={(event) => onTextChange(item.id, normalizeChecklistText(event.target.value))}
+      />
+    </div>
   );
 }
 

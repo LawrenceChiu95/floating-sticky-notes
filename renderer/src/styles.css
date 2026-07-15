@@ -227,7 +227,8 @@ textarea {
 
 .toolbar button:focus-visible,
 .image-delete:focus-visible,
-.checklist-delete:focus-visible {
+.checklist-delete:focus-visible,
+.checklist-add--subtask:focus-visible {
   outline: 2px solid #2563eb;
   outline-offset: -2px;
 }
@@ -386,14 +387,48 @@ textarea {
   flex: 0 0 auto;
   display: grid;
   gap: 5px;
+  margin: 0;
   padding: 8px 9px 0;
+  list-style: none;
+}
+
+.checklist-group,
+.checklist-child,
+.checklist-children {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.checklist-group {
+  display: grid;
+  gap: 5px;
+}
+
+.checklist-parent {
+  display: grid;
+  min-width: 0;
+}
+
+.checklist-parent .checklist-input {
+  padding-right: 24px;
+}
+
+.checklist-children {
+  display: grid;
+  gap: 3px;
+  margin-left: 8px;
+  padding: 3px 0 3px 10px;
+  border-left: 1px solid rgba(43, 42, 39, 0.16);
 }
 
 .checklist-item {
+  position: relative;
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr) 22px;
   align-items: start;
   gap: 6px;
+  min-width: 0;
   min-height: 28px;
 }
 
@@ -433,7 +468,7 @@ textarea {
   outline: none;
 }
 
-.checklist-checkbox:checked + .checklist-input {
+.checklist-checkbox:checked ~ .checklist-input {
   color: rgba(43, 42, 39, 0.58);
   text-decoration: line-through;
 }
@@ -452,11 +487,24 @@ textarea {
   background: transparent;
   cursor: default;
   opacity: 0;
+  pointer-events: none;
+}
+
+.checklist-actions {
+  position: absolute;
+  top: 1px;
+  right: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  pointer-events: none;
 }
 
 .checklist-item:hover .checklist-delete,
 .checklist-delete:focus-visible {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .checklist-delete:hover {
@@ -481,10 +529,50 @@ textarea {
   margin: 8px 9px 0;
 }
 
+.checklist-add--subtask {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  min-height: 22px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  border-radius: 7px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 100ms ease, background 100ms ease;
+}
+
+.checklist-item:hover .checklist-add--subtask,
+.checklist-item:focus-within .checklist-add--subtask,
+.checklist-add--subtask:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.checklist-item--has-children .checklist-input {
+  font-weight: 600;
+}
+
 .checklist-add:hover,
 .checklist-add:focus-visible {
   color: #2b2a27;
   background: rgba(43, 42, 39, 0.07);
+}
+
+.checklist-item--child .checklist-input {
+  font-size: 12.5px;
+  line-height: 19px;
+  padding-top: 2px;
+  padding-bottom: 3px;
+  border-bottom-color: rgba(43, 42, 39, 0.06);
+}
+
+.checklist-item--child .checklist-checkbox {
+  width: 14px;
+  height: 14px;
+  margin-top: 3px;
 }
 
 .note-input {
