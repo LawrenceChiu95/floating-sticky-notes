@@ -1,4 +1,8 @@
 import type { NoteChecklistItemRecord } from './note-state';
+import {
+  normalizeChecklistHierarchy,
+  readChecklistParentId
+} from './checklist-hierarchy';
 
 export function normalizeChecklistInput(value: unknown): NoteChecklistItemRecord[] | undefined {
   if (!Array.isArray(value)) {
@@ -10,7 +14,7 @@ export function normalizeChecklistInput(value: unknown): NoteChecklistItemRecord
     return normalizedItem ? [normalizedItem] : [];
   });
 
-  return items.length === value.length ? items : undefined;
+  return items.length === value.length ? normalizeChecklistHierarchy(items) : undefined;
 }
 
 function normalizeChecklistItemInput(value: unknown): NoteChecklistItemRecord | undefined {
@@ -35,6 +39,9 @@ function normalizeChecklistItemInput(value: unknown): NoteChecklistItemRecord | 
     id: candidate.id,
     text: candidate.text,
     checked: candidate.checked,
+    ...(readChecklistParentId(candidate.parentId)
+      ? { parentId: readChecklistParentId(candidate.parentId) }
+      : {}),
     createdAt: candidate.createdAt,
     updatedAt: candidate.updatedAt
   };

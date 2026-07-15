@@ -12,6 +12,10 @@ import {
   type NoteRecord
 } from './note-state';
 import { isSafeImageFilename } from './image-storage';
+import {
+  normalizeChecklistHierarchy,
+  readChecklistParentId
+} from './checklist-hierarchy';
 
 export type NotesDocument = {
   version: 1;
@@ -144,10 +148,12 @@ function normalizeNoteChecklist(value: unknown): NoteChecklistItemRecord[] {
     return [];
   }
 
-  return value.flatMap((item) => {
+  const items = value.flatMap((item) => {
     const normalizedItem = normalizeNoteChecklistItem(item);
     return normalizedItem ? [normalizedItem] : [];
   });
+
+  return normalizeChecklistHierarchy(items);
 }
 
 function normalizeNoteChecklistItem(value: unknown): NoteChecklistItemRecord | undefined {
@@ -165,6 +171,9 @@ function normalizeNoteChecklistItem(value: unknown): NoteChecklistItemRecord | u
     id: candidate.id,
     text: typeof candidate.text === 'string' ? candidate.text : '',
     checked: typeof candidate.checked === 'boolean' ? candidate.checked : false,
+    ...(readChecklistParentId(candidate.parentId)
+      ? { parentId: readChecklistParentId(candidate.parentId) }
+      : {}),
     createdAt: typeof candidate.createdAt === 'string' ? candidate.createdAt : '',
     updatedAt: typeof candidate.updatedAt === 'string' ? candidate.updatedAt : ''
   };

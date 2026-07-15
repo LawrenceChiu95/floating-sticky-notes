@@ -37,6 +37,7 @@ export type NoteChecklistItemRecord = {
   id: string;
   text: string;
   checked: boolean;
+  parentId?: string;
   createdAt: string;
   updatedAt: string;
 };

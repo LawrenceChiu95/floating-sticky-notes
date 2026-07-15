@@ -9,7 +9,9 @@ describe('checklist text wrapping', () => {
   it('uses a textarea while preserving Enter-based checklist editing', () => {
     expect(appSource).toMatch(/<textarea\s+className="checklist-input"\s+rows=\{1\}/s);
     expect(appSource).not.toMatch(/<input\s+className="checklist-input"/s);
-    expect(appSource).toContain('getChecklistKeyAction(event.key, event.nativeEvent.isComposing)');
+    expect(appSource).toMatch(
+      /getChecklistKeyAction\(\s*event\.key,\s*event\.nativeEvent\.isComposing,\s*event\.shiftKey\s*\)/s
+    );
     expect(appSource).toContain('normalizeChecklistText(event.target.value)');
     expect(appSource).toContain("action === 'enter'");
   });
