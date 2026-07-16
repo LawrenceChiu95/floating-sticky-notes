@@ -60,7 +60,7 @@ Windows 关闭全部便签窗口后仍由系统托盘常驻。只有托盘“退
 
 只有 `process.platform === 'darwin'` 且 `app.isPackaged === true` 时，才启用 Mac 半自动更新。Mac 不调用 `electron-updater` 的 `quitAndInstall`，而是读取同一更新源中的 `latest-mac.yml`，并只接受符合 `StickyNotes-Mac-<version>.dmg` 格式的安装镜像。
 
-应用启动后静默检查，托盘也可以手动检查。用户确认下载后，主进程把 DMG 流式写入“下载”文件夹，并校验元数据声明的文件大小和 SHA-512；校验通过后才会询问是否保存便签、打开安装镜像并退出。由于 Mac 构建未签名，用户仍需把应用拖到 Applications 并确认替换。
+应用启动后静默检查，托盘也可以手动检查。用户确认下载后，主进程把 DMG 流式写入“下载”文件夹，并校验元数据声明的文件大小和 SHA-512；校验通过后才会询问是否保存便签、打开安装镜像并退出。Mac 构建对完整 app bundle 使用 ad-hoc 签名和 hardened runtime，构建脚本会执行严格签名校验；由于它没有 Apple Developer ID 且未经过公证，Gatekeeper 不会直接信任，用户仍需把应用拖到 Applications，并在“系统设置 → 隐私与安全性”中选择“仍要打开”。
 
 ## 版本更新反馈
 
@@ -68,4 +68,4 @@ Windows 关闭全部便签窗口后仍由系统托盘常驻。只有托盘“退
 
 `CHANGELOG.md` 是唯一人工内容源。`predev` 和 `prebuild` 运行 `scripts/build-release-notes.cjs`，按稳定核心版本提取版本号、发布日期、分类和条目，生成 `main/generated/release-notes.ts`，随后由主进程 bundle 打入应用。运行时不读取仓库 Markdown，也不联网获取 Release 文案。
 
-版本反馈窗口使用自己的 renderer、最小 preload 和 presenter。窗口固定宽度并在显示前按内容测量高度；少量内容自然收紧，长内容只滚动中间版本/条目区域，编辑式页头和底部操作保持可见。自动与手动请求复用唯一活动窗口，只有来源为自动且窗口真实显示成功时才写入已读版本。
+版本反馈窗口使用自己的 renderer、最小 preload 和 presenter。离线归档按 SemVer 升序保存，自动路径在筛选未读范围后按 SemVer 倒序展示，确保最新版本位于最上方；手动路径只显示当前版本。窗口固定宽度并在显示前按内容测量高度；少量内容自然收紧，长内容只滚动中间版本/条目区域，编辑式页头和底部操作保持可见。自动与手动请求复用唯一活动窗口，只有来源为自动且窗口真实显示成功时才写入已读版本。完整产品行为见 [`docs/design/release-highlights.md`](design/release-highlights.md)。

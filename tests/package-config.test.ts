@@ -36,6 +36,7 @@ const packageJson = JSON.parse(
     mac?: {
       icon?: string;
       category?: string;
+      identity?: string;
       target?: Array<string | { target: string; arch?: string[] }>;
     };
   };
@@ -43,7 +44,7 @@ const packageJson = JSON.parse(
 
 describe('package configuration', () => {
   it('uses the current release version and pinned updater dependencies', () => {
-    expect(packageJson.version).toBe('0.1.15');
+    expect(packageJson.version).toBe('0.1.16');
     expect(packageJson.dependencies?.['electron-updater']).toBe('6.8.9');
     expect(packageJson.dependencies?.semver).toBe('7.8.5');
     expect(packageJson.dependencies?.yaml).toBe('2.9.0');
@@ -105,6 +106,8 @@ describe('package configuration', () => {
     expect(macBuildScript).toContain('--config.publish.channel=latest');
     expect(macBuildScript).toContain('--publish');
     expect(macBuildScript).toContain('never');
+    expect(macBuildScript).toContain("run('codesign', [");
+    expect(macBuildScript).toContain("'--verify', '--deep', '--strict', '--verbose=2'");
     expect(macBuildScript).toContain(
       'https://github.com/LawrenceChiu95/floating-sticky-notes-updates/releases/latest/download'
     );
@@ -140,13 +143,14 @@ describe('package configuration', () => {
     });
   });
 
-  it('configures an unsigned Apple Silicon Mac package', () => {
+  it('configures a completely ad-hoc signed Apple Silicon Mac package', () => {
     expect(packageJson.build?.files).toContain('assets/icons/app-icon.icns');
     expect(packageJson.build?.mac?.target).toEqual([
       { target: 'dmg', arch: ['arm64'] }
     ]);
     expect(packageJson.build?.mac?.icon).toBe('assets/icons/app-icon.icns');
     expect(packageJson.build?.mac?.category).toBe('public.app-category.productivity');
+    expect(packageJson.build?.mac?.identity).toBe('-');
   });
 
   it('bypasses legacy uninstallers during upgrades so old close checks cannot block reinstall', () => {

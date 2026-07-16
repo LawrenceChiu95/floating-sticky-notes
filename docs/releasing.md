@@ -21,12 +21,16 @@
    ```
 
 4. 检查打包后的 asar，确认 runtime 包名、版本、更新源和资源符合预期；三个 preload 应为 `preload.cjs`、`updateProgressPreload.cjs` 和 `releaseFeedbackPreload.cjs`，renderer 应包含 `release-feedback.html`，主进程不得引用 preload `.mjs`。
-5. 直接启动生成的打包应用，确认主进程可以加载、便签窗口和托盘可以出现，且没有模块导入或其他仅在打包环境发生的启动错误。只通过 TypeScript、单元测试和打包命令不算完成这项验证。
-6. 校验 Windows Setup 和 Mac DMG；在 macOS 上还要运行：
+5. 直接启动生成的打包应用，确认主进程可以加载、便签窗口和托盘可以出现，且没有模块导入或其他仅在打包环境发生的启动错误。从托盘打开当前版本说明，确认版本、分类、每项独立圆点、关闭入口和长内容滚动正常。只通过 TypeScript、单元测试和打包命令不算完成这项验证。
+6. 校验 Windows Setup、Mac app 的完整签名和 DMG。`npm run dist:mac` 会在打包后自动执行严格签名校验；在 macOS 上还要独立运行：
 
    ```bash
+   codesign --verify --deep --strict --verbose=2 "release-mac/mac-arm64/悬浮便签.app"
+   codesign -dv --verbose=4 "release-mac/mac-arm64/悬浮便签.app"
    hdiutil verify "release-mac/StickyNotes-Mac-<version>.dmg"
    ```
+
+   在没有 Apple Developer ID 的阶段，第二条命令应显示 `Signature=adhoc`、正确的应用标识、已绑定的 `Info.plist` 和 `Sealed Resources`；第一条必须成功。`spctl --assess` 仍会拒绝未经公证的 ad-hoc 构建，这属于预期限制，不能把它描述为已通过 Gatekeeper。
 
 7. 在更新仓库创建 Draft Release，上传以下安装资源，但暂不上传两个更新元数据文件：
 
@@ -39,7 +43,7 @@
 
    Windows 构建使用 GitHub provider，构建配置固定指向 `LawrenceChiu95/floating-sticky-notes-updates`，不再使用 `releases/latest/download` 作为 Windows feed。正式版本必须保留每个 Windows Setup 的 `.exe.blockmap`；删除旧 blockmap 会让后续差分更新回退为完整下载。
 
-8. 在 Windows 上验证安装、启动、托盘和本地数据保留；在 Apple Silicon Mac 上验证 DMG、启动、托盘和本地数据保留。Draft 资源不能通过 `releases/latest/download` 访问，因此这一阶段不能冒充线上更新闭环已经完成。
+8. 在 Windows 上验证安装、启动、托盘、版本说明窗口和本地数据保留；在 Apple Silicon Mac 上验证 DMG、启动、托盘、版本说明窗口和本地数据保留。Mac 还必须使用从浏览器或聊天工具外部取得、带 quarantine 的最终 DMG 验证首次启动：系统可以因未公证而阻止直接打开，但提示不得再是“应用已损坏”；进入“系统设置 → 隐私与安全性”选择“仍要打开”后，应用必须正常启动。多版本测试数据应确认最新版本在最上方，每个功能点都有独立圆点；托盘手动入口只显示当前版本且不修改已读状态。Draft 资源不能通过 `releases/latest/download` 访问，因此这一阶段不能冒充线上更新闭环已经完成。
 9. 真机基础验证通过后发布 Draft，并明确将该 Release 标记为 GitHub 的 latest，然后最后上传：
 
    ```text
@@ -61,9 +65,10 @@
     - 覆盖多显示器和 100%/125%/150% DPI，确认窗口首次出现时位于当前显示器可见范围内，状态、进度条、百分比和提示文字均不被标题栏裁切。
     - 为便签命名后，确认名称持久化并出现在任务栏和 Alt-Tab；空名称回退为“悬浮便签”。确认非空名称常驻显示，悬停名称时出现弱底色，空名称只在中央热区悬停时显示“双击命名”；同时检查普通双击编辑、Enter、失焦、Esc、保存失败保留草稿、窄窗口截断和窗口拖动。
     - 选择“重启并安装”后完成退出和安装，并确认本地便签与图片保留。
+    - 新版首次成功启动后只出现一个更新说明窗口；跳版本时最新版本位于最上方，每项有独立圆点。关闭后同版重启不再自动出现，托盘手动入口仍只显示当前版本。
 
     对首次切换到 GitHub provider 的版本，上一正式版升级时允许出现一次旧客户端的 blockmap 404 和完整下载；这不代表新 provider 失效。真正的差分验收应使用已安装的切换后版本升级到下一个版本，并确认没有 blockmap 404、没有多段 Range 501，也没有 fallback 到完整下载。
-11. Mac 应完成检查、下载、SHA-512 校验、打开 DMG 和退出，并由用户拖入 Applications 完成替换，同时确认本地便签保留；还要确认非空名称常驻显示，悬停名称时出现弱底色，空名称只在中央热区悬停时显示“双击命名”，并验证普通单指双击进入命名而不触发系统标题栏缩放，以及 Enter、失焦、Esc、保存失败保留草稿、窄窗口截断和窗口拖动。
+11. Mac 应完成检查、下载、SHA-512 校验、打开 DMG 和退出，并由用户拖入 Applications 完成替换；未经公证时按“系统设置 → 隐私与安全性 → 仍要打开”的预期流程放行，确认应用启动且本地便签保留。新版首次成功启动后只出现一个更新说明窗口，跳版本时最新版本在最上方、每项有独立圆点，同版重启不重复自动出现，托盘手动入口只显示当前版本。还要确认非空名称常驻显示，悬停名称时出现弱底色，空名称只在中央热区悬停时显示“双击命名”，并验证普通单指双击进入命名而不触发系统标题栏缩放，以及 Enter、失焦、Esc、保存失败保留草稿、窄窗口截断和窗口拖动。
 12. 为对应源码 commit 创建 tag，并发布源码 Release 说明。
 
 禁止上传用户数据、本地 profile、凭据、调试日志，以及上述更新资源以外的生成包。
