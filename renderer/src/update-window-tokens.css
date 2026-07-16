@@ -1,0 +1,16 @@
+:root {
+  --update-window-background: #f5f1e8;
+  --update-window-text: #26231f;
+  --update-window-heading: #5e574d;
+  --update-window-muted: #746b60;
+  --update-window-accent: #d49a3a;
+  --update-window-focus: #755111;
+  --update-window-font:
+    "Segoe UI",
+    "Microsoft YaHei UI",
+    sans-serif;
+  color: var(--update-window-text);
+  background: var(--update-window-background);
+  font-family: var(--update-window-font);
+  font-synthesis: none;
+}

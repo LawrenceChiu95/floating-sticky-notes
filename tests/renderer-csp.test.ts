@@ -13,4 +13,18 @@ describe('renderer Content Security Policy', () => {
     expect(csp).not.toContain("script-src 'self' blob:");
     expect(csp).not.toContain("default-src 'self' blob:");
   });
+
+  it('keeps the release feedback page local-only', async () => {
+    const html = await readFile(
+      join(process.cwd(), 'renderer/release-feedback.html'),
+      'utf8'
+    );
+    const csp = html.match(/Content-Security-Policy"\s+content="([^"]+)"/)?.[1] ?? '';
+
+    expect(csp).toContain("default-src 'self'");
+    expect(csp).toContain("script-src 'self'");
+    expect(csp).toContain("style-src 'self'");
+    expect(csp).not.toContain('http:');
+    expect(csp).not.toContain('https:');
+  });
 });

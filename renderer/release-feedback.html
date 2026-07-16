@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:;"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>本版更新</title>
+    <link rel="stylesheet" href="/src/release-feedback.css" />
+  </head>
+  <body>
+    <main id="release-feedback-main" class="release-feedback" tabindex="-1">
+      <header class="release-feedback__masthead">
+        <div class="release-feedback__topline">
+          <p id="release-feedback-eyebrow" class="release-feedback__eyebrow"></p>
+          <p id="release-feedback-metadata" class="release-feedback__metadata"></p>
+        </div>
+        <h1 id="release-feedback-version" class="release-feedback__version"></h1>
+        <p id="release-feedback-summary" class="release-feedback__summary"></p>
+        <span class="release-feedback__accent" aria-hidden="true"></span>
+      </header>
+      <div
+        id="release-feedback-releases"
+        class="release-feedback__releases"
+        tabindex="0"
+      ></div>
+      <footer class="release-feedback__footer">
+        <p class="release-feedback__status">
+          <span class="release-feedback__status-dot" aria-hidden="true"></span>
+          <span id="release-feedback-status-label"></span>
+        </p>
+        <button id="release-feedback-dismiss" type="button">知道了</button>
+      </footer>
+    </main>
+    <script type="module" src="/src/release-feedback.ts"></script>
+  </body>
+</html>

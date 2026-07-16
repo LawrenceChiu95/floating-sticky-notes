@@ -52,7 +52,7 @@ GitHub provider 会关闭不兼容的多段 Range 请求，但保留单段 Range
 
 用户确认下载后，更新控制器通过窄 presenter 接口驱动独立的进度窗口。该窗口使用自己的 preload 和 renderer，只能接收只读进度快照，不具备便签读写 IPC 权限。控制器按 operation ID 和显式阶段接受 `download-progress`、`update-downloaded` 与错误事件，忽略迟到或重复事件；详细设计见 [`docs/design/windows-update-progress.md`](design/windows-update-progress.md)。
 
-便签窗口与更新进度窗口都启用 Electron sandbox。electron-vite 必须把两个 preload 构建为 CommonJS，并由主进程加载 `.cjs` 文件；沙箱 preload 若输出为带 import 的 ESM，bridge 不会执行，renderer 只能停留在默认准备状态。
+便签窗口、更新进度窗口和版本反馈窗口都启用 Electron sandbox。electron-vite 必须把三个 preload 构建为 CommonJS，并由主进程加载 `.cjs` 文件；沙箱 preload 若输出为带 import 的 ESM，bridge 不会执行，renderer 只能停留在默认准备状态。
 
 Windows 关闭全部便签窗口后仍由系统托盘常驻。只有托盘“退出”、明确执行安装或系统退出才结束进程，避免进度窗口关闭时触发 `autoInstallOnAppQuit` 并绕过安装确认。
 
@@ -64,6 +64,8 @@ Windows 关闭全部便签窗口后仍由系统托盘常驻。只有托盘“退
 
 ## 版本更新反馈
 
-版本反馈使用独立的 `release-feedback.json` 保存已展示的稳定版本，不修改 `notes.json`。主进程在便签初始化和一次性开机启动 marker 创建前捕获旧安装痕迹；全新安装先建立当前版本基线，老用户升级则在便签窗口恢复后展示一次。托盘版本入口与自动路径共用原生信息对话框和离线生成的结构化内容，手动查看不改变已读状态；退出开始后不再创建新的反馈对话框。
+版本反馈使用独立的 `release-feedback.json` 保存已展示的稳定版本，不修改 `notes.json`。主进程在便签初始化和一次性开机启动 marker 创建前捕获旧安装痕迹；全新安装先建立当前版本基线，老用户升级则在便签窗口恢复后展示一次。托盘版本入口与自动路径共用独立、非模态的版本反馈窗口和离线生成的结构化内容，手动查看不改变已读状态；退出开始后不再创建新的反馈窗口。
 
-`CHANGELOG.md` 是唯一人工内容源。`predev` 和 `prebuild` 运行 `scripts/build-release-notes.cjs`，按稳定核心版本提取章节并生成 `main/generated/release-notes.ts`，随后由主进程 bundle 打入应用。运行时不读取仓库 Markdown，也不联网获取 Release 文案。
+`CHANGELOG.md` 是唯一人工内容源。`predev` 和 `prebuild` 运行 `scripts/build-release-notes.cjs`，按稳定核心版本提取版本号、发布日期、分类和条目，生成 `main/generated/release-notes.ts`，随后由主进程 bundle 打入应用。运行时不读取仓库 Markdown，也不联网获取 Release 文案。
+
+版本反馈窗口使用自己的 renderer、最小 preload 和 presenter。窗口固定宽度并在显示前按内容测量高度；少量内容自然收紧，长内容只滚动中间版本/条目区域，编辑式页头和底部操作保持可见。自动与手动请求复用唯一活动窗口，只有来源为自动且窗口真实显示成功时才写入已读版本。

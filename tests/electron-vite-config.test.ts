@@ -31,14 +31,20 @@ describe('electron-vite renderer config', () => {
     expect(rendererConfig.renderer?.server?.hmr).toBe(false);
   });
 
-  it('builds independent update progress preload and renderer entries', () => {
+  it('builds independent update progress and release feedback entries', () => {
     const buildConfig = config as unknown as RendererServerConfig;
 
     expect(buildConfig.preload?.build?.rollupOptions?.input).toHaveProperty(
       'updateProgressPreload'
     );
+    expect(buildConfig.preload?.build?.rollupOptions?.input).toHaveProperty(
+      'releaseFeedbackPreload'
+    );
     expect(buildConfig.renderer?.build?.rollupOptions?.input).toHaveProperty(
       'updateProgress'
+    );
+    expect(buildConfig.renderer?.build?.rollupOptions?.input).toHaveProperty(
+      'releaseFeedback'
     );
     expect(buildConfig.preload?.build?.rollupOptions?.output?.format).toBe('cjs');
   });
