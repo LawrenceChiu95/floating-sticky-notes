@@ -21,9 +21,9 @@
 
 ## 项目状态
 
-当前正式版本为 [`0.1.14`](https://github.com/LawrenceChiu95/floating-sticky-notes/releases/tag/v0.1.14)。本版本增加一层可选子任务，修复窄便签中的待办文字换行，并在托盘中提供当前版本与本版更新入口。
+当前正式版本为 [`0.1.15`](https://github.com/LawrenceChiu95/floating-sticky-notes/releases/tag/v0.1.15)。本版本将版本更新反馈改为紧凑、非模态的自有窗口，少量内容自然收紧，跳版本或长内容在固定页头和操作区之间滚动展示。
 
-Windows x64 Setup 和 Apple Silicon Mac DMG 可从 [`floating-sticky-notes-updates v0.1.14`](https://github.com/LawrenceChiu95/floating-sticky-notes-updates/releases/tag/v0.1.14) 下载。Windows 可以在应用内完成检查、下载和重启安装；macOS 会下载并校验 DMG、打开安装镜像，用户仍需手动拖到 Applications 并确认替换。当前安装包均未签名，系统可能显示未知发布者或安全提示。
+Windows x64 Setup 和 Apple Silicon Mac DMG 可从 [`floating-sticky-notes-updates v0.1.15`](https://github.com/LawrenceChiu95/floating-sticky-notes-updates/releases/tag/v0.1.15) 下载。Windows 可以在应用内完成检查、下载和重启安装；macOS 会下载并校验 DMG、打开安装镜像，用户仍需手动拖到 Applications 并确认替换。当前安装包均未签名，系统可能显示未知发布者或安全提示。
 
 `0.1.9` 是首个公开源码版本，也是首个具备 Windows 自动更新能力的版本；`0.1.10` 增加了 macOS 半自动更新。项目在公开前已经完成 `0.1.0` 至 `0.1.8` 的内部迭代；完整且经过隐私清洗的版本历史见 [变更日志](CHANGELOG.md)。
 

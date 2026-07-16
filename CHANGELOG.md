@@ -4,9 +4,11 @@
 
 ## [未发布]
 
+## [0.1.15] - 2026-07-16
+
 ### 变更
 
-- 版本更新反馈改用紧凑、非模态的自有窗口；少量内容自然收紧，跳版本或长内容在固定页头和操作区之间滚动展示。
+- 版本更新反馈改用紧凑、非模态的自有窗口；少量内容自然收紧，跳版本或长内容在固定页头和操作区之间滚动展示，并调整确认按钮字号。
 
 ## [0.1.14] - 2026-07-16
 
@@ -145,7 +147,8 @@
 - 提供待办清单、图片、颜色和透明度等核心功能。
 - 开始接入系统托盘与开机启动能力。
 
-[未发布]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.14...HEAD
+[未发布]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.15...HEAD
+[0.1.15]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.14...v0.1.15
 [0.1.14]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.13...v0.1.14
 [0.1.13]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.12...v0.1.13
 [0.1.12]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.11...v0.1.12
