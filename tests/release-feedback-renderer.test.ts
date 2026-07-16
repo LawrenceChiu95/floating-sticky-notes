@@ -126,6 +126,12 @@ describe('release feedback renderer', () => {
     expect(styles).toMatch(/\.release-feedback__releases\s*{[^}]*overflow-y:\s*auto;/s);
     expect(styles).toMatch(/\.release-feedback--bounded\s*{[^}]*grid-template-rows:\s*auto minmax\(0, 1fr\) auto;/s);
     expect(styles).toMatch(/\.release-feedback__section\s*{[^}]*grid-template-columns:/s);
+    expect(styles).toMatch(
+      /\.release-feedback__section ul\s*{[^}]*list-style:\s*disc;/s
+    );
+    expect(styles).toMatch(
+      /\.release-feedback__section li::marker\s*{[^}]*color:\s*var\(--update-window-accent\);/s
+    );
     expect(styles).toContain('scrollbar-gutter: stable;');
     expect(styles).toMatch(/\.release-feedback:focus\s*{[^}]*outline:\s*none;/s);
     expect(styles).toContain(':focus-visible');

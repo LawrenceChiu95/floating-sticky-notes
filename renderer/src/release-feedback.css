@@ -163,9 +163,9 @@ body {
   display: grid;
   gap: 8px;
   margin: 0;
-  padding: 0 0 0 15px;
+  padding: 0 0 0 26px;
   border-left: 1px solid rgb(94 87 77 / 22%);
-  list-style: none;
+  list-style: disc;
 }
 
 .release-feedback__section li {
@@ -173,6 +173,11 @@ body {
   font-size: 13px;
   line-height: 1.52;
   overflow-wrap: anywhere;
+}
+
+.release-feedback__section li::marker {
+  color: var(--update-window-accent);
+  font-size: 0.85em;
 }
 
 .release-feedback__empty {

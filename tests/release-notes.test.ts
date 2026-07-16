@@ -172,5 +172,29 @@ describe('release notes build extraction', () => {
     const archive = extractReleaseNotesArchive?.(repositoryChangelog, packageJson.version);
     expect(archive?.releases.at(-1)?.version).toBe(packageJson.version);
     expect(archive?.releases.length).toBeGreaterThan(1);
+
+    const release014 = archive?.releases.find((release) => release.version === '0.1.14');
+    expect(release014?.sections.find((section) => section.title === '新增')?.items).toEqual([
+      '待办清单支持一层可选子任务，可用 Tab / Shift+Tab 调整层级，并提供父任务行上的轻量鼠标入口。',
+      '托盘现在会显示当前版本，点击即可随时查看本版新增与修复。'
+    ]);
+    expect(release014?.sections.find((section) => section.title === '修复')?.items).toEqual([
+      '待办事项现在会根据便签宽度完整换行并自动调整高度，长网址和连续字符不再被截断。',
+      '中文输入法确认候选词时不再误创建下一条待办。'
+    ]);
+    expect(release014?.sections.some((section) => section.title === '变更')).toBe(false);
+
+    const release015 = archive?.releases.find((release) => release.version === '0.1.15');
+    expect(release015?.sections).toEqual([
+      {
+        title: '变更',
+        items: [
+          '版本更新反馈改用紧凑、非模态的自有窗口。',
+          '少量内容时，窗口会根据内容自然收紧。',
+          '跳版本或内容较长时，更新内容可在固定页头和操作区之间滚动查看。',
+          '收小“知道了”按钮的文字字号。'
+        ]
+      }
+    ]);
   });
 });

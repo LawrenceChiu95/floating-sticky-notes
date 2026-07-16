@@ -54,7 +54,7 @@ function createPresenter(
 }
 
 describe('release feedback controller', () => {
-  it('shows every unseen stable release in ascending order and then records the current version', async () => {
+  it('shows every unseen stable release newest first and then records the current version', async () => {
     const store = createStore('0.1.12');
     const presenter = createPresenter();
     const controller = createReleaseFeedbackController({
@@ -74,7 +74,7 @@ describe('release feedback controller', () => {
     expect(presenter.show).toHaveBeenCalledWith({
       initiatedBy: 'automatic',
       version: '0.1.15',
-      releases: archive.releases
+      releases: [...archive.releases].reverse()
     });
     expect(store.save).toHaveBeenCalledOnce();
     expect(store.save).toHaveBeenCalledWith('0.1.15');
@@ -98,7 +98,7 @@ describe('release feedback controller', () => {
     expect(presenter.show).toHaveBeenCalledWith({
       initiatedBy: 'automatic',
       version: '0.1.14',
-      releases: archive.releases.slice(0, 2)
+      releases: archive.releases.slice(0, 2).reverse()
     });
     expect(store.save).toHaveBeenCalledWith('0.1.14');
   });

@@ -1,4 +1,4 @@
-import { gt, gte, lte, prerelease, valid } from 'semver';
+import { gt, gte, lte, prerelease, rcompare, valid } from 'semver';
 import type {
   ReleaseFeedbackPresentationResult,
   ReleaseFeedbackSnapshot
@@ -155,11 +155,13 @@ function getAutomaticReleases(
   currentVersion: string
 ): ReleaseNotes[] {
   return (
-    archive?.releases.filter(
-      (release) =>
-        lte(release.version, currentVersion) &&
-        (!lastShownReleaseVersion || gt(release.version, lastShownReleaseVersion))
-    ) ?? []
+    archive?.releases
+      .filter(
+        (release) =>
+          lte(release.version, currentVersion) &&
+          (!lastShownReleaseVersion || gt(release.version, lastShownReleaseVersion))
+      )
+      .sort((left, right) => rcompare(left.version, right.version)) ?? []
   );
 }
 

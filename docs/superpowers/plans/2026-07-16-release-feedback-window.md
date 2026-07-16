@@ -17,7 +17,7 @@
 实现前先读完整 Product Spec。以下行为是本计划的硬约束：
 
 - 自动路径只在已有安装、当前稳定版本高于已读版本、且不是开发环境/预发布环境时触发。
-- 有已读版本时，选择 `(lastShownReleaseVersion, currentVersion]` 内所有稳定章节，在一个窗口按版本升序展示。
+- 有已读版本时，选择 `(lastShownReleaseVersion, currentVersion]` 内所有稳定章节，在一个窗口按版本倒序展示，最新版本在最上方。
 - 有旧安装痕迹但没有已读基线时，展示构建归档中不高于当前版本的全部稳定章节；允许重复一次，但不能因为无法推断旧版本而永久漏掉信息。
 - 全新安装建立当前版本基线，不自动展示；降级不覆盖较高的已读版本。
 - 托盘手动入口只展示当前安装版本，永不写入已读状态。
@@ -93,7 +93,7 @@ node -e "const p=require('./package.json'); console.log(p.name,p.version,p.build
 **先改测试，再改实现。** 这一阶段不创建窗口，先把用户最在意的“不漏版本”锁住。
 
 - [ ] 在 `tests/release-notes.test.ts` 增加归档测试：章节按 SemVer 升序并保留发布日期；重复章节、非法/缺失日期、空分类、无条目、当前正式版本缺章节时失败；预发布版本校验稳定核心章节但不把预发布号写入归档；生成产物保留所有稳定章节。
-- [ ] 在 `tests/release-feedback.test.ts` 增加选择测试：`0.1.12 -> 0.1.15` 得到 `0.1.13/0.1.14/0.1.15`；无基线旧安装得到所有不高于当前版本的归档章节；全新安装不展示；降级不写低版本；手动只得到当前版本；空手动内容得到 `releases: []`。
+- [ ] 在 `tests/release-feedback.test.ts` 增加选择测试：`0.1.12 -> 0.1.15` 得到 `0.1.15/0.1.14/0.1.13`；无基线旧安装得到所有不高于当前版本的归档章节并按倒序展示；全新安装不展示；降级不写低版本；手动只得到当前版本；空手动内容得到 `releases: []`。
 - [ ] 修改 `shared/release-notes.ts` 和 `scripts/build-release-notes.cjs`，输出 `releases: [{ version, date, sections }]` 的离线归档；日期严格来自 `CHANGELOG.md` 的稳定章节标题；继续生成被 git 忽略的 `main/generated/release-notes.ts`，禁止手写或 `git add -f`。
 - [ ] 修改 controller：输入快照范围，不再拼 `MessageBox.detail`；自动展示成功条件暂由 presenter 结果提供，只有 `source === 'automatic' && shown === true` 才保存当前最高版本。
 - [ ] 运行：
