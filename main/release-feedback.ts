@@ -1,21 +1,14 @@
-import { gt, gte, prerelease, valid } from 'semver';
-import {
-  formatReleaseNotesDetail,
-  type ReleaseNotes
-} from '../shared/release-notes';
+import { gt, gte, lte, prerelease, valid } from 'semver';
+import type {
+  ReleaseFeedbackPresentationResult,
+  ReleaseFeedbackSnapshot
+} from '../shared/release-feedback-window';
+import type { ReleaseNotes, ReleaseNotesArchive } from '../shared/release-notes';
 import type { ReleaseFeedbackStateStore } from './release-feedback-state';
 
-export type ReleaseFeedbackDialog = {
-  showMessageBox: (options: {
-    type: 'info';
-    title: string;
-    message: string;
-    detail?: string;
-    buttons?: string[];
-    defaultId?: number;
-    cancelId?: number;
-    noLink?: boolean;
-  }) => Promise<{ response: number }>;
+export type ReleaseFeedbackPresenter = {
+  show: (snapshot: ReleaseFeedbackSnapshot) => Promise<ReleaseFeedbackPresentationResult>;
+  dispose: () => void;
 };
 
 export type ReleaseFeedbackController = {
@@ -29,15 +22,10 @@ export type ReleaseFeedbackControllerOptions = {
   currentVersion: string;
   isPackaged: boolean;
   hadExistingInstallation: boolean;
-  releaseNotes?: ReleaseNotes;
+  releaseNotes?: ReleaseNotesArchive;
   stateStore: ReleaseFeedbackStateStore;
-  dialog: ReleaseFeedbackDialog;
+  presenter: ReleaseFeedbackPresenter;
   logWarning?: (message: string, error: unknown) => void;
-};
-
-type PresentationResult = {
-  initiatedBy: 'automatic' | 'manual';
-  shown: boolean;
 };
 
 const FIRST_AUTOMATIC_RELEASE_FEEDBACK_VERSION = '0.1.14';
@@ -48,17 +36,19 @@ export function createReleaseFeedbackController(
   const logWarning = options.logWarning ?? ((message, error) => console.warn(message, error));
   let initialized = false;
   let automaticShowPending = false;
+  let lastShownReleaseVersion: string | undefined;
   let quitting = false;
-  let presentation: Promise<PresentationResult> | undefined;
+  let presentation: Promise<ReleaseFeedbackPresentationResult> | undefined;
 
   const normalizedCurrentVersion = valid(options.currentVersion) ?? undefined;
-  const stableVersion =
-    normalizedCurrentVersion && prerelease(normalizedCurrentVersion) === null
-      ? normalizedCurrentVersion
-      : undefined;
+  const stableCoreVersion = normalizedCurrentVersion
+    ? normalizedCurrentVersion.replace(/-.+$/, '')
+    : undefined;
   const automaticVersion =
-    stableVersion && gte(stableVersion, FIRST_AUTOMATIC_RELEASE_FEEDBACK_VERSION)
-      ? stableVersion
+    normalizedCurrentVersion &&
+    prerelease(normalizedCurrentVersion) === null &&
+    gte(normalizedCurrentVersion, FIRST_AUTOMATIC_RELEASE_FEEDBACK_VERSION)
+      ? normalizedCurrentVersion
       : undefined;
 
   return {
@@ -77,7 +67,7 @@ export function createReleaseFeedbackController(
         return;
       }
 
-      const lastShownReleaseVersion = state.lastShownReleaseVersion;
+      lastShownReleaseVersion = state.lastShownReleaseVersion;
       if (!options.hadExistingInstallation) {
         if (!lastShownReleaseVersion || gt(automaticVersion, lastShownReleaseVersion)) {
           await saveVersion(options.stateStore, automaticVersion, logWarning);
@@ -95,13 +85,22 @@ export function createReleaseFeedbackController(
       }
 
       automaticShowPending = false;
-      if (!options.releaseNotes || options.releaseNotes.sections.length === 0) {
+      const releases = getAutomaticReleases(
+        options.releaseNotes,
+        lastShownReleaseVersion,
+        automaticVersion
+      );
+      if (releases.length === 0) {
         await saveVersion(options.stateStore, automaticVersion, logWarning);
         return;
       }
 
-      const result = await present('automatic');
-      if (result.initiatedBy === 'automatic' && result.shown) {
+      const result = await present({
+        initiatedBy: 'automatic',
+        version: options.currentVersion,
+        releases
+      });
+      if (result.source === 'automatic' && result.shown) {
         await saveVersion(options.stateStore, automaticVersion, logWarning);
       }
     },
@@ -111,20 +110,36 @@ export function createReleaseFeedbackController(
         return;
       }
 
-      await present('manual');
+      const releases = stableCoreVersion
+        ? (options.releaseNotes?.releases.filter(
+            (release) => release.version === stableCoreVersion
+          ) ?? [])
+        : [];
+      await present({
+        initiatedBy: 'manual',
+        version: options.currentVersion,
+        releases
+      });
     },
 
     beginQuit(): void {
+      if (quitting) {
+        return;
+      }
+
       quitting = true;
+      options.presenter.dispose();
     }
   };
 
-  function present(initiatedBy: PresentationResult['initiatedBy']): Promise<PresentationResult> {
+  function present(
+    snapshot: ReleaseFeedbackSnapshot
+  ): Promise<ReleaseFeedbackPresentationResult> {
     if (presentation) {
       return presentation;
     }
 
-    const promise = presentReleaseNotes(initiatedBy).finally(() => {
+    const promise = options.presenter.show(snapshot).finally(() => {
       if (presentation === promise) {
         presentation = undefined;
       }
@@ -132,30 +147,20 @@ export function createReleaseFeedbackController(
     presentation = promise;
     return promise;
   }
+}
 
-  async function presentReleaseNotes(
-    initiatedBy: PresentationResult['initiatedBy']
-  ): Promise<PresentationResult> {
-    try {
-      await options.dialog.showMessageBox({
-        type: 'info',
-        title: '本版更新',
-        message:
-          initiatedBy === 'automatic'
-            ? `悬浮便签已更新到 v${options.currentVersion}`
-            : `当前版本 v${options.currentVersion}`,
-        detail: formatReleaseNotesDetail(options.releaseNotes),
-        buttons: ['知道了'],
-        defaultId: 0,
-        cancelId: 0,
-        noLink: true
-      });
-      return { initiatedBy, shown: true };
-    } catch (error) {
-      logWarning('Unable to show release feedback', error);
-      return { initiatedBy, shown: false };
-    }
-  }
+function getAutomaticReleases(
+  archive: ReleaseNotesArchive | undefined,
+  lastShownReleaseVersion: string | undefined,
+  currentVersion: string
+): ReleaseNotes[] {
+  return (
+    archive?.releases.filter(
+      (release) =>
+        lte(release.version, currentVersion) &&
+        (!lastShownReleaseVersion || gt(release.version, lastShownReleaseVersion))
+    ) ?? []
+  );
 }
 
 async function saveVersion(

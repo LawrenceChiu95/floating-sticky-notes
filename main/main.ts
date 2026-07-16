@@ -29,6 +29,12 @@ import {
   type ReleaseFeedbackController
 } from './release-feedback';
 import {
+  createReleaseFeedbackWindowManager,
+  createReleaseFeedbackWindowOptions,
+  type ReleaseFeedbackWindowManager,
+  type ReleaseFeedbackWindowPort
+} from './release-feedback-window';
+import {
   createReleaseFeedbackStateStore,
   RELEASE_FEEDBACK_STATE_FILENAME
 } from './release-feedback-state';
@@ -51,12 +57,18 @@ import {
 } from './window-options';
 import { createDebouncedValueAction } from '../shared/debounced-action';
 import { DEFAULT_APP_COPY, getAppCopy, type AppCopy } from '../shared/app-copy';
+import {
+  isReleaseFeedbackRenderedPayload,
+  RELEASE_FEEDBACK_CHANNELS,
+  type ReleaseFeedbackSnapshot
+} from '../shared/release-feedback-window';
 import { UPDATE_PROGRESS_CHANNEL, type UpdateProgressSnapshot } from '../shared/update-progress';
 import { BUILT_RELEASE_NOTES } from './generated/release-notes';
 
 let notesManager: NotesManager | undefined;
 let appCopy: AppCopy = DEFAULT_APP_COPY;
 let releaseFeedbackController: ReleaseFeedbackController | undefined;
+let releaseFeedbackWindowManager: ReleaseFeedbackWindowManager | undefined;
 let restoreNotesWhenReady = false;
 const AUTO_LAUNCH_DEFAULT_MARKER = '.auto-launch-default-applied';
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
@@ -236,6 +248,96 @@ function createElectronUpdateProgressWindow(): UpdateProgressWindowPort {
   };
 }
 
+function createElectronReleaseFeedbackWindow(): ReleaseFeedbackWindowPort {
+  const workArea = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
+  const releaseFeedbackWindow = new BrowserWindow(
+    createReleaseFeedbackWindowOptions(
+      workArea,
+      join(__dirname, '../preload/releaseFeedbackPreload.cjs'),
+      NOTE_WINDOW_ICON_PATH
+    )
+  );
+
+  preventNoteWindowNavigation({
+    onWillNavigate: (listener) => {
+      releaseFeedbackWindow.webContents.on('will-navigate', listener);
+    },
+    onWillFrameNavigate: (listener) => {
+      releaseFeedbackWindow.webContents.on('will-frame-navigate', listener);
+    }
+  });
+  releaseFeedbackWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  releaseFeedbackWindow.on('page-title-updated', (event) => {
+    event.preventDefault();
+  });
+
+  return {
+    webContentsId: releaseFeedbackWindow.webContents.id,
+    workArea,
+    load: () => {
+      if (is.dev && process.env.ELECTRON_RENDERER_URL) {
+        return releaseFeedbackWindow.loadURL(
+          `${process.env.ELECTRON_RENDERER_URL}/release-feedback.html`
+        );
+      }
+      return releaseFeedbackWindow.loadFile(
+        join(__dirname, '../renderer/release-feedback.html')
+      );
+    },
+    onReady: (listener) => {
+      releaseFeedbackWindow.webContents.once('did-finish-load', listener);
+    },
+    onShow: (listener) => {
+      releaseFeedbackWindow.once('show', listener);
+    },
+    onClosed: (listener) => {
+      releaseFeedbackWindow.once('closed', listener);
+    },
+    send: (snapshot: ReleaseFeedbackSnapshot) => {
+      if (!releaseFeedbackWindow.webContents.isDestroyed()) {
+        releaseFeedbackWindow.webContents.send(
+          RELEASE_FEEDBACK_CHANNELS.snapshot,
+          snapshot
+        );
+      }
+    },
+    getChromeHeight: () => {
+      if (releaseFeedbackWindow.isDestroyed()) {
+        return 0;
+      }
+      return Math.max(
+        0,
+        releaseFeedbackWindow.getBounds().height -
+          releaseFeedbackWindow.getContentBounds().height
+      );
+    },
+    setBounds: (bounds) => {
+      if (!releaseFeedbackWindow.isDestroyed()) {
+        releaseFeedbackWindow.setBounds(bounds, false);
+      }
+    },
+    show: () => {
+      if (!releaseFeedbackWindow.isDestroyed()) {
+        releaseFeedbackWindow.show();
+      }
+    },
+    focus: () => {
+      if (releaseFeedbackWindow.isDestroyed() || !releaseFeedbackWindow.isVisible()) {
+        return;
+      }
+      if (releaseFeedbackWindow.isMinimized()) {
+        releaseFeedbackWindow.restore();
+      }
+      releaseFeedbackWindow.focus();
+    },
+    destroy: () => {
+      if (!releaseFeedbackWindow.isDestroyed()) {
+        releaseFeedbackWindow.destroy();
+      }
+    }
+  };
+}
+
 function getNotesManager(): NotesManager {
   if (!notesManager) {
     throw new Error('Notes manager is not ready');
@@ -245,6 +347,26 @@ function getNotesManager(): NotesManager {
 }
 
 function registerIpcHandlers(): void {
+  ipcMain.on(RELEASE_FEEDBACK_CHANNELS.rendered, (event, value: unknown) => {
+    if (
+      !releaseFeedbackWindowManager ||
+      !releaseFeedbackWindowManager.isCurrentSender(event.sender.id) ||
+      !isReleaseFeedbackRenderedPayload(value)
+    ) {
+      return;
+    }
+
+    releaseFeedbackWindowManager.reportRendered(event.sender.id, value);
+  });
+
+  ipcMain.on(RELEASE_FEEDBACK_CHANNELS.dismiss, (event) => {
+    if (!releaseFeedbackWindowManager?.isCurrentSender(event.sender.id)) {
+      return;
+    }
+
+    releaseFeedbackWindowManager.dismiss(event.sender.id);
+  });
+
   ipcMain.handle('sticky-notes:get-app-copy', () => appCopy);
 
   ipcMain.handle('sticky-notes:get-current-note', (event) => {
@@ -398,6 +520,9 @@ app.whenReady().then(async () => {
   const autoLaunchMarkerPath = join(userDataPath, AUTO_LAUNCH_DEFAULT_MARKER);
   const hadExistingInstallation =
     existsSync(notesPath) || existsSync(autoLaunchMarkerPath);
+  releaseFeedbackWindowManager = createReleaseFeedbackWindowManager({
+    createWindow: createElectronReleaseFeedbackWindow
+  });
   releaseFeedbackController = createReleaseFeedbackController({
     currentVersion: app.getVersion(),
     isPackaged: app.isPackaged,
@@ -406,7 +531,7 @@ app.whenReady().then(async () => {
     stateStore: createReleaseFeedbackStateStore({
       filePath: join(userDataPath, RELEASE_FEEDBACK_STATE_FILENAME)
     }),
-    dialog
+    presenter: releaseFeedbackWindowManager
   });
   await releaseFeedbackController.initialize();
 

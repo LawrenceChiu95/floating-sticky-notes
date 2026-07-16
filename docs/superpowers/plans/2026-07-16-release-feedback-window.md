@@ -8,7 +8,7 @@
 
 **Architecture:** `main/release-feedback.ts` 保留版本选择、首次安装判断、降级保护和已读状态决策；离线生成器提供稳定版本归档；独立 presenter 管理唯一活动窗口。renderer 只接收经过校验的快照，独立 sandbox preload 只暴露快照订阅、渲染确认和关闭请求。
 
-**Tech Stack:** Electron 35、electron-vite 3、TypeScript 5、Vitest 3、原生 HTML/CSS/DOM、electron-builder。
+**Tech Stack:** Electron 41、electron-vite 3、TypeScript 5、Vitest 3、原生 HTML/CSS/DOM、electron-builder。
 
 ---
 
@@ -92,9 +92,9 @@ node -e "const p=require('./package.json'); console.log(p.name,p.version,p.build
 
 **先改测试，再改实现。** 这一阶段不创建窗口，先把用户最在意的“不漏版本”锁住。
 
-- [ ] 在 `tests/release-notes.test.ts` 增加归档测试：章节按 SemVer 升序；重复章节、空分类、无条目、当前正式版本缺章节时失败；预发布版本校验稳定核心章节但不把预发布号写入归档；生成产物保留所有稳定章节。
+- [ ] 在 `tests/release-notes.test.ts` 增加归档测试：章节按 SemVer 升序并保留发布日期；重复章节、非法/缺失日期、空分类、无条目、当前正式版本缺章节时失败；预发布版本校验稳定核心章节但不把预发布号写入归档；生成产物保留所有稳定章节。
 - [ ] 在 `tests/release-feedback.test.ts` 增加选择测试：`0.1.12 -> 0.1.15` 得到 `0.1.13/0.1.14/0.1.15`；无基线旧安装得到所有不高于当前版本的归档章节；全新安装不展示；降级不写低版本；手动只得到当前版本；空手动内容得到 `releases: []`。
-- [ ] 修改 `shared/release-notes.ts` 和 `scripts/build-release-notes.cjs`，输出 `releases: [{ version, sections }]` 的离线归档；继续生成被 git 忽略的 `main/generated/release-notes.ts`，禁止手写或 `git add -f`。
+- [ ] 修改 `shared/release-notes.ts` 和 `scripts/build-release-notes.cjs`，输出 `releases: [{ version, date, sections }]` 的离线归档；日期严格来自 `CHANGELOG.md` 的稳定章节标题；继续生成被 git 忽略的 `main/generated/release-notes.ts`，禁止手写或 `git add -f`。
 - [ ] 修改 controller：输入快照范围，不再拼 `MessageBox.detail`；自动展示成功条件暂由 presenter 结果提供，只有 `source === 'automatic' && shown === true` 才保存当前最高版本。
 - [ ] 运行：
 
@@ -110,16 +110,16 @@ node scripts/build-release-notes.cjs
 这一步把 renderer、preload、主进程窗口和托盘手动入口连通；不要先把所有失败情况写成大型抽象。
 
 - [ ] 新增共享协议：快照为 `{ initiatedBy, version, releases }`；展示结果为 `{ shown, source }`；定义 `snapshot`、`rendered`、`dismiss` 三个 channel 和 `RELEASE_FEEDBACK_RENDER_TIMEOUT_MS = 3000`。
-- [ ] 新增 renderer 页面：`lang="zh-CN"`、使用完整安装版本（含预发布后缀）的 `h1` 文案（自动“悬浮便签已更新到 v…”、手动“当前版本 v…”）、版本 `h2`、分类 `h3`、条目 `ul/li`；手动无内容显示“本版本暂无更新说明”；等待字体就绪后在更新条目区域内部滚动并回报高度；按钮和 Escape 关闭。
+- [ ] 新增 renderer 页面：`lang="zh-CN"`；使用来源眉题、完整安装版本（含预发布后缀）的 `h1`、通用辅助文案、CHANGELOG 日期/计数、分类双栏和固定页脚实现紧凑编辑式结构；单版本不重复可见版本标题，多版本使用 `h2` 分组；分类 `h3`、条目 `ul/li` 保持原文，不自动拆标题；手动无内容显示“本版本暂无更新说明”；等待字体就绪后让中间版本/条目区域内部滚动并回报高度；按钮和 Escape 关闭。
 - [ ] 新增独立 preload：只暴露 `onSnapshot`、`reportRendered({ contentHeight })`、`dismiss`；不暴露便签、下载、文件系统或 `invoke` 权限。
 - [ ] 新增窗口 presenter：`show(snapshot)` 有窗口时聚焦并复用，无窗口时 `show:false` 创建；来源固定；收到 renderer 渲染确认后校验高度、调整固定宽度窗口、调用 `show()` 并等待 `show` 事件；超时/加载失败/渲染失败销毁隐藏窗口并返回 `{ shown: false }`。
-- [ ] 窗口壳遵循 Product Spec：ownerless、非模态、可关闭、不可调整大小、非置顶、可进任务栏、米白背景 `#f5f1e8`、正文 `#26231f`、标题 `#5e574d`、弱文字 `#746b60`、琥珀 `#d49a3a`、标准标题栏。尺寸使用 440 逻辑像素固定宽度（小屏按工作区缩小），内容高度下限 180、上限 `min(560, workArea.height * 0.75)`，外层最终不超出工作区；超出部分在内容区滚动，不为极端显示器增加新框架。
+- [ ] 窗口壳遵循 Product Spec：ownerless、非模态、可关闭、不可调整大小、非置顶、可进任务栏、米白背景 `#f5f1e8`、正文 `#26231f`、标题 `#5e574d`、弱文字 `#746b60`、琥珀 `#d49a3a`、标准原生标题栏。尺寸使用 440 逻辑像素固定宽度（小屏按工作区缩小），内容高度下限 180、上限 `min(560, workArea.height * 0.75)`，外层最终不超出工作区；少量内容自然收紧，超出部分只在中间内容区滚动，页头与页脚固定，不缩字、不折叠、不伪造平台标题栏。
 - [ ] 把 renderer 入口和 preload 加入 `electron.vite.config.ts`，确保第三个 sandbox preload 输出为 `releaseFeedbackPreload.cjs`，主进程只加载 `.cjs`。
 - [ ] 先让托盘手动入口打开窗口并在开发环境验证，再接自动路径；这样能把 renderer/窗口问题和版本状态问题分开诊断。
 
 最小测试覆盖：
 
-- renderer 文案、h2/h3/ul/li、空内容、Escape、滚动容器；
+- renderer 来源眉题、完整版本、通用辅助文案、日期/计数、单/多版本结构、h2/h3/ul/li、分类双栏、固定页脚、空内容、Escape、滚动容器；
 - presenter 单窗口复用、来源固定、渲染确认后才显示、超时返回 false、关闭和 dispose 幂等；
 - preload 只有三个允许操作；
 - electron-vite 产物入口为 `.cjs` 和 `release-feedback.html`。

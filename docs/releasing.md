@@ -20,7 +20,7 @@
    npm run dist:mac
    ```
 
-4. 检查打包后的 asar，确认 runtime 包名、版本、更新源和资源符合预期；两个 preload 应为 `preload.cjs` 和 `updateProgressPreload.cjs`，主进程不得引用 preload `.mjs`。
+4. 检查打包后的 asar，确认 runtime 包名、版本、更新源和资源符合预期；三个 preload 应为 `preload.cjs`、`updateProgressPreload.cjs` 和 `releaseFeedbackPreload.cjs`，renderer 应包含 `release-feedback.html`，主进程不得引用 preload `.mjs`。
 5. 直接启动生成的打包应用，确认主进程可以加载、便签窗口和托盘可以出现，且没有模块导入或其他仅在打包环境发生的启动错误。只通过 TypeScript、单元测试和打包命令不算完成这项验证。
 6. 校验 Windows Setup 和 Mac DMG；在 macOS 上还要运行：
 

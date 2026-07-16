@@ -37,8 +37,27 @@ describe('release feedback main-process wiring', () => {
   it('uses generated offline content and stops creating feedback when quit begins', () => {
     expect(mainSource).toContain("from './generated/release-notes'");
     expect(mainSource).toContain('releaseNotes: BUILT_RELEASE_NOTES');
+    expect(mainSource).toContain('presenter: releaseFeedbackWindowManager');
     expect(mainSource).toContain('releaseFeedbackController?.beginQuit()');
     expect(mainSource).not.toContain("readFileSync('CHANGELOG.md'");
+    expect(mainSource).not.toContain('showMessageBox({');
+  });
+
+  it('loads the isolated CommonJS preload and local renderer with navigation disabled', () => {
+    expect(mainSource).toContain("'../preload/releaseFeedbackPreload.cjs'");
+    expect(mainSource).toContain("'../renderer/release-feedback.html'");
+    expect(mainSource).toContain('createReleaseFeedbackWindowOptions(');
+    expect(mainSource).toContain('releaseFeedbackWindow.webContents.setWindowOpenHandler');
+    expect(mainSource).toContain("releaseFeedbackWindow.webContents.on('will-navigate'");
+    expect(mainSource).toContain("releaseFeedbackWindow.webContents.on('will-frame-navigate'");
+  });
+
+  it('validates feedback IPC against the active sender and rendered payload', () => {
+    expect(mainSource).toContain('RELEASE_FEEDBACK_CHANNELS.rendered');
+    expect(mainSource).toContain('RELEASE_FEEDBACK_CHANNELS.dismiss');
+    expect(mainSource).toContain('event.sender.id');
+    expect(mainSource).toContain('isReleaseFeedbackRenderedPayload(value)');
+    expect(mainSource).toContain('releaseFeedbackWindowManager.isCurrentSender');
   });
 
   it('generates release content before both development and production builds', () => {
