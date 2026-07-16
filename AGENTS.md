@@ -23,6 +23,7 @@
 - 保持 `%APPDATA%\floating-sticky-notes` 数据兼容。
 - Windows 自动更新继续使用现有公开更新仓库，但改用 GitHub provider 读取按版本归档的 Release 资源和 blockmap。
 - macOS 半自动更新继续使用同一更新源的 `latest-mac.yml`，只下载并校验 DMG，不要在未签名条件下改成 `quitAndInstall`。
+- 在没有 Apple Developer ID 的阶段，Mac 构建必须继续对完整 app bundle 使用 ad-hoc 签名，并让 `codesign --verify --deep --strict` 成为打包后置条件；未经公证的构建仍需用户在“系统设置 → 隐私与安全性”中手动放行，不能描述为已通过 Gatekeeper。
 - 不要增加 portable Windows 构建目标。
 - 不要重新加入 `win.signAndEditExecutable: false`，否则 Windows exe 无法写入图标资源。
 - 开机启动是全局设置，应保留在托盘菜单中，不要放进每张便签的外观面板。

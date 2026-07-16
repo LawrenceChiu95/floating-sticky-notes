@@ -4,6 +4,12 @@
 
 ## [未发布]
 
+## [0.1.16] - 2026-07-16
+
+### 修复
+
+- macOS 安装包现在会对完整应用进行 ad-hoc 签名，从浏览器或聊天工具获取后不再被系统误报为“应用已损坏”；由于尚未使用 Apple Developer ID 且未经过公证，首次打开仍需在“系统设置 → 隐私与安全性”中手动放行。
+
 ## [0.1.15] - 2026-07-16
 
 ### 变更
@@ -151,7 +157,8 @@
 - 提供待办清单、图片、颜色和透明度等核心功能。
 - 开始接入系统托盘与开机启动能力。
 
-[未发布]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.15...HEAD
+[未发布]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.16...HEAD
+[0.1.16]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.15...v0.1.16
 [0.1.15]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.14...v0.1.15
 [0.1.14]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.13...v0.1.14
 [0.1.13]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.12...v0.1.13

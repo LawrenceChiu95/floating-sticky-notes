@@ -2,8 +2,8 @@
 
 > 日期：2026-07-15
 > 自有窗口设计变更：2026-07-16
-> 独立评审：2026-07-16 已完成；自有窗口细节已与 GLM 只读评审
-> 状态：0.1.14 基础能力已发布；0.1.15 自有更新说明窗口正在发布验收
+> 独立评审：2026-07-16 已完成；最终实现由 Codex 本地 review 与 Opus 独立只读 review 复核
+> 状态：0.1.14 基础能力与 0.1.15 自有更新说明窗口均已发布
 > 基线版本：0.1.14
 > 目标版本：0.1.15
 > 关联事项：[#4 版本更新反馈与当前版本入口](https://github.com/LawrenceChiu95/floating-sticky-notes/issues/4)
@@ -214,7 +214,7 @@ CHANGELOG.md
 
 ## 呈现方式
 
-`0.1.14` 首版使用 Electron 原生信息对话框，已实现并随版本发布；发布前曾用功能分支构建版本号仍为 0.1.13 的本地验收包，完成 macOS 手动查看路径验证，自动首弹和状态持久化仍按发布监测记录。该本地验收包不等于公开的 0.1.13 Release，证据见 [Issue #4 macOS 人工验收评论](https://github.com/LawrenceChiu95/floating-sticky-notes/issues/4#issuecomment-4983625946)。由于系统默认视觉与现有下载进度窗口不一致，后续版本改用方向 C：独立、非模态、ownerless 的 `BrowserWindow`。它与下载进度窗口共享设计语言和安全壳范式，但布局为阅读更新说明单独设计。
+`0.1.14` 首版使用 Electron 原生信息对话框；`0.1.15` 已改用方向 C：独立、非模态、ownerless 的 `BrowserWindow`。它与下载进度窗口共享设计语言和安全壳范式，但布局为阅读更新说明单独设计。发布证据见 [Issue #4 的 0.1.15 发布回执](https://github.com/LawrenceChiu95/floating-sticky-notes/issues/4#issuecomment-4988928259)；目标环境验证与当前监测状态以 [Issue #4](https://github.com/LawrenceChiu95/floating-sticky-notes/issues/4) 为准。
 
 ### 视觉层级与文案
 
