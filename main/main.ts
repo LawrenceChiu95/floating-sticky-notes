@@ -5,6 +5,7 @@ import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   getDevUserDataPath,
+  shouldApplyAutoLaunchDefault,
   shouldCreateWindowOnActivate,
   shouldQuitWhenAllWindowsClosed
 } from './app-lifecycle';
@@ -802,10 +803,12 @@ app.whenReady().then(async () => {
     restoreNotesWhenReady = false;
   }
 
-  try {
-    ensureAutoLaunchDefaultEnabled(app, createAutoLaunchDefaultState(userDataPath));
-  } catch (error) {
-    console.warn('Unable to apply default auto-launch setting', error);
+  if (shouldApplyAutoLaunchDefault(is.dev)) {
+    try {
+      ensureAutoLaunchDefaultEnabled(app, createAutoLaunchDefaultState(userDataPath));
+    } catch (error) {
+      console.warn('Unable to apply default auto-launch setting', error);
+    }
   }
 
   const updateController = createPlatformUpdateController();

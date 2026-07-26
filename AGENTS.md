@@ -26,7 +26,7 @@
 ## 不可随意改变的边界
 
 - 除非已有获批迁移方案处理安装身份和 userData 后果，否则保持 runtime `name: floating-sticky-notes`、`appId: local.lawrence.floating-sticky-notes` 和 `productName: 悬浮便签`。
-- 保持 `%APPDATA%\floating-sticky-notes` 数据兼容；开发模式必须使用独立 userData 目录 `<appData>/floating-sticky-notes-dev`（`main/app-lifecycle.ts` 的 `getDevUserDataPath`），正式版路径与身份不变，dev 里的删除不得影响正式数据。
+- 保持 `%APPDATA%\floating-sticky-notes` 数据兼容；开发模式必须使用独立 userData 目录 `<appData>/floating-sticky-notes-dev`（`main/app-lifecycle.ts` 的 `getDevUserDataPath`），正式版路径与身份不变，dev 里的删除不得影响正式数据。开发进程不得自动应用全局开机启动默认值，避免独立 dev 目录重新启用或改写系统登录项；托盘中的显式开关仍可用于人工调试。
 - Windows 自动更新继续使用现有公开更新仓库，但改用 GitHub provider 读取按版本归档的 Release 资源和 blockmap。
 - macOS 半自动更新继续使用同一更新源的 `latest-mac.yml`，只下载并校验 DMG，不要在未签名条件下改成 `quitAndInstall`。
 - 在没有 Apple Developer ID 的阶段，Mac 构建必须继续对完整 app bundle 使用 ad-hoc 签名，并让 `codesign --verify --deep --strict` 成为打包后置条件；未经公证的构建仍需用户在“系统设置 → 隐私与安全性”中手动放行，不能描述为已通过 Gatekeeper。

@@ -19,7 +19,7 @@
 
 ## 数据模型与存储
 
-便签保存在 Electron `userData` 目录下的 `notes.json`。导入图片保存在相邻的 `images/` 目录，便签记录只保留图片引用和尺寸。开发模式在启动早期把 `userData` 改到独立的 `<appData>/floating-sticky-notes-dev`（`main/app-lifecycle.ts` 的 `getDevUserDataPath`），正式版路径不变；单实例锁随 `userData` 分离，因此开发实例与正式版可以同机同时运行，开发中的删除不会碰到正式数据。
+便签保存在 Electron `userData` 目录下的 `notes.json`。导入图片保存在相邻的 `images/` 目录，便签记录只保留图片引用和尺寸。开发模式在启动早期把 `userData` 改到独立的 `<appData>/floating-sticky-notes-dev`（`main/app-lifecycle.ts` 的 `getDevUserDataPath`），正式版路径不变；单实例锁随 `userData` 分离，因此开发实例与正式版可以同机同时运行，开发中的删除不会碰到正式数据。开机启动是系统全局设置，不随 userData 隔离；开发进程跳过首次默认启用逻辑，避免新的 dev 目录重新启用或改写用户已经关闭的登录项，只有托盘中的显式开关可以在调试时修改它。
 
 清单记录使用可选的 `parentId` 表达一层子任务：缺少该字段的旧记录仍是普通任务，数组顺序继续作为显示顺序真源，不保存 `children` 或 `depth` 等派生字段。主进程和 renderer 边界共用幂等的层级归一化逻辑，确保子任务紧跟父任务，并将第三层、孤儿或自引用关系降级为普通任务，同时保留文字、完成状态和时间字段。父任务与子任务的完成状态彼此独立。
 
