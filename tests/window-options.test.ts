@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { NOTE_ALWAYS_ON_TOP_LEVEL, createNoteWindowOptions } from '../main/window-options';
+import {
+  NOTE_ALWAYS_ON_TOP_LEVEL,
+  clampNoteBoundsToWorkAreas,
+  createNoteWindowOptions
+} from '../main/window-options';
 
 describe('createNoteWindowOptions', () => {
   it('creates a frameless always-on-top sticky note window', () => {
@@ -60,5 +64,39 @@ describe('createNoteWindowOptions', () => {
     expect(options.y).toBe(820);
     expect(options.width).toBe(320);
     expect(options.height).toBe(260);
+  });
+
+  it('keeps the current top-left anchor unless expansion would leave the work area', () => {
+    expect(
+      clampNoteBoundsToWorkAreas(
+        { x: 120, y: 760, width: 320, height: 260 },
+        [{ x: 0, y: 0, width: 1440, height: 900 }]
+      )
+    ).toEqual({ x: 120, y: 640, width: 320, height: 260 });
+  });
+
+  it('clamps an expanded note within the nearest display, including negative coordinates', () => {
+    expect(
+      clampNoteBoundsToWorkAreas(
+        { x: -1500, y: 850, width: 320, height: 260 },
+        [
+          { x: -1920, y: 0, width: 1920, height: 1080 },
+          { x: 0, y: 0, width: 1440, height: 900 }
+        ]
+      )
+    ).toEqual({ x: -1500, y: 820, width: 320, height: 260 });
+  });
+
+  it('uses the collapsed bar as the display anchor when vertically stacked screens meet', () => {
+    expect(
+      clampNoteBoundsToWorkAreas(
+        { x: 120, y: 850, width: 320, height: 260 },
+        [
+          { x: 0, y: 0, width: 1440, height: 900 },
+          { x: 0, y: 900, width: 1440, height: 900 }
+        ],
+        { x: 120, y: 850, width: 320, height: 40 }
+      )
+    ).toEqual({ x: 120, y: 640, width: 320, height: 260 });
   });
 });

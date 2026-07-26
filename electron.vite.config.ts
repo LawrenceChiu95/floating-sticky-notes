@@ -23,7 +23,8 @@ export default defineConfig({
           releaseFeedbackPreload: resolve(
             __dirname,
             'preload/release-feedback-preload.ts'
-          )
+          ),
+          imagePreviewPreload: resolve(__dirname, 'preload/image-preview-preload.ts')
         },
         output: {
           format: 'cjs'
@@ -42,7 +43,8 @@ export default defineConfig({
         input: {
           index: resolve(__dirname, 'renderer/index.html'),
           updateProgress: resolve(__dirname, 'renderer/update-progress.html'),
-          releaseFeedback: resolve(__dirname, 'renderer/release-feedback.html')
+          releaseFeedback: resolve(__dirname, 'renderer/release-feedback.html'),
+          imagePreview: resolve(__dirname, 'renderer/image-preview.html')
         }
       }
     }

@@ -19,7 +19,9 @@ export type ManagedNoteWindow = {
   onClose: (listener: () => void) => void;
   flushPendingChanges: () => Promise<void>;
   show: () => void;
+  focus: () => void;
   setTitle: (title: string) => void;
+  setCollapsed: (collapsed: boolean) => Promise<void>;
   close: () => void;
 };
 
@@ -315,6 +317,20 @@ export class NotesManager {
     };
   }
 
+  async setCollapsedForWebContents(
+    webContentsId: number,
+    collapsed: boolean
+  ): Promise<boolean> {
+    const note = this.getMutableNoteForWebContents(webContentsId);
+
+    if (!note) {
+      return false;
+    }
+
+    await this.windowsByNoteId.get(note.id)?.setCollapsed(collapsed);
+    return true;
+  }
+
   async deleteNoteForWebContents(webContentsId: number): Promise<boolean> {
     const noteId = this.noteIdByWebContentsId.get(webContentsId);
 
@@ -337,6 +353,25 @@ export class NotesManager {
   getNoteForWebContents(webContentsId: number): NoteView | undefined {
     const note = this.getMutableNoteForWebContents(webContentsId);
     return note ? this.toNoteView(note) : undefined;
+  }
+
+  getNoteById(noteId: string): NoteView | undefined {
+    const note = this.notesById.get(noteId);
+    return note ? this.toNoteView(note) : undefined;
+  }
+
+  getBoundsForWebContents(webContentsId: number): NoteBounds | undefined {
+    const noteId = this.noteIdByWebContentsId.get(webContentsId);
+    return noteId ? this.windowsByNoteId.get(noteId)?.getBounds() : undefined;
+  }
+
+  focusForWebContents(webContentsId: number): void {
+    const noteId = this.noteIdByWebContentsId.get(webContentsId);
+    const noteWindow = noteId ? this.windowsByNoteId.get(noteId) : undefined;
+    if (noteWindow) {
+      noteWindow.show();
+      noteWindow.focus();
+    }
   }
 
   async flushPendingSaves(): Promise<void> {

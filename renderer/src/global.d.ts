@@ -22,6 +22,7 @@ declare global {
       updateContent: (content: string) => Promise<NoteView | undefined>;
       updateChecklist: (checklist: NoteChecklistItemRecord[]) => Promise<NoteView | undefined>;
       updateAppearance: (appearance: NoteAppearanceInput) => Promise<NoteView | undefined>;
+      setCollapsed: (collapsed: boolean) => Promise<boolean>;
       getAutoLaunchStatus: () => Promise<AutoLaunchStatus>;
       setAutoLaunchEnabled: (enabled: boolean) => Promise<AutoLaunchStatus>;
       pasteClipboardImage: () => Promise<AddImageResult | { ok: false; reason: 'empty-clipboard' }>;
@@ -31,6 +32,7 @@ declare global {
         height: number;
       }) => Promise<AddImageResult | undefined>;
       deleteImage: (imageId: string) => Promise<DeleteImageResult | undefined>;
+      openImagePreview: (imageId: string) => Promise<boolean>;
       deleteCurrentNote: () => Promise<boolean>;
     };
     __stickyNotesFlushPendingContent?: () => Promise<void>;

@@ -1,0 +1,167 @@
+:root {
+  font-family: 'Segoe UI', 'Microsoft YaHei UI', system-ui, sans-serif;
+  color: #f4f1ea;
+  background: #151515;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+
+button { font: inherit; }
+
+.image-preview {
+  position: relative;
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #151515;
+  /* fill 不能用 both:动画结束后 transform: scale(1) 会永久残留在根元素上,
+     祖先 transform 会让 Chromium 的 app-region 拖动区计算失效(顶部拖动条拖不动)。
+     backwards 只覆盖动画开始前,结束后归还样式,不留 transform。 */
+  animation: image-preview-enter 140ms ease-out backwards;
+  -webkit-app-region: no-drag;
+}
+
+.image-preview-drag-strip {
+  /* 不做 app-region:拖动统一走 renderer 指针事件 + image-preview:move IPC,
+     与背景/适配态图片拖动同一条可验证路径;OS 级 app-region 拖动合成输入
+     送不进、无法自动化验证,且 Windows 上可能与指针捕获双触发。 */
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 1;
+  height: 28px;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.035), transparent);
+}
+
+.image-preview-viewport {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  cursor: default;
+  -webkit-app-region: no-drag;
+}
+
+.image-preview-viewport--pan { cursor: grab; }
+.image-preview-viewport--pan:active { cursor: grabbing; }
+
+.image-preview-image {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  max-width: none;
+  max-height: none;
+  opacity: 0;
+  user-select: none;
+  transform: translate(-50%, -50%);
+  transform-origin: center;
+  will-change: transform;
+  -webkit-user-drag: none;
+}
+
+.image-preview-image--ready {
+  opacity: 1;
+}
+
+.image-preview-close,
+.image-preview-nav {
+  position: absolute;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  color: rgba(255, 255, 255, 0.76);
+  background: rgba(255, 255, 255, 0.12);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.image-preview-close {
+  top: 14px;
+  right: 14px;
+  width: 36px;
+  height: 36px;
+}
+
+.image-preview-nav {
+  top: 50%;
+  width: 42px;
+  height: 42px;
+  transform: translateY(-50%);
+  opacity: 0.58;
+}
+
+.image-preview-nav--left { left: 16px; }
+.image-preview-nav--right { right: 16px; }
+.image-preview-close:hover,
+.image-preview-nav:not(:disabled):hover,
+.image-preview-close:focus-visible,
+.image-preview-nav:not(:disabled):focus-visible { color: #fff; background: rgba(255, 255, 255, 0.24); opacity: 1; }
+.image-preview-nav:disabled { cursor: default; opacity: 0.2; }
+
+.image-preview--loading { align-items: center; justify-content: center; }
+.image-preview--loading p { color: rgba(255, 255, 255, 0.78); }
+
+/* 无边框窗的自定义缩放命中区:左/右/下边缘 8px、四角 14px,不可见、只改光标。
+   上边缘不做缩放手柄——那是用户直觉里的"标题栏",整段留给拖动条移动窗口,
+   顶部缩放由 NE/NW 角承担。 */
+.image-preview-resize {
+  position: absolute;
+  z-index: 2;
+  touch-action: none;
+  -webkit-app-region: no-drag;
+}
+
+.image-preview-resize--s {
+  right: 14px;
+  bottom: 0;
+  left: 14px;
+  height: 8px;
+  cursor: ns-resize;
+}
+
+.image-preview-resize--e {
+  top: 14px;
+  right: 0;
+  bottom: 14px;
+  width: 8px;
+  cursor: ew-resize;
+}
+
+.image-preview-resize--w {
+  top: 14px;
+  bottom: 14px;
+  left: 0;
+  width: 8px;
+  cursor: ew-resize;
+}
+
+.image-preview-resize--ne,
+.image-preview-resize--nw,
+.image-preview-resize--se,
+.image-preview-resize--sw {
+  width: 14px;
+  height: 14px;
+}
+
+.image-preview-resize--ne { top: 0; right: 0; cursor: nesw-resize; }
+.image-preview-resize--nw { top: 0; left: 0; cursor: nwse-resize; }
+.image-preview-resize--se { right: 0; bottom: 0; cursor: nwse-resize; }
+.image-preview-resize--sw { bottom: 0; left: 0; cursor: nesw-resize; }
+
+@keyframes image-preview-enter {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .image-preview { animation: none; }
+}

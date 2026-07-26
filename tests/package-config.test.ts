@@ -11,6 +11,11 @@ const packageJson = JSON.parse(
   engines?: Record<string, string>;
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
+  overrides?: {
+    minimatch?: {
+      'brace-expansion'?: string;
+    };
+  };
   scripts?: Record<string, string>;
   build?: {
     appId?: string;
@@ -57,10 +62,22 @@ describe('package configuration', () => {
     expect(packageJson.devDependencies?.vitest).toBe('^3.2.6');
   });
 
+  it('keeps vulnerable minimatch chains on the secure brace-expansion compatibility package', () => {
+    expect(packageJson.devDependencies?.['brace-expansion']).toBe(
+      'file:vendor/brace-expansion-compat'
+    );
+    expect(packageJson.overrides?.minimatch?.['brace-expansion']).toBe('$brace-expansion');
+  });
+
   it('is MIT licensed while remaining protected from accidental npm publication', () => {
     expect(packageJson.license).toBe('MIT');
     expect(packageJson.private).toBe(true);
     expect(packageJson.engines).toEqual({ node: '>=22 <23', npm: '>=10 <11' });
+  });
+
+  it('limits Vitest discovery to the root test suite', () => {
+    expect(packageJson.scripts?.test).toBe('vitest run --dir tests');
+    expect(packageJson.scripts?.['test:watch']).toBe('vitest --dir tests');
   });
 
   it('has one public GitHub Windows build and one generic Mac build', () => {

@@ -83,6 +83,17 @@ describe('checklist keyboard editing', () => {
     });
   });
 
+  it('deletes an empty parent and its children on Enter', () => {
+    const parent = createItem('parent', '');
+    const child = createItem('child', '步骤', 'parent');
+    const next = createItem('next', '下一项');
+
+    expect(applyChecklistEnter([parent, child, next], 'parent', createOptions('unused'))).toEqual({
+      checklist: [next],
+      focus: { type: 'note' } satisfies ChecklistFocusTarget
+    });
+  });
+
   it('deletes an empty top-level item and focuses the note body on Enter', () => {
     const first = createItem('first', '保留');
     const empty = createItem('empty', '');
@@ -93,14 +104,15 @@ describe('checklist keyboard editing', () => {
     });
   });
 
-  it('deletes an empty item and focuses the previous visible item on Backspace', () => {
-    const parent = createItem('parent', '目标');
-    const child = createItem('child', '', 'parent');
+  it('deletes an empty parent and its children on Backspace', () => {
+    const previous = createItem('previous', '上一项');
+    const parent = createItem('parent', '');
+    const child = createItem('child', '步骤', 'parent');
     const next = createItem('next', '下一项');
 
-    expect(applyChecklistBackspace([parent, child, next], 'child')).toEqual({
-      checklist: [parent, next],
-      focus: { type: 'checklist', itemId: 'parent' } satisfies ChecklistFocusTarget
+    expect(applyChecklistBackspace([previous, parent, child, next], 'parent')).toEqual({
+      checklist: [previous, next],
+      focus: { type: 'checklist', itemId: 'previous' } satisfies ChecklistFocusTarget
     });
   });
 
@@ -162,15 +174,24 @@ describe('checklist structure editing', () => {
     });
   });
 
-  it('promotes children in order when deleting their parent', () => {
+  it('deletes a parent together with all of its children', () => {
+    const previous = createItem('previous', '上一项');
     const parent = createItem('parent', '目标');
     const checkedChild = { ...createItem('first', '第一步', 'parent'), checked: true };
     const secondChild = createItem('second', '第二步', 'parent');
+    const next = createItem('next', '下一项');
 
-    expect(applyChecklistDelete([parent, checkedChild, secondChild], 'parent')).toEqual([
-      setChecklistParent(checkedChild),
-      setChecklistParent(secondChild)
-    ]);
+    expect(
+      applyChecklistDelete([previous, parent, checkedChild, secondChild, next], 'parent')
+    ).toEqual([previous, next]);
+  });
+
+  it('deletes a top-level item without changing the remaining groups', () => {
+    const item = createItem('item', '普通事项');
+    const parent = createItem('parent', '目标');
+    const child = createItem('child', '步骤', 'parent');
+
+    expect(applyChecklistDelete([item, parent, child], 'item')).toEqual([parent, child]);
   });
 
   it('deletes one child without changing its parent or siblings', () => {

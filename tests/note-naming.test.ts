@@ -135,11 +135,10 @@ describe('note naming presentation priority', () => {
     expect(getNoteNamePresentation(editing, '')).toEqual({ kind: 'editor' });
   });
 
-  it('shows the saved name with a full-name tooltip when revealed', () => {
+  it('shows the saved name without duplicating it in presentation metadata', () => {
     expect(getNoteNamePresentation(createNoteNamingState('工作'), '')).toEqual({
       kind: 'name',
-      text: '工作',
-      title: '工作'
+      text: '工作'
     });
   });
 

@@ -97,6 +97,85 @@ describe('NotesManager', () => {
     expect(createdWindows[2].window.showCount).toBe(1);
   });
 
+  it('shows and focuses the note window that owns a webContents id', async () => {
+    const createdWindows: CreatedWindow[] = [];
+    const note = createDefaultNote({
+      id: 'note-1',
+      now: '2026-07-05T10:00:00.000Z'
+    });
+    const manager = new NotesManager({
+      storage: {
+        load: async () => ({ version: 1, notes: [note] }),
+        save: async () => undefined
+      },
+      createWindow: createWindowFactory(createdWindows)
+    });
+
+    await manager.start();
+    manager.focusForWebContents(1);
+
+    expect(createdWindows[0].window.showCount).toBe(1);
+    expect(createdWindows[0].window.focusCount).toBe(1);
+  });
+
+  it('forwards per-window collapse state without persisting it to the note record', async () => {
+    const createdWindows: CreatedWindow[] = [];
+    const note = createDefaultNote({
+      id: 'note-1',
+      now: '2026-07-22T10:00:00.000Z'
+    });
+    const manager = new NotesManager({
+      storage: {
+        load: async () => ({ version: 1, notes: [note] }),
+        save: async () => undefined
+      },
+      createWindow: createWindowFactory(createdWindows)
+    });
+
+    await manager.start();
+
+    await expect(manager.setCollapsedForWebContents(1, true)).resolves.toBe(true);
+    await expect(manager.setCollapsedForWebContents(1, false)).resolves.toBe(true);
+    await expect(manager.setCollapsedForWebContents(999, true)).resolves.toBe(false);
+
+    expect(createdWindows[0].window.collapsedStates).toEqual([true, false]);
+    expect(note).not.toHaveProperty('collapsed');
+  });
+
+  it('does not acknowledge collapse before the native window operation finishes', async () => {
+    const createdWindows: CreatedWindow[] = [];
+    let finishCollapse: (() => void) | undefined;
+    const collapseFinished = new Promise<void>((resolve) => {
+      finishCollapse = resolve;
+    });
+    const manager = new NotesManager({
+      storage: {
+        load: async () => ({
+          version: 1,
+          notes: [createDefaultNote({ id: 'note-1' })]
+        }),
+        save: async () => undefined
+      },
+      createWindow: createWindowFactory(
+        createdWindows,
+        async () => undefined,
+        async () => collapseFinished
+      )
+    });
+
+    await manager.start();
+    let didAcknowledge = false;
+    const collapse = manager.setCollapsedForWebContents(1, true).then((result) => {
+      didAcknowledge = true;
+      return result;
+    });
+    await Promise.resolve();
+
+    expect(didAcknowledge).toBe(false);
+    finishCollapse?.();
+    await expect(collapse).resolves.toBe(true);
+  });
+
   it('creates, windows, and saves a new note below the note limit', async () => {
     const savedDocuments: NotesDocument[] = [];
     const createdWindows: CreatedWindow[] = [];
@@ -873,7 +952,9 @@ type TestWindow = ManagedNoteWindow & {
   closed: boolean;
   flushCount: number;
   showCount: number;
+  focusCount: number;
   titles: string[];
+  collapsedStates: boolean[];
   triggerBoundsChanged: () => Promise<void>;
   triggerClosed: () => void;
 };
@@ -906,7 +987,8 @@ function createTestImageStorage(deletedImages: string[]): NoteImageStorage {
 
 function createWindowFactory(
   createdWindows: CreatedWindow[],
-  flushPendingChanges: () => Promise<void> = async () => undefined
+  flushPendingChanges: () => Promise<void> = async () => undefined,
+  applyCollapsed: (collapsed: boolean) => Promise<void> = async () => undefined
 ): CreateManagedNoteWindow {
   let nextWebContentsId = 1;
 
@@ -919,7 +1001,9 @@ function createWindowFactory(
       closed: false,
       flushCount: 0,
       showCount: 0,
+      focusCount: 0,
       titles: [],
+      collapsedStates: [],
       getBounds: () => window.bounds,
       onBoundsChanged: (listener) => {
         boundsChangedListener = listener;
@@ -933,8 +1017,15 @@ function createWindowFactory(
       show: () => {
         window.showCount += 1;
       },
+      focus: () => {
+        window.focusCount += 1;
+      },
       setTitle: (title) => {
         window.titles.push(title);
+      },
+      setCollapsed: async (collapsed) => {
+        window.collapsedStates.push(collapsed);
+        await applyCollapsed(collapsed);
       },
       flushPendingChanges: async () => {
         window.flushCount += 1;

@@ -3,7 +3,11 @@ import { is } from '@electron-toolkit/utils';
 import electronUpdater from 'electron-updater';
 import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { shouldCreateWindowOnActivate, shouldQuitWhenAllWindowsClosed } from './app-lifecycle';
+import {
+  getDevUserDataPath,
+  shouldCreateWindowOnActivate,
+  shouldQuitWhenAllWindowsClosed
+} from './app-lifecycle';
 import {
   ensureAutoLaunchDefaultEnabled,
   getAutoLaunchStatus,
@@ -13,8 +17,17 @@ import {
 import { pasteClipboardImage } from './clipboard-image';
 import { normalizeChecklistInput } from './checklist-input';
 import { normalizeSaveImageInput } from './image-input';
+import {
+  computeResizedBounds,
+  createImagePreviewWindowOptions,
+  getImagePreviewMinimumSize,
+  ImagePreviewController,
+  type ImagePreviewSize,
+  type ImagePreviewWindowPort
+} from './image-preview-window';
 import { IMAGE_PROTOCOL, LocalImageStorage } from './image-storage';
 import { readLocalProfile } from './local-profile';
+import { createNoteWindowCollapseController } from './note-window-collapse';
 import {
   createMacUpdateController,
   shouldEnableMacManualUpdates
@@ -22,7 +35,7 @@ import {
 import { createMacUpdateService } from './mac-update-service';
 import { type ManagedNoteWindow, NotesManager } from './notes-manager';
 import { preventNoteWindowNavigation } from './navigation-guard';
-import type { NoteRecord } from './note-state';
+import type { NoteRecord, NoteBounds } from './note-state';
 import { createClosePersistenceHandler, createQuitPersistenceHandler } from './persistence-lifecycle';
 import {
   createReleaseFeedbackController,
@@ -53,7 +66,8 @@ import {
 import {
   NOTE_ALWAYS_ON_TOP_LEVEL,
   NOTE_WINDOW_ICON_PATH,
-  createNoteWindowOptions
+  createNoteWindowOptions,
+  type DisplayWorkArea
 } from './window-options';
 import { createDebouncedValueAction } from '../shared/debounced-action';
 import { DEFAULT_APP_COPY, getAppCopy, type AppCopy } from '../shared/app-copy';
@@ -63,14 +77,27 @@ import {
   type ReleaseFeedbackSnapshot
 } from '../shared/release-feedback-window';
 import { UPDATE_PROGRESS_CHANNEL, type UpdateProgressSnapshot } from '../shared/update-progress';
+import {
+  IMAGE_PREVIEW_CHANNELS,
+  isImagePreviewResizeDirection
+} from '../shared/image-preview';
 import { BUILT_RELEASE_NOTES } from './generated/release-notes';
 
 let notesManager: NotesManager | undefined;
 let appCopy: AppCopy = DEFAULT_APP_COPY;
 let releaseFeedbackController: ReleaseFeedbackController | undefined;
 let releaseFeedbackWindowManager: ReleaseFeedbackWindowManager | undefined;
+let imagePreviewController: ImagePreviewController | undefined;
 let restoreNotesWhenReady = false;
 const AUTO_LAUNCH_DEFAULT_MARKER = '.auto-launch-default-applied';
+
+// dev 与正式版共用安装身份,默认会读写同一份 userData(同一 notes.json)。
+// 开发模式提前切到独立目录,调试/删除永远碰不到正式数据;必须在
+// requestSingleInstanceLock 之前,dev 与正式版才能各持各的锁、同时运行。
+if (is.dev) {
+  app.setPath('userData', getDevUserDataPath(app.getPath('appData')));
+}
+
 const hasSingleInstanceLock = app.requestSingleInstanceLock();
 
 if (!hasSingleInstanceLock) {
@@ -96,14 +123,110 @@ protocol.registerSchemesAsPrivileged([
     privileges: {
       standard: true,
       secure: true,
-      supportFetchAPI: true
+      supportFetchAPI: true,
+      // sandbox:true 的预览窗里 <img> 加载 protocol.handle 的流式响应需要 stream 特权,
+      // 否则资源请求挂起、图片永远不触发 load(预览窗全黑但不报错)。
+      stream: true
     }
   }
 ]);
 
+function createElectronImagePreviewWindow(
+  workArea: DisplayWorkArea,
+  noteBounds: NoteBounds,
+  imageSize: ImagePreviewSize
+): ImagePreviewWindowPort {
+  const previewWindow = new BrowserWindow(
+    createImagePreviewWindowOptions(
+      workArea,
+      noteBounds,
+      imageSize,
+      join(__dirname, '../preload/imagePreviewPreload.cjs'),
+      NOTE_WINDOW_ICON_PATH
+    )
+  );
+
+  preventNoteWindowNavigation({
+    onWillNavigate: (listener) => {
+      previewWindow.webContents.on('will-navigate', listener);
+    },
+    onWillFrameNavigate: (listener) => {
+      previewWindow.webContents.on('will-frame-navigate', listener);
+    }
+  });
+  previewWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  previewWindow.on('page-title-updated', (event) => event.preventDefault());
+  previewWindow.setAlwaysOnTop(true, NOTE_ALWAYS_ON_TOP_LEVEL);
+
+  return {
+    webContentsId: previewWindow.webContents.id,
+    load: () => {
+      if (is.dev && process.env.ELECTRON_RENDERER_URL) {
+        return previewWindow.loadURL(`${process.env.ELECTRON_RENDERER_URL}/image-preview.html`);
+      }
+      return previewWindow.loadFile(join(__dirname, '../renderer/image-preview.html'));
+    },
+    onReady: (listener) => {
+      previewWindow.webContents.once('did-finish-load', listener);
+    },
+    onClosed: (listener) => {
+      previewWindow.once('closed', listener);
+    },
+    send: (snapshot) => {
+      if (!previewWindow.webContents.isDestroyed()) {
+        previewWindow.webContents.send(IMAGE_PREVIEW_CHANNELS.snapshot, snapshot);
+      }
+    },
+    show: () => {
+      if (!previewWindow.isDestroyed()) previewWindow.show();
+    },
+    focus: () => {
+      if (!previewWindow.isDestroyed()) {
+        if (previewWindow.isMinimized()) previewWindow.restore();
+        previewWindow.focus();
+      }
+    },
+    close: () => {
+      if (!previewWindow.isDestroyed()) previewWindow.close();
+    },
+    destroy: () => {
+      if (!previewWindow.isDestroyed()) previewWindow.destroy();
+    },
+    resize: (direction, dx, dy) => {
+      if (previewWindow.isDestroyed()) {
+        return;
+      }
+      const bounds = previewWindow.getBounds();
+      const currentWorkArea = screen.getDisplayMatching(bounds).workArea;
+      previewWindow.setBounds(
+        computeResizedBounds(
+          bounds,
+          direction,
+          dx,
+          dy,
+          getImagePreviewMinimumSize(),
+          { width: currentWorkArea.width, height: currentWorkArea.height }
+        )
+      );
+    },
+    move: (dx, dy) => {
+      if (previewWindow.isDestroyed()) {
+        return;
+      }
+      const bounds = previewWindow.getBounds();
+      previewWindow.setBounds({
+        x: bounds.x + Math.round(dx),
+        y: bounds.y + Math.round(dy),
+        width: bounds.width,
+        height: bounds.height
+      });
+    }
+  };
+}
 function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
   const workAreas = screen.getAllDisplays().map((display) => display.workArea);
   const noteWindow = new BrowserWindow(createNoteWindowOptions(note.bounds, workAreas));
+  const noteWebContentsId = noteWindow.webContents.id;
 
   preventNoteWindowNavigation({
     onWillNavigate: (listener) => {
@@ -134,6 +257,10 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
   const saveBounds = createDebouncedValueAction<void>(() => {
     return listenerBag.boundsChanged?.();
   }, 300);
+  const collapseController = createNoteWindowCollapseController({
+    window: noteWindow,
+    getWorkAreas: () => screen.getAllDisplays().map((display) => display.workArea)
+  });
   const flushPendingChanges = async (): Promise<void> => {
     await Promise.all([saveBounds.flush(), flushRendererPendingContent(noteWindow)]);
   };
@@ -145,10 +272,13 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
   });
 
   noteWindow.on('close', closeAfterFlush);
+  noteWindow.on('closed', () => {
+    imagePreviewController?.handleSourceClosed(noteWebContentsId);
+  });
 
   return {
     webContentsId: noteWindow.webContents.id,
-    getBounds: () => noteWindow.getBounds(),
+    getBounds: collapseController.getBoundsForPersistence,
     onBoundsChanged: (listener) => {
       listenerBag.boundsChanged = listener;
       noteWindow.on('move', () => saveBounds.schedule(undefined));
@@ -167,9 +297,15 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
       }
       noteWindow.show();
     },
+    focus: () => {
+      if (!noteWindow.isDestroyed()) {
+        noteWindow.focus();
+      }
+    },
     setTitle: (title) => {
       noteWindow.setTitle(title);
     },
+    setCollapsed: collapseController.setCollapsed,
     close: () => {
       noteWindow.close();
     }
@@ -369,6 +505,65 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('sticky-notes:get-app-copy', () => appCopy);
 
+  ipcMain.handle(IMAGE_PREVIEW_CHANNELS.open, (event, imageId: unknown) => {
+    if (typeof imageId !== 'string' || imageId.length === 0 || !imagePreviewController) {
+      return false;
+    }
+
+    const manager = getNotesManager();
+    const sourceNote = manager.getNoteForWebContents(event.sender.id);
+    if (!sourceNote || !sourceNote.images.some((image) => image.id === imageId)) {
+      return false;
+    }
+
+    const sourceBounds = manager.getBoundsForWebContents(event.sender.id) ?? sourceNote.bounds;
+    const display =
+      sourceBounds.x !== undefined && sourceBounds.y !== undefined
+        ? screen.getDisplayMatching({
+            x: sourceBounds.x,
+            y: sourceBounds.y,
+            width: sourceBounds.width,
+            height: sourceBounds.height
+          })
+        : screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    return imagePreviewController.open(
+      event.sender.id,
+      sourceNote.id,
+      imageId,
+      display.workArea,
+      sourceBounds
+    );
+  });
+
+  ipcMain.handle(IMAGE_PREVIEW_CHANNELS.getSnapshot, (event) => {
+    return imagePreviewController?.getSnapshotForWebContents(event.sender.id);
+  });
+
+  ipcMain.handle(IMAGE_PREVIEW_CHANNELS.close, (event) => {
+    return imagePreviewController?.close(event.sender.id) ?? false;
+  });
+
+  ipcMain.handle(
+    IMAGE_PREVIEW_CHANNELS.resize,
+    (event, direction: unknown, dx: unknown, dy: unknown) => {
+      if (
+        !isImagePreviewResizeDirection(direction) ||
+        typeof dx !== 'number' ||
+        typeof dy !== 'number'
+      ) {
+        return false;
+      }
+      return imagePreviewController?.resize(event.sender.id, direction, dx, dy) ?? false;
+    }
+  );
+
+  ipcMain.handle(IMAGE_PREVIEW_CHANNELS.move, (event, dx: unknown, dy: unknown) => {
+    if (typeof dx !== 'number' || typeof dy !== 'number') {
+      return false;
+    }
+    return imagePreviewController?.move(event.sender.id, dx, dy) ?? false;
+  });
+
   ipcMain.handle('sticky-notes:get-current-note', (event) => {
     return getNotesManager().getNoteForWebContents(event.sender.id);
   });
@@ -423,8 +618,21 @@ function registerIpcHandlers(): void {
     return setAutoLaunchEnabled(app, enabled);
   });
 
-  ipcMain.handle('sticky-notes:delete-current-note', (event) => {
-    return getNotesManager().deleteNoteForWebContents(event.sender.id);
+  ipcMain.handle('sticky-notes:set-collapsed', (event, collapsed: unknown) => {
+    if (typeof collapsed !== 'boolean') {
+      return false;
+    }
+
+    return getNotesManager().setCollapsedForWebContents(event.sender.id, collapsed);
+  });
+
+  ipcMain.handle('sticky-notes:delete-current-note', async (event) => {
+    const sourceNote = getNotesManager().getNoteForWebContents(event.sender.id);
+    const deleted = await getNotesManager().deleteNoteForWebContents(event.sender.id);
+    if (deleted && sourceNote) {
+      imagePreviewController?.handleNoteDeleted(sourceNote.id);
+    }
+    return deleted;
   });
 
   ipcMain.handle('sticky-notes:paste-clipboard-image', (event) => {
@@ -444,12 +652,19 @@ function registerIpcHandlers(): void {
     return getNotesManager().addImageForWebContents(event.sender.id, normalizedInput);
   });
 
-  ipcMain.handle('sticky-notes:delete-image', (event, imageId: unknown) => {
+  ipcMain.handle('sticky-notes:delete-image', async (event, imageId: unknown) => {
     if (typeof imageId !== 'string' || imageId.length === 0) {
       return undefined;
     }
 
-    return getNotesManager().deleteImageForWebContents(event.sender.id, imageId);
+    const result = await getNotesManager().deleteImageForWebContents(
+      event.sender.id,
+      imageId
+    );
+    if (result.ok) {
+      imagePreviewController?.handleImageDeleted(result.note.id, imageId);
+    }
+    return result;
   });
 }
 
@@ -549,6 +764,28 @@ app.whenReady().then(async () => {
     imageStorage,
     createWindow: createElectronNoteWindow
   });
+  imagePreviewController = new ImagePreviewController({
+    createWindow: createElectronImagePreviewWindow,
+    getSnapshot: (noteId, imageId) => {
+      const note = getNotesManager().getNoteById(noteId);
+      if (!note || !note.images.some((image) => image.id === imageId)) {
+        return undefined;
+      }
+      return {
+        noteId,
+        images: note.images.map(({ id, src, width, height }) => ({
+          id,
+          src,
+          width,
+          height
+        })),
+        activeImageId: imageId
+      };
+    },
+    focusSource: (webContentsId) => {
+      getNotesManager().focusForWebContents(webContentsId);
+    }
+  });
   registerIpcHandlers();
   app.on(
     'before-quit',
@@ -574,6 +811,7 @@ app.whenReady().then(async () => {
   const updateController = createPlatformUpdateController();
   app.once('before-quit', () => {
     releaseFeedbackController?.beginQuit();
+    imagePreviewController?.dispose();
     updateController?.dispose?.();
   });
 

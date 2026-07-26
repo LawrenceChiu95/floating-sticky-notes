@@ -29,8 +29,8 @@
     "dist:win": "node scripts/build-windows.cjs",
     "dist:mac": "npm run build:mac-icons && node scripts/build-mac.cjs",
     "preview": "electron-vite preview",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "test": "vitest run --dir tests",
+    "test:watch": "vitest --dir tests"
   },
   "build": {
     "appId": "local.lawrence.floating-sticky-notes",
@@ -100,6 +100,7 @@
     "@types/semver": "7.7.1",
     "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "10.4.19",
+    "brace-expansion": "file:vendor/brace-expansion-compat",
     "electron": "41.7.1",
     "electron-builder": "^26.15.3",
     "electron-vite": "3.1.0",
@@ -108,5 +109,10 @@
     "typescript": "5.4.5",
     "vite": "^6.4.3",
     "vitest": "^3.2.6"
+  },
+  "overrides": {
+    "minimatch": {
+      "brace-expansion": "$brace-expansion"
+    }
   }
 }

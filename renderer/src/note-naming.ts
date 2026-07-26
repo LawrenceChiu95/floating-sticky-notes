@@ -9,7 +9,7 @@ export type NoteNamingState = {
 export type NoteNamePresentation =
   | { kind: 'status'; text: string }
   | { kind: 'editor' }
-  | { kind: 'name'; text: string; title: string }
+  | { kind: 'name'; text: string }
   | { kind: 'empty'; hint: string };
 
 export function createNoteNamingState(name: string): NoteNamingState {
@@ -115,8 +115,7 @@ export function getNoteNamePresentation(
   if (state.name) {
     return {
       kind: 'name',
-      text: state.name,
-      title: state.name
+      text: state.name
     };
   }
 

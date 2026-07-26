@@ -16,6 +16,12 @@ describe('checklist text wrapping', () => {
     expect(appSource).toContain("action === 'enter'");
   });
 
+  it('disables spellchecking on checklist textareas', () => {
+    expect(appSource).toMatch(
+      /<textarea(?=[^>]*className="checklist-input")(?=[^>]*spellCheck=\{false\})[^>]*>/s
+    );
+  });
+
   it('grows each checklist field with wrapped content without an inner scrollbar', () => {
     expect(styles).toMatch(/\.checklist-input\s*{[^}]*field-sizing:\s*content;/s);
     expect(styles).toMatch(/\.checklist-input\s*{[^}]*overflow:\s*hidden;/s);

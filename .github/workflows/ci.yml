@@ -38,4 +38,4 @@ jobs:
         run: npm run build
 
       - name: 审计完整依赖树
-        run: npm audit
+        run: npx --yes npm@11 audit

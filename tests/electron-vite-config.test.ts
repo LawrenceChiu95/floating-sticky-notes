@@ -31,7 +31,7 @@ describe('electron-vite renderer config', () => {
     expect(rendererConfig.renderer?.server?.hmr).toBe(false);
   });
 
-  it('builds independent update progress and release feedback entries', () => {
+  it('builds independent utility-window renderers and CommonJS preloads', () => {
     const buildConfig = config as unknown as RendererServerConfig;
 
     expect(buildConfig.preload?.build?.rollupOptions?.input).toHaveProperty(
@@ -45,6 +45,12 @@ describe('electron-vite renderer config', () => {
     );
     expect(buildConfig.renderer?.build?.rollupOptions?.input).toHaveProperty(
       'releaseFeedback'
+    );
+    expect(buildConfig.preload?.build?.rollupOptions?.input).toHaveProperty(
+      'imagePreviewPreload'
+    );
+    expect(buildConfig.renderer?.build?.rollupOptions?.input).toHaveProperty(
+      'imagePreview'
     );
     expect(buildConfig.preload?.build?.rollupOptions?.output?.format).toBe('cjs');
   });

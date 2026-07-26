@@ -97,9 +97,7 @@ export function applyChecklistEnter(
 
   if (item.text.trim().length === 0) {
     return {
-      checklist: normalizeChecklistHierarchy(
-        normalizedChecklist.filter((candidate) => candidate.id !== itemId)
-      ),
+      checklist: applyChecklistDelete(normalizedChecklist, itemId),
       focus: item.parentId
         ? { type: 'checklist', itemId: item.parentId }
         : { type: 'note' }
@@ -146,9 +144,7 @@ export function applyChecklistBackspace(
   const previousItem = normalizedChecklist[itemIndex - 1];
 
   return {
-    checklist: normalizeChecklistHierarchy(
-      normalizedChecklist.filter((item) => item.id !== itemId)
-    ),
+    checklist: applyChecklistDelete(normalizedChecklist, itemId),
     focus: previousItem
       ? { type: 'checklist', itemId: previousItem.id }
       : { type: 'note' }
@@ -210,8 +206,17 @@ export function applyChecklistDelete(
   checklist: NoteChecklistItemRecord[],
   itemId: string
 ): NoteChecklistItemRecord[] {
+  const normalizedChecklist = normalizeChecklistHierarchy(checklist);
+  const item = normalizedChecklist.find((candidate) => candidate.id === itemId);
+
+  if (!item) {
+    return normalizedChecklist;
+  }
+
   return normalizeChecklistHierarchy(
-    checklist.filter((item) => item.id !== itemId)
+    normalizedChecklist.filter(
+      (candidate) => candidate.id !== itemId && candidate.parentId !== itemId
+    )
   );
 }
 

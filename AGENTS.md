@@ -17,10 +17,16 @@
 - 默认静默维护，完成后只给一行回执。只有产品取舍、信息无法可靠推断、公开敏感内容、发布或不可逆操作需要询问用户。
 - 实现、自动验证、产物验证、目标环境验证、发布和监测必须分开记录，不得互相推导；细则以 `docs/project-management.md` 为准。
 
+## GitHub 身份
+
+- 本项目是个人仓库 [`LawrenceChiu95/floating-sticky-notes`](https://github.com/LawrenceChiu95/floating-sticky-notes)。创建或编辑 Issue、评论、PR、Release、标签等所有 GitHub 写操作，必须使用仓库所有者账号 `LawrenceChiu95`，不得使用其他 GitHub 身份。
+- 每个会话第一次执行 GitHub 写操作前，必须用 `gh api user --jq .login` 核对当前活动身份；不能只根据 remote URL 或仓库 owner 推断。
+- 若活动身份不是 `LawrenceChiu95`，停止写操作并先执行 `gh auth switch --hostname github.com --user LawrenceChiu95`，再次核对成功后才能继续。
+
 ## 不可随意改变的边界
 
 - 除非已有获批迁移方案处理安装身份和 userData 后果，否则保持 runtime `name: floating-sticky-notes`、`appId: local.lawrence.floating-sticky-notes` 和 `productName: 悬浮便签`。
-- 保持 `%APPDATA%\floating-sticky-notes` 数据兼容。
+- 保持 `%APPDATA%\floating-sticky-notes` 数据兼容；开发模式必须使用独立 userData 目录 `<appData>/floating-sticky-notes-dev`（`main/app-lifecycle.ts` 的 `getDevUserDataPath`），正式版路径与身份不变，dev 里的删除不得影响正式数据。
 - Windows 自动更新继续使用现有公开更新仓库，但改用 GitHub provider 读取按版本归档的 Release 资源和 blockmap。
 - macOS 半自动更新继续使用同一更新源的 `latest-mac.yml`，只下载并校验 DMG，不要在未签名条件下改成 `quitAndInstall`。
 - 在没有 Apple Developer ID 的阶段，Mac 构建必须继续对完整 app bundle 使用 ad-hoc 签名，并让 `codesign --verify --deep --strict` 成为打包后置条件；未经公证的构建仍需用户在“系统设置 → 隐私与安全性”中手动放行，不能描述为已通过 Gatekeeper。
@@ -30,6 +36,8 @@
 - Windows 原生问题应先判断进程、文件锁、注册表、快捷方式、资源、系统策略或 Shell 缓存中哪一层失败，再修改代码。
 - 不要把 macOS 交叉构建结果描述成 Windows 真机验证。
 - 三个启用 `sandbox: true` 的 preload 必须继续构建为 CommonJS，并使用 `.cjs` 路径加载；修改 Electron 或 electron-vite 构建配置后必须检查打包产物，不能只看源码测试。
+
+- Node.js 22 / npm 10 仍是开发与 CI 安装边界；`npm ci` 可直接消费仓库 lockfile。若修改依赖或 overrides，需要用 `npx --yes npm@11 install --package-lock-only` 重新生成 lockfile，再在干净临时目录用 npm 10 执行 `npm ci`，并分别运行 npm 10 的 `npm audit` 与 npm 11 的 `npx --yes npm@11 audit`。
 
 ## 验证要求
 

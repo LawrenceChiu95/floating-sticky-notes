@@ -6,7 +6,7 @@
 
 - [ ] `npm test`
 - [ ] `npm run build`
-- [ ] `npm audit`
+- [ ] `npx --yes npm@11 audit`
 - [ ] 如果修改了原生或视觉行为，已在下方说明人工验证结果
 
 ## 变更日志

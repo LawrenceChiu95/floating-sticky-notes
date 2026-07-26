@@ -1,4 +1,14 @@
-import { CheckSquare, ImagePlus, Palette, Plus, Trash2, X } from 'lucide-react';
+import {
+  CheckSquare,
+  ChevronDown,
+  ChevronUp,
+  ImagePlus,
+  MoreHorizontal,
+  Palette,
+  Plus,
+  Trash2,
+  X
+} from 'lucide-react';
 import {
   useEffect,
   useMemo,
@@ -8,7 +18,9 @@ import {
   type ClipboardEvent,
   type CSSProperties,
   type DragEvent,
-  type KeyboardEvent
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode
 } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { NoteImageView } from '../../main/notes-manager';
@@ -16,6 +28,7 @@ import { groupChecklist } from '../../main/checklist-hierarchy';
 import type { NoteChecklistItemRecord } from '../../main/note-state';
 import { DEFAULT_APP_COPY } from '../../shared/app-copy';
 import { DEFAULT_NOTE_COLOR, DEFAULT_NOTE_OPACITY, NOTE_COLORS } from '../../shared/note-appearance';
+import { NOTE_COLLAPSED_HEIGHT } from '../../shared/note-window';
 import { createDebouncedValueAction, type DebouncedValueAction } from '../../shared/debounced-action';
 import { limitNoteNameLength } from '../../shared/note-name';
 import {
@@ -47,10 +60,13 @@ import {
   startNoteNameEditing,
   updateNoteNameDraft
 } from './note-naming';
+import { togglePopover, type NotePopover } from './note-popover';
 import { getPreloadStatus } from './preload-status';
 import './styles.css';
 
 const STATUS_MESSAGE_DURATION_MS = 2000;
+const NOTE_SHELL_TRANSITION_FALLBACK_MS = 320;
+const NOTE_VIEWPORT_RESIZE_FALLBACK_MS = 500;
 const PERSISTENT_STATUS_MESSAGES = new Set(['读取失败']);
 
 function App(): JSX.Element {
@@ -62,16 +78,37 @@ function App(): JSX.Element {
   const [color, setColor] = useState<string>(DEFAULT_NOTE_COLOR);
   const [opacity, setOpacity] = useState(DEFAULT_NOTE_OPACITY);
   const [isAppearanceOpen, setIsAppearanceOpen] = useState(false);
+  // Single nullable state keeps the more menu and the note-delete confirmation
+  // mutually exclusive on both pointer and keyboard paths.
+  const [openPopover, setOpenPopover] = useState<NotePopover | null>(null);
+  const isMoreMenuOpen = openPopover === 'more';
+  const isNoteDeleteConfirmOpen = openPopover === 'note-delete';
+  const setIsMoreMenuOpen = (open: boolean): void => setOpenPopover(open ? 'more' : null);
+  const setIsNoteDeleteConfirmOpen = (open: boolean): void =>
+    setOpenPopover(open ? 'note-delete' : null);
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapseTransitioning, setIsCollapseTransitioning] = useState(false);
+  const [transitionStatusLabelWidth, setTransitionStatusLabelWidth] = useState(0);
+  const [shouldRenderContent, setShouldRenderContent] = useState(true);
   const [isImageDragActive, setIsImageDragActive] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
   const [appCopy, setAppCopy] = useState(DEFAULT_APP_COPY);
   const [noteNaming, setNoteNaming] = useState(() => createNoteNamingState(''));
+  const [collapsedNameEditStartWidth, setCollapsedNameEditStartWidth] = useState(0);
   const [pendingImageDelete, setPendingImageDelete] = useState<{
     imageId: string;
     focusTarget: ChecklistFocusTarget;
   }>();
   const saveContentRef = useRef<DebouncedValueAction<string>>();
+  const noteShellRef = useRef<HTMLElement | null>(null);
+  const statusLabelRef = useRef<HTMLDivElement | null>(null);
+  const expandedStatusLabelWidthRef = useRef(0);
   const nameInputRef = useRef<HTMLInputElement | null>(null);
+  const moreMenuButtonRef = useRef<HTMLButtonElement | null>(null);
+  const moreMenuRef = useRef<HTMLDivElement | null>(null);
+  const noteDeleteButtonRef = useRef<HTMLButtonElement | null>(null);
+  const noteDeleteConfirmRef = useRef<HTMLDivElement | null>(null);
+  const cancelNoteDeleteButtonRef = useRef<HTMLButtonElement | null>(null);
   const isNameEditingRef = useRef(false);
   const isNameSavingRef = useRef(false);
   const noteInputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -175,17 +212,87 @@ function App(): JSX.Element {
     return () => window.clearTimeout(timeoutId);
   }, [statusMessage]);
 
+  useEffect(() => {
+    if (!isMoreMenuOpen && !isNoteDeleteConfirmOpen) {
+      return;
+    }
+
+    const handleOutsidePointerDown = (event: PointerEvent): void => {
+      const target = event.target as Node | null;
+
+      if (openPopover === 'more') {
+        if (
+          !target ||
+          (!moreMenuRef.current?.contains(target) &&
+            !moreMenuButtonRef.current?.contains(target))
+        ) {
+          setOpenPopover(null);
+        }
+
+        return;
+      }
+
+      if (openPopover === 'note-delete') {
+        if (
+          !target ||
+          (!noteDeleteConfirmRef.current?.contains(target) &&
+            !noteDeleteButtonRef.current?.contains(target))
+        ) {
+          setOpenPopover(null);
+        }
+      }
+    };
+
+    document.addEventListener('pointerdown', handleOutsidePointerDown);
+
+    return () => {
+      document.removeEventListener('pointerdown', handleOutsidePointerDown);
+    };
+  }, [openPopover]);
+
+  useEffect(() => {
+    if (!isMoreMenuOpen) {
+      return;
+    }
+
+    const animationFrameId = requestAnimationFrame(() => {
+      moreMenuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+    });
+
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [isMoreMenuOpen]);
+
+  useEffect(() => {
+    if (!isNoteDeleteConfirmOpen) {
+      return;
+    }
+
+    const animationFrameId = requestAnimationFrame(() => {
+      cancelNoteDeleteButtonRef.current?.focus();
+    });
+
+    return () => cancelAnimationFrame(animationFrameId);
+  }, [isNoteDeleteConfirmOpen]);
+
   const handleContentChange = (event: ChangeEvent<HTMLTextAreaElement>): void => {
     const nextContent = event.target.value;
     setContent(nextContent);
     saveContentRef.current?.schedule(nextContent);
   };
 
-  const handleStartNameEditing = (): void => {
+  const handleStartNameEditing = (event: MouseEvent<HTMLSpanElement>): void => {
     if (isNameSavingRef.current) {
       return;
     }
 
+    if (isCollapsed) {
+      const currentTarget = event.currentTarget;
+      setCollapsedNameEditStartWidth(currentTarget.getBoundingClientRect().width);
+    }
+
+    setIsAppearanceOpen(false);
+    setIsMoreMenuOpen(false);
+    setIsNoteDeleteConfirmOpen(false);
     isNameEditingRef.current = true;
     setNoteNaming(startNoteNameEditing);
   };
@@ -565,30 +672,223 @@ function App(): JSX.Element {
       });
   };
 
-  const handleDeleteNote = (): void => {
-    if (!window.confirm('删除这张便签？')) {
-      return;
-    }
+  const handleRequestDeleteNote = (): void => {
+    setOpenPopover((current) => togglePopover(current, 'note-delete'));
+  };
 
+  const handleConfirmDeleteNote = (): void => {
+    setIsNoteDeleteConfirmOpen(false);
     window.stickyNotes.deleteCurrentNote().catch(() => {
       setStatusMessage('删除失败');
     });
   };
 
+  const handleCancelDeleteNote = (): void => {
+    setIsNoteDeleteConfirmOpen(false);
+    requestAnimationFrame(() => noteDeleteButtonRef.current?.focus());
+  };
+
+  const handleNoteDeleteConfirmKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      handleCancelDeleteNote();
+    }
+  };
+
+  const handleMoreMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
+    const items = Array.from(
+      event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')
+    );
+    const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+    let nextIndex: number | undefined;
+
+    if (event.key === 'ArrowDown') {
+      nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % items.length;
+    } else if (event.key === 'ArrowUp') {
+      nextIndex =
+        currentIndex < 0 ? items.length - 1 : (currentIndex - 1 + items.length) % items.length;
+    } else if (event.key === 'Home') {
+      nextIndex = 0;
+    } else if (event.key === 'End') {
+      nextIndex = items.length - 1;
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      setIsMoreMenuOpen(false);
+      requestAnimationFrame(() => moreMenuButtonRef.current?.focus());
+      return;
+    } else if (event.key === 'Tab') {
+      setIsMoreMenuOpen(false);
+      return;
+    } else {
+      return;
+    }
+
+    event.preventDefault();
+    items[nextIndex]?.focus();
+  };
+
+  const handleAppearanceMenuItem = (): void => {
+    setIsMoreMenuOpen(false);
+    setIsAppearanceOpen((value) => !value);
+  };
+
+  const handlePasteImageMenuItem = (): void => {
+    setIsMoreMenuOpen(false);
+    handlePasteImage();
+  };
+
+  const handleCollapsedChange = (collapsed: boolean): void => {
+    if (collapsed === isCollapsed || isCollapseTransitioning) {
+      return;
+    }
+
+    void (async () => {
+      if (collapsed) {
+        const expandedStatusLabelWidth = statusLabelRef.current?.getBoundingClientRect().width ?? 0;
+        expandedStatusLabelWidthRef.current = expandedStatusLabelWidth;
+        setTransitionStatusLabelWidth(expandedStatusLabelWidth);
+      } else {
+        setTransitionStatusLabelWidth(expandedStatusLabelWidthRef.current);
+      }
+      setIsCollapseTransitioning(true);
+
+      try {
+        if (collapsed) {
+          setIsAppearanceOpen(false);
+          setIsMoreMenuOpen(false);
+          setIsNoteDeleteConfirmOpen(false);
+          setPendingImageDelete(undefined);
+          // Let the transitioning title and toolbar mount in their hidden
+          // state before the class flip starts the staged transitions.
+          await waitForNextPaint();
+          const visualTransition = waitForHeightTransition(noteShellRef.current);
+          setIsCollapsed(true);
+          await visualTransition;
+        } else {
+          setShouldRenderContent(true);
+          await waitForAnimationFrame();
+        }
+
+        const didUpdate = await window.stickyNotes.setCollapsed(collapsed);
+
+        if (!didUpdate) {
+          throw new Error('Window collapse state was not updated');
+        }
+
+        if (collapsed) {
+          setShouldRenderContent(false);
+        } else {
+          await waitForExpandedViewport();
+          const visualTransition = waitForHeightTransition(noteShellRef.current);
+          setIsCollapsed(false);
+          await visualTransition;
+        }
+        setStatusMessage('');
+      } catch {
+        if (collapsed) {
+          const rollbackTransition = waitForHeightTransition(noteShellRef.current);
+          setIsCollapsed(false);
+          setShouldRenderContent(true);
+          await rollbackTransition;
+        } else {
+          setIsCollapsed(true);
+          setShouldRenderContent(false);
+        }
+        setStatusMessage(collapsed ? '收起失败' : '展开失败');
+      } finally {
+        setIsCollapseTransitioning(false);
+        setTransitionStatusLabelWidth(0);
+      }
+    })();
+  };
+
   const shellStyle = {
-    backgroundColor: hexToRgba(color, opacity)
-  } satisfies CSSProperties;
+    backgroundColor: hexToRgba(color, opacity),
+    '--note-menu-surface': noteColorToMenuSurface(color),
+    '--note-collapsed-height': `${NOTE_COLLAPSED_HEIGHT}px`,
+    '--note-transition-title-width': `${transitionStatusLabelWidth}px`,
+    '--collapsed-name-edit-start-width': `${collapsedNameEditStartWidth}px`
+  } satisfies CSSProperties &
+    Record<
+      | '--note-menu-surface'
+      | '--note-collapsed-height'
+      | '--note-transition-title-width'
+      | '--collapsed-name-edit-start-width',
+      string
+    >;
   const checklistAddLabel = getChecklistAddLabel(
     checklist.length,
     appCopy.checklistItemPlaceholder
   );
   const showChecklistAddEntry = shouldShowChecklistAddEntry(checklist.length);
   const checklistGroups = useMemo(() => groupChecklist(checklist), [checklist]);
+  const collapsedLabel = statusMessage || noteNaming.name;
   const namePresentation = getNoteNamePresentation(noteNaming, statusMessage);
+
+  // Shared by the expanded status label and the collapsed title bar. Only one
+  // of the two areas is interactive at a time, so a single input ever mounts.
+  const renderNamePresentationContent = (): ReactNode => (
+    <>
+      {namePresentation.kind === 'status' ? (
+        <span className="status-message">{namePresentation.text}</span>
+      ) : null}
+      {namePresentation.kind === 'editor' ? (
+        <>
+          <input
+            ref={nameInputRef}
+            className={`note-name-input${
+              noteNaming.hasSaveError ? ' note-name-input--error' : ''
+            }`}
+            type="text"
+            aria-label="便签名称"
+            aria-busy={noteNaming.isSaving}
+            aria-invalid={noteNaming.hasSaveError}
+            aria-describedby={noteNaming.hasSaveError ? 'name-save-error' : undefined}
+            readOnly={noteNaming.isSaving}
+            value={noteNaming.draft}
+            onChange={(event) =>
+              setNoteNaming((state) =>
+                updateNoteNameDraft(state, limitNoteNameLength(event.target.value))
+              )
+            }
+            onKeyDown={handleNameKeyDown}
+            onBlur={handleNameSubmit}
+          />
+          {noteNaming.hasSaveError ? (
+            <span id="name-save-error" className="visually-hidden">
+              保存失败
+            </span>
+          ) : null}
+        </>
+      ) : null}
+      {namePresentation.kind === 'name' ? (
+        <span
+          className="note-name-hit-area note-name-hit-area--named"
+          onDoubleClick={handleStartNameEditing}
+        >
+          <span className="note-name">{namePresentation.text}</span>
+        </span>
+      ) : null}
+      {namePresentation.kind === 'empty' ? (
+        <span
+          className="note-name-hit-area"
+          title="双击命名"
+          onDoubleClick={handleStartNameEditing}
+        >
+          <span className="note-name note-name--empty" data-hint={namePresentation.hint} />
+        </span>
+      ) : null}
+    </>
+  );
 
   return (
     <main
-      className={`note-shell${isImageDragActive ? ' note-shell--dragging-image' : ''}`}
+      ref={noteShellRef}
+      className={`note-shell${isImageDragActive ? ' note-shell--dragging-image' : ''}${
+        isCollapsed ? ' note-shell--collapsed' : ''
+      }${isCollapseTransitioning ? ' note-shell--collapse-transitioning' : ''}${
+        noteNaming.isEditing ? ' note-shell--naming' : ''
+      }`}
       data-preload-status={preloadStatus}
       style={shellStyle}
       onPaste={handlePaste}
@@ -598,89 +898,163 @@ function App(): JSX.Element {
     >
       <div className="drag-bar">
         <span className="drag-grip" aria-hidden="true" />
-        <div className="status-label" aria-live="polite">
-          {namePresentation.kind === 'status' ? (
-            <span className="status-message">{namePresentation.text}</span>
-          ) : null}
-          {namePresentation.kind === 'editor' ? (
-            <>
-              <input
-                ref={nameInputRef}
-                className={`note-name-input${
-                  noteNaming.hasSaveError ? ' note-name-input--error' : ''
-                }`}
-                type="text"
-                aria-label="便签名称"
-                aria-busy={noteNaming.isSaving}
-                aria-invalid={noteNaming.hasSaveError}
-                aria-describedby={noteNaming.hasSaveError ? 'name-save-error' : undefined}
-                readOnly={noteNaming.isSaving}
-                value={noteNaming.draft}
-                onChange={(event) =>
-                  setNoteNaming((state) =>
-                    updateNoteNameDraft(state, limitNoteNameLength(event.target.value))
-                  )
-                }
-                onKeyDown={handleNameKeyDown}
-                onBlur={handleNameSubmit}
-              />
-              {noteNaming.hasSaveError ? (
-                <span id="name-save-error" className="visually-hidden">
-                  保存失败
-                </span>
-              ) : null}
-            </>
-          ) : null}
-          {namePresentation.kind === 'name' ? (
-            <span
-              className="note-name-hit-area note-name-hit-area--named"
-              onDoubleClick={handleStartNameEditing}
+        <div className="drag-bar-title">
+          {!isCollapsed || isCollapseTransitioning ? (
+            <div
+              ref={statusLabelRef}
+              className="status-label"
+              aria-live="polite"
+              aria-hidden={isCollapsed || undefined}
             >
-              <span className="note-name" title={namePresentation.title}>
-                {namePresentation.text}
-              </span>
-            </span>
+              {renderNamePresentationContent()}
+            </div>
           ) : null}
-          {namePresentation.kind === 'empty' ? (
-            <span className="note-name-hit-area" onDoubleClick={handleStartNameEditing}>
-              <span
-                className="note-name note-name--empty"
-                data-hint={namePresentation.hint}
-              />
+          {isCollapsed || isCollapseTransitioning ? (
+            <span
+              className="collapsed-title"
+              title={collapsedLabel}
+              aria-live="polite"
+              aria-hidden={!isCollapsed || undefined}
+            >
+              {isCollapsed && !isCollapseTransitioning ? (
+                renderNamePresentationContent()
+              ) : (
+                <span className="collapsed-title-text">{collapsedLabel}</span>
+              )}
             </span>
           ) : null}
         </div>
-        <div className="toolbar" aria-label="便签工具">
-          <button type="button" title="新建便签" aria-label="新建便签" onClick={handleCreateNote}>
-            <Plus size={15} strokeWidth={2} />
-          </button>
+        <div className="drag-bar-actions">
+          {!isCollapsed || isCollapseTransitioning ? (
+            <div
+              className="toolbar-wrap"
+              aria-hidden={isCollapsed || noteNaming.isEditing || undefined}
+            >
+              <div className="toolbar" aria-label="便签工具">
+                <button
+                  type="button"
+                  title="新建便签"
+                  aria-label="新建便签"
+                  tabIndex={noteNaming.isEditing ? -1 : undefined}
+                  onClick={handleCreateNote}
+                >
+                  <Plus size={15} strokeWidth={2} />
+                </button>
+                <button
+                  type="button"
+                  title="添加事项"
+                  aria-label="添加事项"
+                  tabIndex={noteNaming.isEditing ? -1 : undefined}
+                  onClick={handleAddChecklistItem}
+                >
+                  <CheckSquare size={15} strokeWidth={2} />
+                </button>
+                <button
+                  type="button"
+                  ref={noteDeleteButtonRef}
+                  className="note-delete-button"
+                  title="删除便签"
+                  aria-label="删除便签"
+                  aria-haspopup="dialog"
+                  aria-expanded={isNoteDeleteConfirmOpen}
+                  tabIndex={noteNaming.isEditing ? -1 : undefined}
+                  onClick={handleRequestDeleteNote}
+                >
+                  <Trash2 size={15} strokeWidth={2} />
+                </button>
+                <button
+                  type="button"
+                  ref={moreMenuButtonRef}
+                  title="更多"
+                  aria-label="更多"
+                  aria-haspopup="menu"
+                  aria-expanded={isMoreMenuOpen}
+                  aria-controls={isMoreMenuOpen ? 'note-more-menu' : undefined}
+                  tabIndex={noteNaming.isEditing ? -1 : undefined}
+                  onClick={() => setOpenPopover((current) => togglePopover(current, 'more'))}
+                >
+                  <MoreHorizontal size={16} strokeWidth={2} />
+                </button>
+              </div>
+            </div>
+          ) : null}
+          {isMoreMenuOpen ? (
+            <div
+              ref={moreMenuRef}
+              id="note-more-menu"
+              className="more-menu"
+              role="menu"
+              aria-label="更多便签操作"
+              onKeyDown={handleMoreMenuKeyDown}
+            >
+              <button
+                type="button"
+                role="menuitem"
+                tabIndex={-1}
+                onClick={handleAppearanceMenuItem}
+              >
+                <span className="more-menu-item-label">
+                  <Palette size={14} strokeWidth={2} aria-hidden="true" />
+                  外观
+                </span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                tabIndex={-1}
+                onClick={handlePasteImageMenuItem}
+              >
+                <span className="more-menu-item-label">
+                  <ImagePlus size={14} strokeWidth={2} aria-hidden="true" />
+                  从剪贴板贴图
+                </span>
+                <kbd>{window.stickyNotes.platform === 'darwin' ? '⌘V' : 'Ctrl+V'}</kbd>
+              </button>
+            </div>
+          ) : null}
+          {isNoteDeleteConfirmOpen ? (
+            <div
+              ref={noteDeleteConfirmRef}
+              className="note-delete-confirm"
+              role="dialog"
+              aria-label="确认删除便签"
+              onKeyDown={handleNoteDeleteConfirmKeyDown}
+            >
+              <span>删除这张便签？</span>
+              <button
+                type="button"
+                className="note-delete-confirm--danger"
+                onClick={handleConfirmDeleteNote}
+              >
+                删除
+              </button>
+              <button type="button" ref={cancelNoteDeleteButtonRef} onClick={handleCancelDeleteNote}>
+                取消
+              </button>
+            </div>
+          ) : null}
           <button
             type="button"
-            title="添加事项"
-            aria-label="添加事项"
-            onClick={handleAddChecklistItem}
+            className="collapse-toggle"
+            title={isCollapsed ? '展开便签' : '收起便签'}
+            aria-label={isCollapsed ? '展开便签' : '收起便签'}
+            disabled={isCollapseTransitioning}
+            onClick={() => handleCollapsedChange(!isCollapsed)}
           >
-            <CheckSquare size={15} strokeWidth={2} />
-          </button>
-          <button
-            type="button"
-            title="外观"
-            aria-label="外观"
-            aria-pressed={isAppearanceOpen}
-            onClick={() => setIsAppearanceOpen((value) => !value)}
-          >
-            <Palette size={15} strokeWidth={2} />
-          </button>
-          <button type="button" title="贴图" aria-label="贴图" onClick={handlePasteImage}>
-            <ImagePlus size={15} strokeWidth={2} />
-          </button>
-          <button type="button" title="删除" aria-label="删除" onClick={handleDeleteNote}>
-            <Trash2 size={15} strokeWidth={2} />
+            <span className="collapse-toggle-icons" aria-hidden="true">
+              <span className="collapse-toggle-icon collapse-toggle-icon--up">
+                <ChevronUp size={15} strokeWidth={2} />
+              </span>
+              <span className="collapse-toggle-icon collapse-toggle-icon--down">
+                <ChevronDown size={15} strokeWidth={2} />
+              </span>
+            </span>
           </button>
         </div>
       </div>
-      <div className="note-content">
-        {isAppearanceOpen ? (
+      {shouldRenderContent ? (
+        <div className="note-content" aria-hidden={isCollapsed}>
+          {isAppearanceOpen ? (
           <div className="appearance-panel" aria-label="便签外观">
             <div className="color-swatches" aria-label="颜色">
               {Object.values(NOTE_COLORS).map((swatchColor) => (
@@ -708,8 +1082,8 @@ function App(): JSX.Element {
               onChange={handleOpacityChange}
             />
           </div>
-        ) : null}
-        {images.length > 0 ? (
+          ) : null}
+          {images.length > 0 ? (
           <div className="image-list" aria-label="便签图片">
             {images.map((image) => (
               <figure key={image.id} className="image-item">
@@ -719,6 +1093,20 @@ function App(): JSX.Element {
                   width={image.width || undefined}
                   height={image.height || undefined}
                   alt=""
+                  draggable={false}
+                  tabIndex={0}
+                  role="button"
+                  aria-label="预览图片"
+                  title="点击预览图片"
+                  onClick={() => {
+                    void window.stickyNotes.openImagePreview(image.id);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      void window.stickyNotes.openImagePreview(image.id);
+                    }
+                  }}
                 />
                 <button
                   type="button"
@@ -758,8 +1146,8 @@ function App(): JSX.Element {
               </figure>
             ))}
           </div>
-        ) : null}
-        {checklist.length > 0 ? (
+          ) : null}
+          {checklist.length > 0 ? (
           <ul className="checklist" aria-label="勾选事项">
             {checklistGroups.map(({ parent, children }) => (
               <li key={parent.id} className="checklist-group">
@@ -813,8 +1201,8 @@ function App(): JSX.Element {
               </li>
             ))}
           </ul>
-        ) : null}
-        {showChecklistAddEntry ? (
+          ) : null}
+          {showChecklistAddEntry ? (
           <button
             type="button"
             className="checklist-add checklist-add--empty"
@@ -823,25 +1211,26 @@ function App(): JSX.Element {
           >
             {checklistAddLabel}
           </button>
-        ) : null}
-        <textarea
-          className="note-input"
-          ref={noteInputRef}
-          spellCheck={false}
-          aria-label="便签内容"
-          placeholder={appCopy.noteContentPlaceholder}
-          value={content}
-          onFocus={() => {
-            lastEditingTargetRef.current = {
-              type: 'note'
-            };
-          }}
-          onChange={handleContentChange}
-          onBlur={() => {
-            void saveContentRef.current?.flush();
-          }}
-        />
-      </div>
+          ) : null}
+          <textarea
+            className="note-input"
+            ref={noteInputRef}
+            spellCheck={false}
+            aria-label="便签内容"
+            placeholder={appCopy.noteContentPlaceholder}
+            value={content}
+            onFocus={() => {
+              lastEditingTargetRef.current = {
+                type: 'note'
+              };
+            }}
+            onChange={handleContentChange}
+            onBlur={() => {
+              void saveContentRef.current?.flush();
+            }}
+          />
+        </div>
+      ) : null}
     </main>
   );
 }
@@ -920,6 +1309,7 @@ function ChecklistItemRow({
       <textarea
         className="checklist-input"
         rows={1}
+        spellCheck={false}
         value={item.text}
         placeholder={placeholder}
         aria-label={inputLabel}
@@ -953,6 +1343,69 @@ function createClientId(): string {
   return `item-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function waitForAnimationFrame(): Promise<void> {
+  return new Promise((resolve) => requestAnimationFrame(() => resolve()));
+}
+
+function waitForNextPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve());
+    });
+  });
+}
+
+function waitForExpandedViewport(): Promise<void> {
+  return new Promise((resolve) => {
+    let didFinish = false;
+    let fallbackTimer: ReturnType<typeof setTimeout> | undefined;
+    const finish = (): void => {
+      if (didFinish) {
+        return;
+      }
+
+      didFinish = true;
+      window.removeEventListener('resize', handleResize);
+      if (fallbackTimer) {
+        clearTimeout(fallbackTimer);
+      }
+      requestAnimationFrame(() => resolve());
+    };
+    const handleResize = (): void => {
+      if (window.innerHeight > NOTE_COLLAPSED_HEIGHT) {
+        finish();
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    fallbackTimer = setTimeout(finish, NOTE_VIEWPORT_RESIZE_FALLBACK_MS);
+    handleResize();
+  });
+}
+
+function waitForHeightTransition(element: HTMLElement | null): Promise<void> {
+  if (!element) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    let fallbackTimer: ReturnType<typeof setTimeout>;
+    const finish = (): void => {
+      element.removeEventListener('transitionend', handleTransitionEnd);
+      clearTimeout(fallbackTimer);
+      resolve();
+    };
+    const handleTransitionEnd = (event: TransitionEvent): void => {
+      if (event.target === element && event.propertyName === 'height') {
+        finish();
+      }
+    };
+
+    element.addEventListener('transitionend', handleTransitionEnd);
+    fallbackTimer = setTimeout(finish, NOTE_SHELL_TRANSITION_FALLBACK_MS);
+  });
+}
+
 function hexToRgba(hex: string, alpha: number): string {
   const normalizedHex = /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : DEFAULT_NOTE_COLOR;
   const red = Number.parseInt(normalizedHex.slice(1, 3), 16);
@@ -960,6 +1413,17 @@ function hexToRgba(hex: string, alpha: number): string {
   const blue = Number.parseInt(normalizedHex.slice(5, 7), 16);
 
   return `rgba(${red}, ${green}, ${blue}, ${alpha})`;
+}
+
+// Popover surfaces ("更多"菜单、删除确认)从便签纸色向白抬升,读作同一张纸
+// 上抬起的纸片,而不是贴上去的系统面板。alpha 固定高位,低透明度便签上仍可读。
+function noteColorToMenuSurface(hex: string): string {
+  const normalizedHex = /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : DEFAULT_NOTE_COLOR;
+  const lift = (channel: number): number => Math.round(channel + (255 - channel) * 0.55);
+
+  return `rgba(${lift(Number.parseInt(normalizedHex.slice(1, 3), 16))}, ${lift(
+    Number.parseInt(normalizedHex.slice(3, 5), 16)
+  )}, ${lift(Number.parseInt(normalizedHex.slice(5, 7), 16))}, 0.97)`;
 }
 
 function hasImageDragData(dataTransfer: DataTransfer): boolean {

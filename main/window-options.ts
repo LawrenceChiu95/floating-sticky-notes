@@ -1,6 +1,13 @@
 import type { BrowserWindowConstructorOptions } from 'electron';
 import { join } from 'node:path';
 import { DEFAULT_NOTE_BOUNDS, type NoteBounds } from './note-state';
+import {
+  NOTE_COLLAPSED_HEIGHT,
+  NOTE_MIN_HEIGHT,
+  NOTE_MIN_WIDTH
+} from '../shared/note-window';
+
+export { NOTE_COLLAPSED_HEIGHT, NOTE_MIN_HEIGHT, NOTE_MIN_WIDTH } from '../shared/note-window';
 
 export const NOTE_ALWAYS_ON_TOP_LEVEL = 'floating';
 export const NOTE_WINDOW_ICON_PATH = join(__dirname, '../../assets/icons/app-icon.ico');
@@ -23,8 +30,8 @@ export function createNoteWindowOptions(
     y: windowBounds.y,
     width: windowBounds.width,
     height: windowBounds.height,
-    minWidth: 200,
-    minHeight: 140,
+    minWidth: NOTE_MIN_WIDTH,
+    minHeight: NOTE_MIN_HEIGHT,
     alwaysOnTop: true,
     frame: false,
     transparent: true,
@@ -42,9 +49,21 @@ export function createNoteWindowOptions(
   };
 }
 
-function clampNoteBounds(bounds: NoteBounds, workAreas: DisplayWorkArea[]): NoteBounds {
-  const width = Math.max(200, bounds.width);
-  const height = Math.max(140, bounds.height);
+export function clampNoteBoundsToWorkAreas(
+  bounds: NoteBounds,
+  workAreas: DisplayWorkArea[],
+  displayAnchorBounds: NoteBounds = bounds
+): NoteBounds {
+  return clampNoteBounds(bounds, workAreas, displayAnchorBounds);
+}
+
+function clampNoteBounds(
+  bounds: NoteBounds,
+  workAreas: DisplayWorkArea[],
+  displayAnchorBounds: NoteBounds = bounds
+): NoteBounds {
+  const width = Math.max(NOTE_MIN_WIDTH, bounds.width);
+  const height = Math.max(NOTE_MIN_HEIGHT, bounds.height);
 
   if (bounds.x === undefined || bounds.y === undefined || workAreas.length === 0) {
     return {
@@ -54,7 +73,7 @@ function clampNoteBounds(bounds: NoteBounds, workAreas: DisplayWorkArea[]): Note
     };
   }
 
-  const workArea = findNearestWorkArea(bounds, workAreas);
+  const workArea = findNearestWorkArea(displayAnchorBounds, workAreas);
   const clampedWidth = Math.min(width, workArea.width);
   const clampedHeight = Math.min(height, workArea.height);
 

@@ -37,7 +37,12 @@ textarea {
   border: 1px solid rgba(43, 42, 39, 0.14);
   border-radius: 8px;
   background: rgba(255, 243, 176, 0.94);
-  box-shadow: 0 6px 16px rgba(20, 19, 17, 0.14), 0 1px 3px rgba(20, 19, 17, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 0 -1px 0 rgba(43, 42, 39, 0.06);
+  /* 基础态不能过渡 height:用户从边/角手动缩放窗口时,100vh 跳变会让纸面用
+     240ms 追赶窗口,底边静不住(先缩一下再弹回)。高度动画只属于下方的
+     collapse-transitioning 过渡态。 */
+  transition: border-radius 200ms ease;
 }
 
 .note-shell--dragging-image {
@@ -46,14 +51,95 @@ textarea {
     0 1px 3px rgba(20, 19, 17, 0.1);
 }
 
+.note-shell--collapsed {
+  height: var(--note-collapsed-height);
+  border-radius: 10px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    inset 0 -1px 0 rgba(43, 42, 39, 0.08);
+}
+
+/* 高度过渡只挂在收起/展开过渡态:窗口被原生 setBounds 改高后,纸面用 240ms
+   从旧高度滑到新高度。收起/展开路径在翻转 collapsed class 前就会加上这个
+   class,动画时序与之前一致。 */
+.note-shell--collapse-transitioning {
+  transition: height 240ms cubic-bezier(0.33, 0.75, 0.35, 1), border-radius 200ms ease;
+  will-change: height;
+}
+
 .drag-bar {
   -webkit-app-region: drag;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex: 0 0 auto;
   height: 28px;
   padding: 3px 5px 3px 9px;
   border-bottom: 1px solid rgba(43, 42, 39, 0.08);
+  transition: height 240ms cubic-bezier(0.33, 0.75, 0.35, 1), padding 200ms ease;
+}
+
+.note-shell--collapsed .drag-bar {
+  height: calc(var(--note-collapsed-height) - 2px);
+  min-height: 0;
+  padding: 4px 5px 4px 10px;
+  border-bottom: 0;
+}
+
+.drag-bar-title {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  min-width: 0;
+  flex: 1;
+}
+
+.drag-bar-title > * {
+  grid-area: 1 / 1;
+  min-width: 0;
+}
+
+.collapsed-title {
+  --note-name-min-width: min(72px, 100%);
+  --note-name-max-width: min(160px, 100%);
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  /* The grip side is 7px wider than the toggle side. Matching right padding
+     keeps both the display chip and editor centered in the whole window. */
+  padding: 0 7px 0 0;
+  overflow: hidden;
+  color: rgba(43, 42, 39, 0.84);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 30px;
+  text-align: left;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 150ms ease 40ms,
+    transform 220ms cubic-bezier(0.33, 0.75, 0.35, 1) 40ms;
+}
+
+.note-shell:not(.note-shell--collapsed) .collapsed-title {
+  opacity: 0;
+  transform: translateY(3px);
+  transition: opacity 120ms ease, transform 200ms cubic-bezier(0.33, 0.75, 0.35, 1);
+}
+
+.collapsed-title-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The collapsed bar hosts the same naming pieces as the expanded status
+   label; the container is drag-only, so the input re-enables pointer events. */
+.collapsed-title .note-name-input {
+  pointer-events: auto;
 }
 
 .drag-grip {
@@ -61,7 +147,7 @@ textarea {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
+  width: 28px;
   height: 20px;
 }
 
@@ -71,6 +157,9 @@ textarea {
   height: 3px;
   border-radius: 999px;
   background: rgba(43, 42, 39, 0.16);
+  /* The 28px container saves title space; the visual nudge keeps the line's
+     left edge exactly where the original 40px container placed it. */
+  transform: translateX(6px);
 }
 
 .status-label {
@@ -78,7 +167,6 @@ textarea {
   --note-name-max-width: min(160px, 100%);
 
   min-width: 0;
-  flex: 1;
   padding: 0;
   color: rgba(111, 106, 96, 0.9);
   font-size: 12px;
@@ -86,6 +174,25 @@ textarea {
   text-align: center;
   overflow: hidden;
   white-space: nowrap;
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 160ms ease 50ms,
+    transform 220ms cubic-bezier(0.33, 0.75, 0.35, 1) 50ms;
+}
+
+/* Freeze the expanded title track while the toolbar changes width. The
+   centered name keeps its original screen position instead of riding the
+   growing or shrinking track during the fold. */
+.note-shell--collapse-transitioning .status-label {
+  justify-self: start;
+  width: var(--note-transition-title-width);
+}
+
+.note-shell--collapsed .status-label {
+  opacity: 0;
+  transform: translateY(-3px);
+  pointer-events: none;
+  transition: opacity 120ms ease, transform 200ms cubic-bezier(0.33, 0.75, 0.35, 1);
 }
 
 .status-message {
@@ -162,6 +269,10 @@ textarea {
   vertical-align: top;
 }
 
+.collapsed-title .status-message {
+  padding: 0;
+}
+
 .note-name-input--error {
   outline: 1px solid rgba(185, 28, 28, 0.55);
   outline-offset: -1px;
@@ -179,13 +290,157 @@ textarea {
   border: 0;
 }
 
+.drag-bar-actions {
+  -webkit-app-region: no-drag;
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.collapse-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-left: 1px solid rgba(43, 42, 39, 0.12);
+  border-radius: 0 8px 8px 0;
+  color: #2b2a27;
+  background: transparent;
+  cursor: default;
+  opacity: 0.58;
+}
+
+.note-shell:focus-within .collapse-toggle,
+.note-shell:hover .collapse-toggle {
+  opacity: 1;
+}
+
+.collapse-toggle:hover,
+.collapse-toggle:focus-visible {
+  background: rgba(43, 42, 39, 0.08);
+  outline: none;
+}
+
+.collapse-toggle:disabled {
+  pointer-events: none;
+  opacity: 0.35;
+}
+
+.collapse-toggle-icons {
+  display: grid;
+  align-items: center;
+  justify-items: center;
+}
+
+.collapse-toggle-icon {
+  grid-area: 1 / 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 160ms ease, transform 200ms cubic-bezier(0.33, 0.75, 0.35, 1);
+}
+
+.collapse-toggle-icon--down {
+  opacity: 0;
+  transform: rotate(-90deg);
+}
+
+.note-shell--collapsed .collapse-toggle-icon--up {
+  opacity: 0;
+  transform: rotate(90deg);
+}
+
+.note-shell--collapsed .collapse-toggle-icon--down {
+  opacity: 1;
+  transform: rotate(0deg);
+}
+
+.toolbar-wrap {
+  display: grid;
+  grid-template-columns: 1fr;
+  min-width: 0;
+  opacity: 1;
+  transition: grid-template-columns 240ms cubic-bezier(0.33, 0.75, 0.35, 1) 60ms,
+    opacity 150ms ease 60ms;
+}
+
+.toolbar-wrap > .toolbar {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.note-shell--collapsed .toolbar-wrap {
+  grid-template-columns: 0fr;
+  pointer-events: none;
+  transition: grid-template-columns 220ms cubic-bezier(0.33, 0.75, 0.35, 1) 50ms;
+}
+
+.note-shell--naming .toolbar-wrap {
+  grid-template-columns: 0fr;
+  pointer-events: none;
+  opacity: 0;
+  transition: grid-template-columns 200ms cubic-bezier(0.33, 0.75, 0.35, 1),
+    opacity 110ms ease;
+}
+
+.note-shell--naming .note-name-input {
+  field-sizing: fixed;
+  width: 100%;
+}
+
+.note-shell--collapsed.note-shell--naming .collapsed-title .note-name-input {
+  animation: collapsed-name-editor-enter 200ms cubic-bezier(0.33, 0.75, 0.35, 1) backwards;
+}
+
+@keyframes collapsed-name-editor-enter {
+  from {
+    width: var(--collapsed-name-edit-start-width);
+  }
+
+  to {
+    width: var(--note-name-max-width);
+  }
+}
+
 .toolbar {
   -webkit-app-region: no-drag;
   flex: 0 0 auto;
   display: flex;
+  justify-content: flex-end;
   gap: 2px;
   opacity: 0.58;
   transition: opacity 120ms ease;
+}
+
+/* Collapse only: buttons fold into the toggle one after another, right to
+   left, instead of being squeezed and clipped as one block. The base state
+   has no per-button transition, so expansion is unaffected. Delays count from
+   the right edge so reordering buttons does not shift the cascade. */
+.note-shell--collapsed .toolbar button {
+  opacity: 0;
+  transform: translateX(8px);
+  transition: opacity 150ms ease, transform 180ms cubic-bezier(0.33, 0.75, 0.35, 1);
+}
+
+.note-shell--collapsed .toolbar button:nth-last-child(4) {
+  transition-delay: 66ms;
+}
+
+.note-shell--collapsed .toolbar button:nth-last-child(3) {
+  transition-delay: 44ms;
+}
+
+.note-shell--collapsed .toolbar button:nth-last-child(2) {
+  transition-delay: 22ms;
+}
+
+.note-shell--collapsed .toolbar button:nth-last-child(1) {
+  transition-delay: 0ms;
 }
 
 .note-shell:focus-within .toolbar,
@@ -197,7 +452,7 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
+  width: 26px;
   height: 22px;
   padding: 0;
   border: 0;
@@ -208,12 +463,38 @@ textarea {
 }
 
 @media (max-width: 220px) {
+  .drag-bar {
+    padding-right: 4px;
+    padding-left: 6px;
+  }
+
+  .drag-grip {
+    width: 22px;
+  }
+
+  .drag-grip::after {
+    width: 18px;
+    transform: translateX(2px);
+  }
+
+  .collapsed-title {
+    padding-right: 5px;
+  }
+
+  .drag-bar-actions {
+    gap: 2px;
+  }
+
   .toolbar {
     gap: 0;
   }
 
   .toolbar button {
-    width: 26px;
+    width: 20px;
+  }
+
+  .collapse-toggle {
+    width: 22px;
   }
 }
 
@@ -221,8 +502,134 @@ textarea {
   background: rgba(43, 42, 39, 0.08);
 }
 
+.toolbar .note-delete-button:hover,
+.toolbar .note-delete-button:focus-visible {
+  color: rgba(185, 28, 28, 0.9);
+  background: rgba(185, 28, 28, 0.08);
+}
+
 .toolbar button:disabled {
   opacity: 0.45;
+}
+
+.more-menu {
+  -webkit-app-region: no-drag;
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 31px;
+  z-index: 20;
+  display: grid;
+  width: max-content;
+  min-width: 160px;
+  max-width: calc(100vw - 18px);
+  padding: 4px;
+  border: 1px solid rgba(43, 42, 39, 0.12);
+  border-radius: 8px;
+  background: var(--note-menu-surface, rgba(252, 250, 244, 0.98));
+  /* 与纸面同一套边缘语言:顶部内高光 + 底部内暗边,再叠加浮层投影。 */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 0 -1px 0 rgba(43, 42, 39, 0.06), 0 2px 8px rgba(25, 24, 21, 0.1),
+    0 1px 2px rgba(25, 24, 21, 0.06);
+}
+
+.more-menu button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 28px;
+  padding: 3px 7px;
+  border: 0;
+  border-radius: 6px;
+  color: #2b2a27;
+  background: transparent;
+  font-size: 12px;
+  line-height: 18px;
+  text-align: left;
+  cursor: default;
+}
+
+.more-menu button:hover,
+.more-menu button:focus-visible {
+  background: rgba(43, 42, 39, 0.08);
+  outline: none;
+}
+
+.more-menu-item-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.more-menu kbd {
+  color: rgba(111, 106, 96, 0.82);
+  font-family: inherit;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.note-delete-confirm {
+  -webkit-app-region: no-drag;
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 57px;
+  z-index: 21;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 26px;
+  max-width: calc(100vw - 18px);
+  padding: 3px 4px 3px 9px;
+  border: 1px solid rgba(43, 42, 39, 0.12);
+  border-radius: 8px;
+  color: #2b2a27;
+  background: var(--note-menu-surface, rgba(252, 250, 244, 0.98));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 0 -1px 0 rgba(43, 42, 39, 0.06), 0 2px 8px rgba(25, 24, 21, 0.1),
+    0 1px 2px rgba(25, 24, 21, 0.06);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.note-delete-confirm button {
+  min-height: 20px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  color: #2b2a27;
+  background: transparent;
+  cursor: default;
+}
+
+.note-delete-confirm button:hover,
+.note-delete-confirm button:focus-visible {
+  background: rgba(43, 42, 39, 0.08);
+  outline: none;
+}
+
+.note-delete-confirm .note-delete-confirm--danger {
+  color: rgba(185, 28, 28, 0.9);
+}
+
+.note-delete-confirm .note-delete-confirm--danger:hover,
+.note-delete-confirm .note-delete-confirm--danger:focus-visible {
+  background: rgba(185, 28, 28, 0.1);
+}
+
+@media (max-width: 220px) {
+  .more-menu {
+    right: 24px;
+  }
+}
+
+/* Below ~250px the confirmation cannot stay both viewport-bound and aligned
+   to the delete button; keeping it inside the window wins. */
+@media (max-width: 250px) {
+  .note-delete-confirm {
+    right: 9px;
+  }
 }
 
 .toolbar button:focus-visible,
@@ -243,6 +650,17 @@ textarea {
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: rgba(43, 42, 39, 0.28) transparent;
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 170ms ease-out 70ms,
+    transform 240ms cubic-bezier(0.33, 0.75, 0.35, 1) 70ms;
+}
+
+.note-shell--collapsed .note-content {
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(-3px);
+  transition: opacity 110ms ease-in, transform 200ms ease-in;
 }
 
 .note-content::-webkit-scrollbar {
@@ -310,15 +728,20 @@ textarea {
 .image-item {
   position: relative;
   margin: 0;
+  overflow: hidden;
+  border-radius: 8px;
 }
 
 .note-image {
   display: block;
   width: 100%;
   height: auto;
-  max-height: 240px;
+  /* 上限跟随窗口高度:默认 220px 便签里方图/竖图也不再吞掉 textarea(240px 定值
+     比 190px 内容区还大);大窗口下维持 240px 不变。 */
+  max-height: min(240px, 45vh);
   border-radius: 8px;
   object-fit: contain;
+  cursor: zoom-in;
   background: rgba(255, 255, 255, 0.38);
 }
 
@@ -596,4 +1019,24 @@ textarea {
 .note-input:focus,
 .note-input:focus-visible {
   outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .note-shell,
+  .drag-bar,
+  .status-label,
+  .collapsed-title,
+  .toolbar-wrap,
+  .toolbar button,
+  .more-menu,
+  .note-content,
+  .collapse-toggle-icon {
+    transition-delay: 0ms !important;
+    transition-duration: 1ms !important;
+  }
+
+  .note-name-input {
+    animation-delay: 0ms !important;
+    animation-duration: 1ms !important;
+  }
 }

@@ -14,7 +14,9 @@ describe('sticky note content scrolling', () => {
     expect(styles).toMatch(/\.image-list\s*{[^}]*flex:\s*0 0 auto;/s);
     expect(styles).not.toMatch(/\.image-list\s*{[^}]*overflow-y:\s*auto;/s);
     expect(styles).not.toMatch(/\.image-list\s*{[^}]*max-height:\s*58%;/s);
-    expect(styles).toMatch(/\.note-image\s*{[^}]*max-height:\s*240px;/s);
+    // 图片上限跟随窗口高度:默认 220px 便签里方图/竖图不会把 textarea 顶出可视区,
+    // 大窗口下仍维持 240px(见 #10 QA 验收 item6)。
+    expect(styles).toMatch(/\.note-image\s*{[^}]*max-height:\s*min\(240px,\s*45vh\);/s);
   });
 
   it('keeps the checklist at natural height inside the content scroll area', () => {
