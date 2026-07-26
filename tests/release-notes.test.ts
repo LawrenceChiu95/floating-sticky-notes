@@ -184,15 +184,27 @@ describe('release notes build extraction', () => {
     ]);
     expect(release014?.sections.some((section) => section.title === '变更')).toBe(false);
 
-    const release015 = archive?.releases.find((release) => release.version === '0.1.15');
-    expect(release015?.sections).toEqual([
+    const release017 = archive?.releases.find((release) => release.version === '0.1.17');
+    expect(release017?.sections).toEqual([
+      {
+        title: '新增',
+        items: [
+          '支持将单张便签收起为仍留在桌面、保持置顶并可拖动的标题横条；横条可直接命名，展开时从横条当前位置恢复完整便签。',
+          '便签中的图片支持点击打开独立预览窗口：窗口按图片尺寸打开，可自由拖动和调整大小；图片适应窗口（不超过 100%）、滚轮朝光标缩放、拖拽平移、多图左右切换，可通过按钮、Esc 或点击背景关闭；删除图片或便签时预览联动关闭。'
+        ]
+      },
       {
         title: '变更',
         items: [
-          '版本更新反馈改用紧凑、非模态的自有窗口。',
-          '少量内容时，窗口会根据内容自然收紧。',
-          '跳版本或内容较长时，更新内容可在固定页头和操作区之间滚动查看。',
-          '收小“知道了”按钮的文字字号。'
+          '顶栏保留新建、待办、删除和更多四个一级动作；外观与从剪贴板贴图收进“更多”菜单，删除便签改用顶栏内联确认。',
+          '默认高度的便签会限制图片预览高度，为正文输入保留空间；较高窗口仍保持原有 240px 上限。'
+        ]
+      },
+      {
+        title: '修复',
+        items: [
+          '通过删除按钮，或对空父任务按 Enter / Backspace 删除父任务时，其直接子任务现在会作为同一任务组一并删除。',
+          '关闭应用内待办文本框的拼写检查，任务编号、英文代号和普通文本不再显示红色波浪线。'
         ]
       }
     ]);
