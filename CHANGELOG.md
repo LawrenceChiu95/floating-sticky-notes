@@ -4,6 +4,8 @@
 
 ## [未发布]
 
+## [0.1.17] - 2026-07-26
+
 ### 新增
 
 - 支持将单张便签收起为仍留在桌面、保持置顶并可拖动的标题横条；横条可直接命名，展开时从横条当前位置恢复完整便签。
@@ -168,7 +170,8 @@
 - 提供待办清单、图片、颜色和透明度等核心功能。
 - 开始接入系统托盘与开机启动能力。
 
-[未发布]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.16...HEAD
+[未发布]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.17...HEAD
+[0.1.17]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.16...v0.1.17
 [0.1.16]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.15...v0.1.16
 [0.1.15]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.14...v0.1.15
 [0.1.14]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.13...v0.1.14
