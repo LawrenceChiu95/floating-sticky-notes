@@ -12,6 +12,10 @@ const rendererSource = readFileSync(
   resolve(__dirname, '../renderer/src/image-preview.tsx'),
   'utf8'
 );
+const styles = readFileSync(
+  resolve(__dirname, '../renderer/src/image-preview.css'),
+  'utf8'
+);
 
 describe('image preview wiring', () => {
   it('constructs the controller and routes lifecycle events to it', () => {
@@ -43,5 +47,19 @@ describe('image preview wiring', () => {
   it('uses the preview current display as the resize limit', () => {
     expect(mainSource).toContain('screen.getDisplayMatching(bounds).workArea');
     expect(mainSource).not.toContain('{ width: workArea.width, height: workArea.height }');
+  });
+
+  it('keeps preview controls visible over both light and dark images', () => {
+    expect(styles).toMatch(
+      /\.image-preview-close,\s*\.image-preview-nav\s*{[^}]*background:\s*rgba\(22, 22, 22, 0\.68\);/s
+    );
+    expect(styles).toMatch(
+      /\.image-preview-close,\s*\.image-preview-nav\s*{[^}]*border:\s*1px solid rgba\(255, 255, 255, 0\.42\);/s
+    );
+    expect(styles).toMatch(
+      /\.image-preview-close,\s*\.image-preview-nav\s*{[^}]*box-shadow:/s
+    );
+    expect(styles).toMatch(/\.image-preview-nav:disabled\s*{[^}]*opacity:\s*0\.28;/s);
+    expect(styles).toContain('.image-preview-nav:not(:disabled):focus-visible');
   });
 });

@@ -112,6 +112,8 @@ function App(): JSX.Element {
   const isNameEditingRef = useRef(false);
   const isNameSavingRef = useRef(false);
   const noteInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const noteContentRef = useRef<HTMLDivElement | null>(null);
+  const collapsedScrollTopRef = useRef<number>();
   const checklistInputRefs = useRef(new Map<string, HTMLTextAreaElement>());
   const pendingFocusRestoreRef = useRef<ChecklistFocusTarget>();
   const lastEditingTargetRef = useRef<{ type: 'note' } | { type: 'checklist'; itemId: string }>({
@@ -744,6 +746,7 @@ function App(): JSX.Element {
 
     void (async () => {
       if (collapsed) {
+        collapsedScrollTopRef.current = noteContentRef.current?.scrollTop ?? 0;
         const expandedStatusLabelWidth = statusLabelRef.current?.getBoundingClientRect().width ?? 0;
         expandedStatusLabelWidthRef.current = expandedStatusLabelWidth;
         setTransitionStatusLabelWidth(expandedStatusLabelWidth);
@@ -781,6 +784,12 @@ function App(): JSX.Element {
           await waitForExpandedViewport();
           const visualTransition = waitForHeightTransition(noteShellRef.current);
           setIsCollapsed(false);
+          await waitForAnimationFrame();
+          const scrollTop = collapsedScrollTopRef.current;
+          if (scrollTop !== undefined && noteContentRef.current) {
+            noteContentRef.current.scrollTop = scrollTop;
+            collapsedScrollTopRef.current = undefined;
+          }
           await visualTransition;
         }
         setStatusMessage('');
@@ -1053,7 +1062,7 @@ function App(): JSX.Element {
         </div>
       </div>
       {shouldRenderContent ? (
-        <div className="note-content" aria-hidden={isCollapsed}>
+        <div ref={noteContentRef} className="note-content" aria-hidden={isCollapsed}>
           {isAppearanceOpen ? (
           <div className="appearance-panel" aria-label="便签外观">
             <div className="color-swatches" aria-label="颜色">

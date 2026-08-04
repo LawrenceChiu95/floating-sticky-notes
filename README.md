@@ -23,9 +23,9 @@
 
 ## 项目状态
 
-当前正式版本为 [`0.1.17`](https://github.com/LawrenceChiu95/floating-sticky-notes/releases/tag/v0.1.17)。本版本支持把便签收起为可拖动的桌面标题横条，并增加独立图片预览、缩放、平移和多图切换；同时精简顶栏操作，完善父任务级联删除和待办文本体验。
+当前正式版本为 [`0.1.18`](https://github.com/LawrenceChiu95/floating-sticky-notes/releases/tag/v0.1.18)。本版本支持从托盘连续回看当前及更早的版本公告，并增大公告窗口；同时提升图片预览按钮的常态可见性，让长便签在收起再展开后恢复原滚动位置。
 
-Windows x64 Setup 和 Apple Silicon Mac DMG 可从 [`floating-sticky-notes-updates v0.1.17`](https://github.com/LawrenceChiu95/floating-sticky-notes-updates/releases/tag/v0.1.17) 下载。Windows 可以在应用内完成检查、下载和重启安装；macOS 会下载并校验 DMG、打开安装镜像，用户仍需手动拖到 Applications 并确认替换。Windows 安装包未签名；macOS 构建使用完整的 ad-hoc 签名，但未使用 Apple Developer ID 且未经过公证，首次从外部下载时需要在“系统设置 → 隐私与安全性”中选择“仍要打开”。
+Windows x64 Setup 和 Apple Silicon Mac DMG 可从 [`floating-sticky-notes-updates v0.1.18`](https://github.com/LawrenceChiu95/floating-sticky-notes-updates/releases/tag/v0.1.18) 下载。Windows 可以在应用内完成检查、下载和重启安装；macOS 会下载并校验 DMG、打开安装镜像，用户仍需手动拖到 Applications 并确认替换。Windows 安装包未签名；macOS 构建使用完整的 ad-hoc 签名，但未使用 Apple Developer ID 且未经过公证，首次从外部下载时需要在“系统设置 → 隐私与安全性”中选择“仍要打开”。
 
 `0.1.9` 是首个公开源码版本，也是首个具备 Windows 自动更新能力的版本；`0.1.10` 增加了 macOS 半自动更新。项目在公开前已经完成 `0.1.0` 至 `0.1.8` 的内部迭代；完整且经过隐私清洗的版本历史见 [变更日志](CHANGELOG.md)。
 

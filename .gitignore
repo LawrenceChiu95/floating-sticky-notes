@@ -4,6 +4,7 @@ dist/
 dist-electron/
 release/
 release-mac/
+release-diagnostic/
 out/
 /main/generated/
 coverage/

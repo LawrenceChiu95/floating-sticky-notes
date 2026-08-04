@@ -460,6 +460,103 @@ describe('update controller', () => {
     await flushMicrotasks();
   });
 
+  it('records automatic/manual operation and busy-check diagnostics without changing behavior', async () => {
+    const updater = new FakeUpdater();
+    let resolveCheck: (() => void) | undefined;
+    updater.checkForUpdates.mockImplementationOnce(
+      () => new Promise<undefined>((resolve) => {
+        resolveCheck = () => resolve(undefined);
+      })
+    );
+    const record = vi.fn();
+    const controller = createUpdateController({
+      updater,
+      dialog: createDialog(),
+      diagnostics: { record }
+    });
+
+    void controller.checkSilently();
+    await flushMicrotasks();
+    await controller.checkManually();
+    updater.emit('update-not-available', { version: '0.1.17' });
+    resolveCheck?.();
+    await flushMicrotasks();
+
+    expect(record).toHaveBeenCalledWith(
+      'update_check_started',
+      expect.objectContaining({ operationId: 1, source: 'startup' })
+    );
+    expect(record).toHaveBeenCalledWith(
+      'update_check_busy',
+      expect.objectContaining({
+        operationId: 1,
+        requestedSource: 'manual',
+        activeSource: 'startup',
+        phase: 'checking'
+      })
+    );
+    expect(record).toHaveBeenCalledWith(
+      'updater_event',
+      expect.objectContaining({ event: 'update-not-available' })
+    );
+    expect(record).toHaveBeenCalledWith(
+      'update_check_resolved',
+      expect.objectContaining({ operationId: 1 })
+    );
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(1);
+  });
+
+  it('records updater rejection details while preserving manual error feedback', async () => {
+    const updater = new FakeUpdater();
+    const error = Object.assign(new Error('network failed'), { code: 'ERR_CONNECTION_RESET' });
+    updater.checkForUpdates.mockRejectedValueOnce(error);
+    const dialog = createDialog();
+    const record = vi.fn();
+    const controller = createUpdateController({
+      updater,
+      dialog,
+      diagnostics: { record },
+      logError: vi.fn()
+    });
+
+    await controller.checkManually();
+
+    expect(record).toHaveBeenCalledWith(
+      'update_check_rejected',
+      expect.objectContaining({ operationId: 1, error })
+    );
+    expect(record).toHaveBeenCalledWith(
+      'update_operation_failed',
+      expect.objectContaining({ operationId: 1, source: 'manual', failedPhase: 'checking' })
+    );
+    expect(dialog.showErrorBox).toHaveBeenCalledWith(
+      '检查更新失败',
+      expect.stringContaining('检查网络')
+    );
+  });
+
+  it('ignores diagnostic recorder failures without changing update behavior', async () => {
+    const updater = new FakeUpdater();
+    const dialog = createDialog();
+    const controller = createUpdateController({
+      updater,
+      dialog,
+      diagnostics: {
+        record: () => {
+          throw new Error('log target unavailable');
+        }
+      }
+    });
+
+    const check = controller.checkManually();
+    updater.emit('update-not-available', { version: '0.1.17' });
+    await check;
+
+    expect(dialog.showMessageBox).toHaveBeenCalledWith(
+      expect.objectContaining({ title: '检查更新', message: '已经是最新版本' })
+    );
+  });
+
   it('does not interrupt the user when a silent startup check fails', async () => {
     const updater = new FakeUpdater();
     const dialog = createDialog();

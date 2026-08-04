@@ -48,4 +48,19 @@ describe('Windows build command', () => {
     expect(getPublishChannel?.('0.1.13-beta.2')).toBe('beta');
     expect(getPublishChannel?.('0.1.13')).toBe('latest');
   });
+
+  it('keeps the updater diagnostic installer on version 0.1.17 and the latest channel', () => {
+    const diagnosticBuildSource = require('node:fs').readFileSync(
+      require('node:path').resolve(__dirname, '../scripts/build-windows-diagnostic.cjs'),
+      'utf8'
+    );
+
+    expect(diagnosticBuildSource).not.toContain('STICKY_NOTES_UPDATE_DIAGNOSTIC_BUILD');
+    expect(diagnosticBuildSource).toContain("output: 'release-diagnostic'");
+    expect(diagnosticBuildSource).toContain(
+      "artifactName: 'StickyNotes-Setup-0.1.17-Update-Diagnostic.${ext}'"
+    );
+    expect(diagnosticBuildSource).toContain("channel: 'latest'");
+    expect(diagnosticBuildSource).not.toContain('publish:');
+  });
 });

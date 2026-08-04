@@ -111,9 +111,7 @@ export function createReleaseFeedbackController(
       }
 
       const releases = stableCoreVersion
-        ? (options.releaseNotes?.releases.filter(
-            (release) => release.version === stableCoreVersion
-          ) ?? [])
+        ? getManualReleases(options.releaseNotes, stableCoreVersion)
         : [];
       await present({
         initiatedBy: 'manual',
@@ -147,6 +145,17 @@ export function createReleaseFeedbackController(
     presentation = promise;
     return promise;
   }
+}
+
+function getManualReleases(
+  archive: ReleaseNotesArchive | undefined,
+  currentVersion: string
+): ReleaseNotes[] {
+  if (!archive?.releases.some((release) => release.version === currentVersion)) {
+    return [];
+  }
+
+  return getAutomaticReleases(archive, undefined, currentVersion);
 }
 
 function getAutomaticReleases(

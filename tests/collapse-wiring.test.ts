@@ -52,6 +52,21 @@ describe('sticky note collapse wiring', () => {
     expect(appSource).toContain('window.innerHeight > NOTE_COLLAPSED_HEIGHT');
   });
 
+  it('restores the shared content scroll position after the expanded viewport returns', () => {
+    const captureIndex = appSource.indexOf(
+      'collapsedScrollTopRef.current = noteContentRef.current?.scrollTop ?? 0;'
+    );
+    const viewportWaitIndex = appSource.indexOf('await waitForExpandedViewport();');
+    const restoreIndex = appSource.indexOf('noteContentRef.current.scrollTop = scrollTop;');
+    const clearIndex = appSource.indexOf('collapsedScrollTopRef.current = undefined;');
+
+    expect(appSource).toContain('ref={noteContentRef}');
+    expect(captureIndex).toBeGreaterThan(-1);
+    expect(captureIndex).toBeLessThan(appSource.indexOf('setIsCollapseTransitioning(true);'));
+    expect(restoreIndex).toBeGreaterThan(viewportWaitIndex);
+    expect(clearIndex).toBeGreaterThan(restoreIndex);
+  });
+
   it('animates the visible shell instead of the BrowserWindow viewport', () => {
     // 高度动画只挂在收起/展开过渡态:基础态过渡会让用户手动缩放窗口时纸面
     // 滞后于 100vh(底边先缩再弹回),所以这里锁定的是 transitioning 选择器。

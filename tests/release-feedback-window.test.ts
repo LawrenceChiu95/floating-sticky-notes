@@ -104,7 +104,7 @@ describe('release feedback window geometry', () => {
         900,
         28
       )
-    ).toEqual({ x: 480, y: 156, width: 440, height: 588 });
+    ).toEqual({ x: 480, y: 136, width: 440, height: 628 });
     expect(
       calculateReleaseFeedbackWindowBounds(
         { x: -300, y: 10, width: 300, height: 140 },
@@ -126,7 +126,7 @@ describe('release feedback window manager', () => {
 
     window.emitReady();
     expect(window.send).toHaveBeenCalledWith(automaticSnapshot);
-    expect(manager.reportRendered(42, { contentHeight: 320 })).toBe(true);
+    expect(manager.reportRendered(42, { contentHeight: 700, currentReleaseHeight: 320 })).toBe(true);
     expect(window.setBounds).toHaveBeenCalledWith({
       x: 480,
       y: 276,

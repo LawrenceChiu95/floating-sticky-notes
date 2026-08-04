@@ -1,3 +1,4 @@
+import { createSafeDiagnosticRecorder, type DiagnosticRecorder } from './diagnostics';
 import type { UpdateProgressPresenter } from './update-progress-window';
 
 export type UpdateEvent =
@@ -48,6 +49,7 @@ type UpdateControllerOptions = {
   updater: UpdateClient;
   dialog: UpdateDialog;
   progress?: UpdateProgressPresenter;
+  diagnostics?: DiagnosticRecorder;
   beforeInstall?: () => Promise<void>;
   logError?: (message: string, error: unknown) => void;
 };
@@ -79,6 +81,7 @@ export function shouldEnableAutoUpdates(platform: NodeJS.Platform, isPackaged: b
 export function createUpdateController(options: UpdateControllerOptions): UpdateController {
   const beforeInstall = options.beforeInstall ?? (async () => undefined);
   const logError = options.logError ?? ((message, error) => console.error(message, error));
+  const recordDiagnostic = createSafeDiagnosticRecorder(options.diagnostics).record;
   let phase: UpdatePhase = 'idle';
   let currentOperation: UpdateOperation | undefined;
   let nextOperationId = 0;
@@ -97,8 +100,21 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     );
   };
 
+  const setPhase = (nextPhase: UpdatePhase, operationId: number | undefined): void => {
+    const previousPhase = phase;
+    phase = nextPhase;
+    if (previousPhase !== nextPhase) {
+      recordDiagnostic('update_phase_changed', {
+        operationId,
+        from: previousPhase,
+        to: nextPhase
+      });
+    }
+  };
+
   const resetToIdle = (): void => {
-    phase = 'idle';
+    const operationId = currentOperation?.id;
+    setPhase('idle', operationId);
     currentOperation = undefined;
   };
 
@@ -116,6 +132,13 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     } else {
       operation.downloadPending = false;
     }
+    recordDiagnostic('update_promise_settled', {
+      operationId,
+      promise,
+      phase,
+      checkPending: operation.checkPending,
+      downloadPending: operation.downloadPending
+    });
 
     if (
       (phase === 'failed' || phase === 'check-complete') &&
@@ -146,7 +169,13 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     if (isDownloadFailure) {
       options.progress?.close();
     }
-    phase = 'failed';
+    setPhase('failed', operation.id);
+    recordDiagnostic('update_operation_failed', {
+      operationId: operation.id,
+      source: operation.manual ? 'manual' : 'startup',
+      failedPhase,
+      error
+    });
     logError('Auto-update failed', error);
 
     if (shouldNotify && !disposed) {
@@ -167,13 +196,32 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     }
   };
 
-  options.updater.on('update-not-available', () => {
+  const recordUpdaterEvent = (
+    event: UpdateEvent,
+    details: Record<string, unknown> = {}
+  ): void => {
+    recordDiagnostic('updater_event', {
+      operationId: currentOperation?.id,
+      event,
+      phase,
+      ...details
+    });
+  };
+
+  options.updater.on('checking-for-update', () => {
+    recordUpdaterEvent('checking-for-update');
+  });
+
+  options.updater.on('update-not-available', (value) => {
+    const info = value as UpdateInfo | undefined;
+    const version = info?.version?.trim() || undefined;
+    recordUpdaterEvent('update-not-available', { version });
     if (disposed || phase !== 'checking' || !currentOperation) {
       return;
     }
 
     const shouldNotify = currentOperation.manual;
-    phase = 'check-complete';
+    setPhase('check-complete', currentOperation.id);
     if (!currentOperation.checkPending) {
       resetToIdle();
     }
@@ -188,15 +236,16 @@ export function createUpdateController(options: UpdateControllerOptions): Update
   });
 
   options.updater.on('update-available', (value) => {
+    const info = value as UpdateInfo | undefined;
+    const version = info?.version?.trim() || undefined;
+    recordUpdaterEvent('update-available', { version });
     if (disposed || phase !== 'checking' || !currentOperation) {
       return;
     }
 
-    const info = value as UpdateInfo | undefined;
-    const version = info?.version?.trim() || undefined;
     const operationId = currentOperation.id;
     currentOperation.version = version;
-    phase = 'awaiting-download-confirmation';
+    setPhase('awaiting-download-confirmation', operationId);
 
     void options.dialog
       .showMessageBox({
@@ -215,14 +264,14 @@ export function createUpdateController(options: UpdateControllerOptions): Update
         }
 
         if (response !== 0) {
-          phase = 'check-complete';
+          setPhase('check-complete', operationId);
           if (!currentOperation?.checkPending) {
             resetToIdle();
           }
           return;
         }
 
-        phase = 'downloading';
+        setPhase('downloading', operationId);
         options.progress?.showPreparing(version);
         const operation = currentOperation;
         if (!operation || operation.id !== operationId) {
@@ -243,6 +292,9 @@ export function createUpdateController(options: UpdateControllerOptions): Update
   });
 
   options.updater.on('download-progress', (value) => {
+    recordUpdaterEvent('download-progress', {
+      percent: (value as { percent?: unknown } | undefined)?.percent
+    });
     if (disposed || phase !== 'downloading' || !currentOperation) {
       return;
     }
@@ -251,12 +303,12 @@ export function createUpdateController(options: UpdateControllerOptions): Update
   });
 
   options.updater.on('update-downloaded', (value) => {
+    const receivedVersion = (value as UpdateInfo | undefined)?.version?.trim() || undefined;
+    recordUpdaterEvent('update-downloaded', { version: receivedVersion });
     if (disposed || phase !== 'downloading' || !currentOperation) {
       return;
     }
 
-    const info = value as UpdateInfo | undefined;
-    const receivedVersion = info?.version?.trim() || undefined;
     const expectedVersion = currentOperation.version;
     if (!expectedVersion || !receivedVersion || expectedVersion !== receivedVersion) {
       finishFailure(
@@ -271,7 +323,7 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     }
     const version = receivedVersion;
     const operationId = currentOperation.id;
-    phase = 'awaiting-install-confirmation';
+    setPhase('awaiting-install-confirmation', operationId);
     options.progress?.close();
 
     void options.dialog
@@ -292,12 +344,12 @@ export function createUpdateController(options: UpdateControllerOptions): Update
 
         if (response !== 0) {
           downloadedVersion = version;
-          phase = 'downloaded-deferred';
+          setPhase('downloaded-deferred', operationId);
           currentOperation = undefined;
           return;
         }
 
-        phase = 'installing';
+        setPhase('installing', operationId);
         try {
           await beforeInstall();
           if (disposed || currentOperation?.id !== operationId || phase !== 'installing') {
@@ -313,13 +365,14 @@ export function createUpdateController(options: UpdateControllerOptions): Update
           return;
         }
         downloadedVersion = version;
-        phase = 'downloaded-deferred';
+        setPhase('downloaded-deferred', operationId);
         currentOperation = undefined;
         logError('Unable to show auto-update installation prompt', error);
       });
   });
 
   options.updater.on('error', (error) => {
+    recordUpdaterEvent('error', { error });
     finishFailure(error, currentOperation?.id);
   });
 
@@ -366,13 +419,18 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     }
 
     if (phase !== 'idle') {
+      recordDiagnostic('update_check_busy', {
+        operationId: currentOperation?.id,
+        requestedSource: isManual ? 'manual' : 'startup',
+        activeSource: currentOperation?.manual ? 'manual' : 'startup',
+        phase
+      });
       if (isManual) {
         await showBusyState();
       }
       return;
     }
 
-    phase = 'checking';
     currentOperation = {
       id: ++nextOperationId,
       manual: isManual,
@@ -381,9 +439,17 @@ export function createUpdateController(options: UpdateControllerOptions): Update
       downloadPending: false
     };
     const operationId = currentOperation.id;
+    setPhase('checking', operationId);
+    recordDiagnostic('update_check_started', {
+      operationId,
+      source: isManual ? 'manual' : 'startup'
+    });
     try {
-      await options.updater.checkForUpdates();
+      const result = await options.updater.checkForUpdates();
+      const latestVersion = (result as { updateInfo?: UpdateInfo } | undefined)?.updateInfo?.version;
+      recordDiagnostic('update_check_resolved', { operationId, latestVersion });
     } catch (error) {
+      recordDiagnostic('update_check_rejected', { operationId, error });
       finishFailure(error, operationId);
     } finally {
       settleOperationPromise(operationId, 'check');
@@ -397,6 +463,10 @@ export function createUpdateController(options: UpdateControllerOptions): Update
       if (disposed) {
         return;
       }
+      recordDiagnostic('update_controller_disposed', {
+        operationId: currentOperation?.id,
+        phase
+      });
       disposed = true;
       resetToIdle();
       options.progress?.dispose();

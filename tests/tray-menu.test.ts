@@ -39,6 +39,7 @@ describe('tray menu template', () => {
     expect(labels).toContain('开机时启动');
     expect(labels).toContain('版本 0.1.14');
     expect(labels).toContain('退出');
+    expect(labels).not.toContain('打开更新日志');
     expect(findItem(template, '开机时启动')?.type).toBe('checkbox');
   });
 
@@ -78,7 +79,6 @@ describe('tray menu template', () => {
     );
     const autoLaunchItem = findItem(template, '开机时启动');
 
-    // Electron flips the checkbox state before invoking click, so menuItem.checked is the next value.
     autoLaunchItem?.click?.({ checked: true });
     autoLaunchItem?.click?.({ checked: false });
 
@@ -95,13 +95,7 @@ describe('tray menu template', () => {
     const showCurrentRelease = vi.fn();
     const quit = vi.fn();
     const template = buildTrayMenuTemplate(
-      createDeps({
-        createNote,
-        restoreNotes,
-        checkForUpdates,
-        showCurrentRelease,
-        quit
-      } as Partial<TrayMenuDeps>)
+      createDeps({ createNote, restoreNotes, checkForUpdates, showCurrentRelease, quit })
     );
 
     findItem(template, '新建便签')?.click?.({});

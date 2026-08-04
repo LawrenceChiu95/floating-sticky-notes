@@ -1,7 +1,8 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, net, protocol, screen, shell } from 'electron';
+import { release as getOsRelease, arch as getOsArch, homedir } from 'node:os';
 import { is } from '@electron-toolkit/utils';
 import electronUpdater from 'electron-updater';
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   getDevUserDataPath,
@@ -60,6 +61,11 @@ import {
   type UpdateController
 } from './update-controller';
 import {
+  attachUpdaterRequestDiagnostics,
+  createDiagnosticLogger,
+  type DiagnosticLogger
+} from './diagnostics';
+import {
   createUpdateProgressWindowManager,
   createUpdateProgressWindowOptions,
   type UpdateProgressWindowPort
@@ -91,6 +97,8 @@ let releaseFeedbackWindowManager: ReleaseFeedbackWindowManager | undefined;
 let imagePreviewController: ImagePreviewController | undefined;
 let restoreNotesWhenReady = false;
 const AUTO_LAUNCH_DEFAULT_MARKER = '.auto-launch-default-applied';
+let diagnosticLogger: DiagnosticLogger | undefined;
+let disposeUpdateRequestDiagnostics: (() => void) | undefined;
 
 // dev 与正式版共用安装身份,默认会读写同一份 userData(同一 notes.json)。
 // 开发模式提前切到独立目录,调试/删除永远碰不到正式数据;必须在
@@ -146,6 +154,7 @@ function createElectronImagePreviewWindow(
       NOTE_WINDOW_ICON_PATH
     )
   );
+  observeWindowDiagnostics(previewWindow, 'image-preview');
 
   preventNoteWindowNavigation({
     onWillNavigate: (listener) => {
@@ -227,6 +236,7 @@ function createElectronImagePreviewWindow(
 function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
   const workAreas = screen.getAllDisplays().map((display) => display.workArea);
   const noteWindow = new BrowserWindow(createNoteWindowOptions(note.bounds, workAreas));
+  observeWindowDiagnostics(noteWindow, 'note');
   const noteWebContentsId = noteWindow.webContents.id;
 
   preventNoteWindowNavigation({
@@ -322,6 +332,7 @@ function createElectronUpdateProgressWindow(): UpdateProgressWindowPort {
       NOTE_WINDOW_ICON_PATH
     )
   );
+  observeWindowDiagnostics(progressWindow, 'update-progress');
 
   preventNoteWindowNavigation({
     onWillNavigate: (listener) => {
@@ -394,6 +405,7 @@ function createElectronReleaseFeedbackWindow(): ReleaseFeedbackWindowPort {
       NOTE_WINDOW_ICON_PATH
     )
   );
+  observeWindowDiagnostics(releaseFeedbackWindow, 'release-feedback');
 
   preventNoteWindowNavigation({
     onWillNavigate: (listener) => {
@@ -619,12 +631,32 @@ function registerIpcHandlers(): void {
     return setAutoLaunchEnabled(app, enabled);
   });
 
-  ipcMain.handle('sticky-notes:set-collapsed', (event, collapsed: unknown) => {
+  ipcMain.handle('sticky-notes:set-collapsed', async (event, collapsed: unknown) => {
     if (typeof collapsed !== 'boolean') {
       return false;
     }
 
-    return getNotesManager().setCollapsedForWebContents(event.sender.id, collapsed);
+    try {
+      const didUpdate = await getNotesManager().setCollapsedForWebContents(
+        event.sender.id,
+        collapsed
+      );
+      if (!didUpdate) {
+        diagnosticLogger?.record('note_collapse_failed', {
+          webContentsId: event.sender.id,
+          collapsed,
+          reason: 'window-not-found'
+        });
+      }
+      return didUpdate;
+    } catch (error) {
+      diagnosticLogger?.record('note_collapse_failed', {
+        webContentsId: event.sender.id,
+        collapsed,
+        error
+      });
+      return false;
+    }
   });
 
   ipcMain.handle('sticky-notes:delete-current-note', async (event) => {
@@ -669,6 +701,77 @@ function registerIpcHandlers(): void {
   });
 }
 
+function createDiagnosticLog(userDataPath: string): DiagnosticLogger {
+  const homeDirectory = homedir();
+  const logger = createDiagnosticLogger({
+    filePath: join(userDataPath, 'logs', 'diagnostic.log'),
+    homeDirectory
+  });
+  logger.record('application_session_started', {
+    appVersion: app.getVersion(),
+    platform: process.platform,
+    osRelease: getOsRelease(),
+    arch: getOsArch(),
+    packaged: app.isPackaged,
+    userDataPath
+  });
+  return logger;
+}
+
+function recordDiagnosticError(event: string, error: unknown): void {
+  diagnosticLogger?.record(event, { error });
+}
+
+function createDiagnosticMessageLogger(
+  event: string
+): (message: string, error: unknown) => void {
+  return (message, error) => {
+    diagnosticLogger?.record(event, { message, error });
+  };
+}
+
+function registerProcessDiagnostics(): void {
+  process.on('uncaughtException', (error) => {
+    recordDiagnosticError('main_uncaught_exception', error);
+  });
+  process.on('unhandledRejection', (reason) => {
+    diagnosticLogger?.record('main_unhandled_rejection', { reason });
+  });
+  app.on('render-process-gone', (_event, webContents, details) => {
+    diagnosticLogger?.record('renderer_process_gone', {
+      webContentsId: webContents.id,
+      reason: details.reason,
+      exitCode: details.exitCode
+    });
+  });
+  app.on('child-process-gone', (_event, details) => {
+    diagnosticLogger?.record('child_process_gone', {
+      type: details.type,
+      reason: details.reason,
+      exitCode: details.exitCode,
+      serviceName: details.serviceName
+    });
+  });
+}
+
+function observeWindowDiagnostics(window: BrowserWindow, kind: string): void {
+  const webContentsId = window.webContents.id;
+  window.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+    diagnosticLogger?.record('window_load_failed', {
+      kind,
+      webContentsId,
+      errorCode,
+      errorDescription
+    });
+  });
+  window.on('unresponsive', () => {
+    diagnosticLogger?.record('window_unresponsive', { kind, webContentsId });
+  });
+  window.on('responsive', () => {
+    diagnosticLogger?.record('window_responsive', { kind, webContentsId });
+  });
+}
+
 function createAutoLaunchDefaultState(userDataPath: string): AutoLaunchDefaultState {
   const markerPath = join(userDataPath, AUTO_LAUNCH_DEFAULT_MARKER);
 
@@ -684,6 +787,16 @@ function createPlatformUpdateController(): PlatformUpdateController | undefined 
   const beforeInstall = (): Promise<void> => getNotesManager().flushPendingSaves();
 
   if (shouldEnableAutoUpdates(process.platform, app.isPackaged)) {
+    const updater = electronUpdater.autoUpdater;
+    if (diagnosticLogger) {
+      updater.logger = diagnosticLogger;
+      disposeUpdateRequestDiagnostics = attachUpdaterRequestDiagnostics(
+        updater.netSession.webRequest,
+        diagnosticLogger,
+        undefined,
+        homedir()
+      );
+    }
     const progress = createUpdateProgressWindowManager({
       createWindow: createElectronUpdateProgressWindow,
       setFallbackProgress: (progressValue) => {
@@ -692,13 +805,16 @@ function createPlatformUpdateController(): PlatformUpdateController | undefined 
             window.setProgressBar(progressValue);
           }
         }
-      }
+      },
+      logError: createDiagnosticMessageLogger('update_progress_error')
     });
     return createUpdateController({
-      updater: electronUpdater.autoUpdater,
+      updater,
       dialog,
       beforeInstall,
-      progress
+      progress,
+      diagnostics: diagnosticLogger,
+      logError: createDiagnosticMessageLogger('windows_update_error')
     });
   }
 
@@ -712,6 +828,8 @@ function createPlatformUpdateController(): PlatformUpdateController | undefined 
         openPath: (filePath) => shell.openPath(filePath)
       }),
       beforeInstall,
+      diagnostics: diagnosticLogger,
+      logError: createDiagnosticMessageLogger('mac_update_error'),
       quit: () => app.quit(),
       setProgress: (progress) => {
         for (const window of BrowserWindow.getAllWindows()) {
@@ -732,12 +850,15 @@ app.whenReady().then(async () => {
   }
 
   const userDataPath = app.getPath('userData');
+  diagnosticLogger = createDiagnosticLog(userDataPath);
+  registerProcessDiagnostics();
   const notesPath = join(userDataPath, 'notes.json');
   const autoLaunchMarkerPath = join(userDataPath, AUTO_LAUNCH_DEFAULT_MARKER);
   const hadExistingInstallation =
     existsSync(notesPath) || existsSync(autoLaunchMarkerPath);
   releaseFeedbackWindowManager = createReleaseFeedbackWindowManager({
-    createWindow: createElectronReleaseFeedbackWindow
+    createWindow: createElectronReleaseFeedbackWindow,
+    logWarning: createDiagnosticMessageLogger('release_feedback_window_error')
   });
   releaseFeedbackController = createReleaseFeedbackController({
     currentVersion: app.getVersion(),
@@ -745,9 +866,11 @@ app.whenReady().then(async () => {
     hadExistingInstallation,
     releaseNotes: BUILT_RELEASE_NOTES,
     stateStore: createReleaseFeedbackStateStore({
-      filePath: join(userDataPath, RELEASE_FEEDBACK_STATE_FILENAME)
+      filePath: join(userDataPath, RELEASE_FEEDBACK_STATE_FILENAME),
+      logWarning: createDiagnosticMessageLogger('release_feedback_state_error')
     }),
-    presenter: releaseFeedbackWindowManager
+    presenter: releaseFeedbackWindowManager,
+    logWarning: createDiagnosticMessageLogger('release_feedback_error')
   });
   await releaseFeedbackController.initialize();
 
@@ -755,18 +878,22 @@ app.whenReady().then(async () => {
     const localProfile = await readLocalProfile(userDataPath);
     appCopy = getAppCopy(localProfile?.displayName);
   } catch (error) {
+    recordDiagnosticError('local_profile_load_failed', error);
     console.warn('Unable to load local profile', error);
   }
   const imageStorage = new LocalImageStorage(join(userDataPath, 'images'));
   protocol.handle(IMAGE_PROTOCOL, (request) => imageStorage.createImageResponse(request.url));
 
   notesManager = new NotesManager({
-    storage: new JsonNotesStorage(notesPath),
+    storage: new JsonNotesStorage(notesPath, (event, error) => {
+      diagnosticLogger?.record(event, { error });
+    }),
     imageStorage,
     createWindow: createElectronNoteWindow
   });
   imagePreviewController = new ImagePreviewController({
     createWindow: createElectronImagePreviewWindow,
+    logWarning: createDiagnosticMessageLogger('image_preview_error'),
     getSnapshot: (noteId, imageId) => {
       const note = getNotesManager().getNoteById(noteId);
       if (!note || !note.images.some((image) => image.id === imageId)) {
@@ -815,7 +942,10 @@ app.whenReady().then(async () => {
   app.once('before-quit', () => {
     releaseFeedbackController?.beginQuit();
     imagePreviewController?.dispose();
+    diagnosticLogger?.record('application_before_quit');
     updateController?.dispose?.();
+    disposeUpdateRequestDiagnostics?.();
+    disposeUpdateRequestDiagnostics = undefined;
   });
 
   // The tray right-click menu is the single global surface for app-level

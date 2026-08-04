@@ -167,7 +167,7 @@ describe('release feedback controller', () => {
     expect(presenter.show).not.toHaveBeenCalled();
   });
 
-  it('still permits manual viewing in development and prerelease builds using only the stable core chapter', async () => {
+  it('shows the current release followed by older archived releases for manual history viewing', async () => {
     const store = createStore('0.1.13');
     const presenter = createPresenter({ shown: true, source: 'manual' });
     const controller = createReleaseFeedbackController({
@@ -185,7 +185,7 @@ describe('release feedback controller', () => {
     expect(presenter.show).toHaveBeenCalledWith({
       initiatedBy: 'manual',
       version: '0.1.14-rc.1',
-      releases: [archive.releases[1]]
+      releases: archive.releases.slice(0, 2).reverse()
     });
     expect(store.save).not.toHaveBeenCalled();
   });

@@ -4,6 +4,21 @@
 
 ## [未发布]
 
+## [0.1.18] - 2026-08-04
+
+### 新增
+
+- 从托盘查看版本公告时，当前版本会优先完整展示，向下滚动可以继续回看更早的历史版本。
+
+### 变更
+
+- 适当增大版本公告窗口，让常规版本内容尽量一屏完整展示；内容较长或屏幕空间不足时仍可滚动查看。
+- 提升图片预览中关闭和左右切换按钮在浅色、深色及明暗混合图片上的常态可见性。
+
+### 修复
+
+- 长便签收起再展开后会恢复收起前的滚动位置，不再每次回到顶部。
+
 ## [0.1.17] - 2026-07-26
 
 ### 新增
@@ -174,7 +189,8 @@
 - 提供待办清单、图片、颜色和透明度等核心功能。
 - 开始接入系统托盘与开机启动能力。
 
-[未发布]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.17...HEAD
+[未发布]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.18...HEAD
+[0.1.18]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.17...v0.1.18
 [0.1.17]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.16...v0.1.17
 [0.1.16]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.15...v0.1.16
 [0.1.15]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.14...v0.1.15

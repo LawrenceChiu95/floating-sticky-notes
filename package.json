@@ -1,6 +1,6 @@
 {
   "name": "floating-sticky-notes",
-  "version": "0.1.17",
+  "version": "0.1.18",
   "private": true,
   "description": "本地优先、始终置顶的桌面便签应用。",
   "license": "MIT",
@@ -30,7 +30,8 @@
     "dist:mac": "npm run build:mac-icons && node scripts/build-mac.cjs",
     "preview": "electron-vite preview",
     "test": "vitest run --dir tests",
-    "test:watch": "vitest --dir tests"
+    "test:watch": "vitest --dir tests",
+    "dist:win:diagnostic": "node scripts/build-windows-diagnostic.cjs"
   },
   "build": {
     "appId": "local.lawrence.floating-sticky-notes",

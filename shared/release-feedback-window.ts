@@ -23,6 +23,7 @@ export type ReleaseFeedbackPresentationResult = {
 
 export type ReleaseFeedbackRenderedPayload = {
   contentHeight: number;
+  currentReleaseHeight?: number;
 };
 
 export function isReleaseFeedbackSnapshot(
@@ -53,7 +54,11 @@ export function isReleaseFeedbackRenderedPayload(
   return (
     typeof payload.contentHeight === 'number' &&
     Number.isFinite(payload.contentHeight) &&
-    payload.contentHeight >= 0
+    payload.contentHeight >= 0 &&
+    (payload.currentReleaseHeight === undefined ||
+      (typeof payload.currentReleaseHeight === 'number' &&
+        Number.isFinite(payload.currentReleaseHeight) &&
+        payload.currentReleaseHeight >= 0))
   );
 }
 

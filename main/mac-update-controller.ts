@@ -1,3 +1,4 @@
+import { createSafeDiagnosticRecorder, type DiagnosticRecorder } from './diagnostics';
 import { gt, valid } from 'semver';
 
 export type MacUpdateInfo = {
@@ -38,6 +39,7 @@ type MacUpdateControllerOptions = {
   currentVersion: string;
   dialog: MacUpdateDialog;
   service: MacUpdateService;
+  diagnostics?: DiagnosticRecorder;
   beforeInstall?: () => Promise<void>;
   quit?: () => void;
   setProgress?: (progress: number) => void;
@@ -60,10 +62,13 @@ export function createMacUpdateController(
   const quit = options.quit ?? (() => undefined);
   const setProgress = options.setProgress ?? (() => undefined);
   const logError = options.logError ?? ((message, error) => console.error(message, error));
+  const recordDiagnostic = createSafeDiagnosticRecorder(options.diagnostics).record;
   let phase: MacUpdatePhase = 'idle';
 
   const startCheck = async (isManual: boolean): Promise<void> => {
+    const source = isManual ? 'manual' : 'startup';
     if (phase !== 'idle') {
+      recordDiagnostic('mac_update_check_busy', { source, phase });
       if (isManual) {
         await options.dialog.showMessageBox({
           type: 'info',
@@ -82,11 +87,17 @@ export function createMacUpdateController(
 
     let reportErrors = isManual;
     phase = 'checking';
+    recordDiagnostic('mac_update_check_started', { source });
 
     try {
       const update = await options.service.getLatest();
+      recordDiagnostic('mac_update_metadata_loaded', {
+        source,
+        latestVersion: update.version
+      });
       if (!valid(options.currentVersion) || !gt(update.version, options.currentVersion)) {
         phase = 'idle';
+        recordDiagnostic('mac_update_not_available', { source, latestVersion: update.version });
         if (isManual) {
           await options.dialog.showMessageBox({
             type: 'info',
@@ -117,8 +128,16 @@ export function createMacUpdateController(
 
       phase = 'downloading';
       reportErrors = true;
+      recordDiagnostic('mac_update_download_started', {
+        version: update.version,
+        expectedSize: update.size
+      });
       setProgress(0);
       const filePath = await options.service.download(update, setProgress);
+      recordDiagnostic('mac_update_download_verified', {
+        version: update.version,
+        expectedSize: update.size
+      });
       setProgress(-1);
 
       phase = 'prompting';
@@ -141,8 +160,10 @@ export function createMacUpdateController(
 
       await beforeInstall();
       await options.service.openInstaller(filePath);
+      recordDiagnostic('mac_update_installer_opened', { version: update.version });
       quit();
     } catch (error) {
+      recordDiagnostic('mac_update_failed', { source, phase, error });
       phase = 'idle';
       setProgress(-1);
       logError('macOS update failed', error);

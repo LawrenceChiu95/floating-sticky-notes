@@ -22,8 +22,13 @@ export type NotesDocument = {
   notes: NoteRecord[];
 };
 
+export type NotesStorageLogger = (event: string, error: unknown) => void;
+
 export class JsonNotesStorage {
-  constructor(private readonly filePath: string) {}
+  constructor(
+    private readonly filePath: string,
+    private readonly logError: NotesStorageLogger = () => undefined
+  ) {}
 
   async load(): Promise<NotesDocument> {
     try {
@@ -33,14 +38,20 @@ export class JsonNotesStorage {
         return createEmptyDocument();
       }
 
+      this.logError('notes_primary_load_failed', error);
       return this.loadBackupOrEmpty();
     }
   }
 
   async save(document: NotesDocument): Promise<void> {
-    await mkdir(dirname(this.filePath), { recursive: true });
-    await this.backupCurrentDocument();
-    await writeFile(this.filePath, `${JSON.stringify(document, null, 2)}\n`, 'utf8');
+    try {
+      await mkdir(dirname(this.filePath), { recursive: true });
+      await this.backupCurrentDocument();
+      await writeFile(this.filePath, `${JSON.stringify(document, null, 2)}\n`, 'utf8');
+    } catch (error) {
+      this.logError('notes_save_failed', error);
+      throw error;
+    }
   }
 
   private get backupPath(): string {
@@ -62,7 +73,10 @@ export class JsonNotesStorage {
   private async loadBackupOrEmpty(): Promise<NotesDocument> {
     try {
       return await readDocument(this.backupPath);
-    } catch {
+    } catch (error) {
+      if (!isNodeError(error) || error.code !== 'ENOENT') {
+        this.logError('notes_backup_load_failed', error);
+      }
       return createEmptyDocument();
     }
   }

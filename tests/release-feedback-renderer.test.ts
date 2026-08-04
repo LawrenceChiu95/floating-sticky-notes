@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   createReleaseFeedbackView,
+  getCurrentReleaseWindowHeight,
   isReleaseFeedbackSnapshot
 } from '../renderer/src/release-feedback';
 
@@ -72,6 +73,11 @@ describe('release feedback renderer', () => {
       releases: [release],
       singleRelease: true
     });
+  });
+  it('measures a manual window from the current release instead of all history', () => {
+    expect(getCurrentReleaseWindowHeight(1220, 900, 260, 4)).toBe(584);
+    expect(getCurrentReleaseWindowHeight(100, 900, 0, 0)).toBe(0);
+    expect(getCurrentReleaseWindowHeight(Number.NaN, 900, 260, 4)).toBe(0);
   });
 
   it.each([

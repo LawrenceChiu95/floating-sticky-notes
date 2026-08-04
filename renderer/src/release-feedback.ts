@@ -117,16 +117,70 @@ function renderReleaseFeedback(
     }
   }
 
-  void reportWhenMeasured(elements.main);
+  const currentRelease = elements.releases.querySelector<HTMLElement>(
+    '.release-feedback__release:first-child'
+  );
+  void reportWhenMeasured(elements.main, currentRelease, snapshot.initiatedBy);
 }
 
-async function reportWhenMeasured(main: HTMLElement): Promise<void> {
+async function reportWhenMeasured(
+  main: HTMLElement,
+  currentRelease: HTMLElement | null,
+  initiatedBy: ReleaseFeedbackSnapshot['initiatedBy']
+): Promise<void> {
   await document.fonts.ready.catch(() => undefined);
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   const contentHeight = document.documentElement.scrollHeight;
+  const currentReleaseHeight =
+    initiatedBy === 'manual' && currentRelease
+      ? measureCurrentReleaseWindowHeight(currentRelease)
+      : undefined;
   main.classList.add('release-feedback--bounded');
-  window.releaseFeedback.reportRendered({ contentHeight });
+  window.releaseFeedback.reportRendered({
+    contentHeight,
+    ...(currentReleaseHeight === undefined ? {} : { currentReleaseHeight })
+  });
   main.focus();
+}
+
+function parseCssPixels(value: string): number {
+  const parsed = parseFloat(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function measureCurrentReleaseWindowHeight(currentRelease: HTMLElement): number {
+  const releases = currentRelease.parentElement;
+  if (!(releases instanceof HTMLElement)) {
+    return document.documentElement.scrollHeight;
+  }
+
+  const releasesStyle = getComputedStyle(releases);
+  const verticalPadding =
+    parseCssPixels(releasesStyle.paddingTop) + parseCssPixels(releasesStyle.paddingBottom);
+
+  return getCurrentReleaseWindowHeight(
+    document.documentElement.scrollHeight,
+    releases.scrollHeight,
+    currentRelease.scrollHeight,
+    verticalPadding
+  );
+}
+
+export function getCurrentReleaseWindowHeight(
+  documentHeight: number,
+  historyHeight: number,
+  currentReleaseHeight: number,
+  verticalPadding: number
+): number {
+  const values = [documentHeight, historyHeight, currentReleaseHeight, verticalPadding];
+  if (values.some((value) => !Number.isFinite(value))) {
+    return 0;
+  }
+
+  return Math.max(
+    0,
+    documentHeight - historyHeight + currentReleaseHeight + verticalPadding
+  );
 }
 
 function bindReleaseFeedback(): void {

@@ -10,7 +10,6 @@ import type { ReleaseFeedbackPresenter } from './release-feedback';
 
 const RELEASE_FEEDBACK_WINDOW_WIDTH = 440;
 const RELEASE_FEEDBACK_MIN_CONTENT_HEIGHT = 180;
-const RELEASE_FEEDBACK_MAX_CONTENT_HEIGHT = 560;
 
 export type ReleaseFeedbackWindowBounds = DisplayWorkArea;
 
@@ -55,10 +54,7 @@ export function calculateReleaseFeedbackWindowBounds(
   const width = Math.min(RELEASE_FEEDBACK_WINDOW_WIDTH, workArea.width);
   const maximumContentHeight = Math.max(
     RELEASE_FEEDBACK_MIN_CONTENT_HEIGHT,
-    Math.min(
-      RELEASE_FEEDBACK_MAX_CONTENT_HEIGHT,
-      Math.floor(workArea.height * 0.75)
-    )
+    Math.floor(workArea.height * 0.75)
   );
   const safeContentHeight = Number.isFinite(contentHeight) ? contentHeight : 0;
   const clampedContentHeight = Math.min(
@@ -259,7 +255,7 @@ export function createReleaseFeedbackWindowManager(
       try {
         const bounds = calculateReleaseFeedbackWindowBounds(
           presentation.window.workArea,
-          value.contentHeight,
+          value.currentReleaseHeight ?? value.contentHeight,
           presentation.window.getChromeHeight()
         );
         presentation.window.setBounds(bounds);

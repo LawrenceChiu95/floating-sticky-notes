@@ -5,16 +5,21 @@ import { describe, expect, it } from 'vitest';
 const mainSource = readFileSync(resolve(__dirname, '../main/main.ts'), 'utf8');
 
 describe('auto-update main-process wiring', () => {
-  it('uses electron-updater only for packaged Windows builds', () => {
+  it('uses electron-updater only for packaged Windows builds and connects diagnostics', () => {
     expect(mainSource).toContain("import electronUpdater from 'electron-updater';");
     expect(mainSource).not.toContain("import { autoUpdater } from 'electron-updater';");
     expect(mainSource).toMatch(
       /shouldEnableAutoUpdates\(\s*process\.platform,\s*app\.isPackaged\s*\)/
     );
     expect(mainSource).toContain('createUpdateController({');
-    expect(mainSource).toContain('updater: electronUpdater.autoUpdater');
+    expect(mainSource).toContain('const updater = electronUpdater.autoUpdater');
     expect(mainSource).toContain('createUpdateProgressWindowManager({');
-    expect(mainSource).toContain('progress');
+    expect(mainSource).not.toContain('STICKY_NOTES_UPDATE_DIAGNOSTIC_BUILD');
+    expect(mainSource).toContain('createDiagnosticLog(userDataPath)');
+    expect(mainSource).toContain('updater.logger = diagnosticLogger');
+    expect(mainSource).toContain('attachUpdaterRequestDiagnostics(');
+    expect(mainSource).toContain('diagnostics: diagnosticLogger');
+    expect(mainSource).not.toContain('showUpdateLog: () =>');
   });
 
   it('creates a secure ownerless progress window on the active display', () => {
@@ -31,12 +36,14 @@ describe('auto-update main-process wiring', () => {
     );
   });
 
-  it('uses the manual DMG flow only for packaged macOS builds', () => {
+  it('uses the manual DMG flow only for packaged macOS builds and connects diagnostics', () => {
     expect(mainSource).toContain('shouldEnableMacManualUpdates(');
     expect(mainSource).toContain('createMacUpdateController({');
     expect(mainSource).toContain('createMacUpdateService({');
     expect(mainSource).toContain("downloadsPath: app.getPath('downloads')");
     expect(mainSource).toContain('currentVersion: app.getVersion()');
+    expect(mainSource).toContain('diagnostics: diagnosticLogger');
+    expect(mainSource).toContain('mac_update_error');
     expect(mainSource).toContain('fetch: (input, init) => net.fetch(input, init)');
     expect(mainSource).toContain('openPath: (filePath) => shell.openPath(filePath)');
     expect(mainSource).toContain('window.setProgressBar(progress)');
