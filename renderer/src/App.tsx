@@ -137,10 +137,10 @@ function App(): JSX.Element {
   isUndockGrowingRef.current = isUndockGrowing;
   // 收起横条与贴边书签头的窗口拖动：macOS 没有任何「拖动结束」窗口事件，
   // moved 是 move 的别名，只有这里的 pointerup / pointercancel 才是真正的
-  // 松手。超过阈值后只发一次 start（带按下点相对窗口的抓取偏移），拖动期间
-  // 主进程自己跟光标，松手再发一次 finish——不逐帧走 IPC。started 之前不碰
-  // IPC，单击/双击命名不会触发任何窗口移动。展开态横条仍走原生
-  // -webkit-app-region。
+  // 松手。超过阈值后发一次 start（带按下点相对窗口的抓取偏移），之后每个
+  // pointermove 发一次 move（带光标屏幕坐标），主进程逐事件 setPosition
+  // 跟手，松手再发一次 finish。started 之前不碰 IPC，单击/双击命名不会触发
+  // 任何窗口移动。展开态横条仍走原生 -webkit-app-region。
   const noteWindowDragRef = useRef<{
     pointerId: number;
     offsetX: number;
@@ -903,7 +903,14 @@ function App(): JSX.Element {
   const handleNoteWindowDragPointerMove = (event: ReactPointerEvent<HTMLElement>): void => {
     const drag = noteWindowDragRef.current;
 
-    if (!drag || drag.pointerId !== event.pointerId || drag.started) {
+    if (!drag || drag.pointerId !== event.pointerId) {
+      return;
+    }
+
+    // 已开始拖动：每个指针事件都把光标屏幕坐标发给主进程直接移窗——事件驱
+    // 动与原生拖窗同源，比固定间隔轮询光标更跟手（不错相、无起步空窗）。
+    if (drag.started) {
+      window.stickyNotes.moveNoteWindowDrag(event.screenX, event.screenY);
       return;
     }
 
@@ -916,10 +923,11 @@ function App(): JSX.Element {
       return;
     }
 
-    // 超过阈值才通知主进程开始跟光标；窗口尚未移动过，按下时的 clientX/Y
-    // 仍是准确的抓取偏移。
+    // 超过阈值才通知主进程开始；start 与紧随的 move 在同一 IPC 管道上有序，
+    // 窗口立刻跟到当前光标位置，没有轮询起步空窗。
     drag.started = true;
-    void window.stickyNotes.startNoteWindowDrag(drag.offsetX, drag.offsetY);
+    window.stickyNotes.startNoteWindowDrag(drag.offsetX, drag.offsetY);
+    window.stickyNotes.moveNoteWindowDrag(event.screenX, event.screenY);
   };
 
   const handleNoteWindowDragPointerUp = (event: ReactPointerEvent<HTMLElement>): void => {
@@ -939,8 +947,8 @@ function App(): JSX.Element {
       return;
     }
 
-    // 松手才是真正的判定点：主进程停掉光标跟踪、补最后一段位移后判定。
-    void window.stickyNotes.finishNoteWindowDrag();
+    // 松手才是真正的判定点：事件自带屏幕坐标，主进程补最后一段位移后判定。
+    window.stickyNotes.finishNoteWindowDrag(event.screenX, event.screenY);
   };
 
   // 横条松手时已贴近工作区边缘：先把壳体视觉收到 96×32 的书签头，再由主进程
@@ -1113,9 +1121,9 @@ function App(): JSX.Element {
   );
 
   // 贴边态只渲染一枚横着的书签头：便签色实心底，有名字就横排显示一小段
-  // （认得出是哪张），没有按钮和正文，整枚可拖（主进程跟光标，松手才由主进程
-  // 判定展开或弹回）。拖出展开的生长动画由完整 DOM + undock-grow 尺寸钉住来演，
-  // 这里让位。
+  // （认得出是哪张），没有按钮和正文，整枚可拖（主进程按 move IPC 逐事件移
+  // 窗，松手才由主进程判定展开或弹回）。拖出展开的生长动画由完整 DOM +
+  // undock-grow 尺寸钉住来演，这里让位。
   if (dock && !isUndockGrowing) {
     return (
       <main

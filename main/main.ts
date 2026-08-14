@@ -113,38 +113,11 @@ let disposeUpdateRequestDiagnostics: (() => void) | undefined;
 // 每个便签窗口一份拖动会话：拖动期间暂存状态，松手 IPC 到达时按当前矩形
 // 判定贴边/拖出/弹回，并用 epoch 使过期 accept 失效。
 const noteWindowDragSessions = new Map<number, NoteWindowDragSession>();
-// 拖动期间主进程自己跟光标：start 只发一次（带光标相对窗口的抓取偏移），
-// 之后每个 tick 用 screen.getCursorScreenPoint() 直接 setPosition，不再
-// 每帧走 renderer → IPC → setBounds（那是拖动卡顿/发黏的根因）。
-const noteWindowDragTrackers = new Map<
-  number,
-  { offsetX: number; offsetY: number; timer: NodeJS.Timeout }
->();
-const NOTE_WINDOW_DRAG_FOLLOW_INTERVAL_MS = 16;
-
-function stopNoteWindowDragTracker(webContentsId: number, noteWindow?: BrowserWindow): void {
-  const tracker = noteWindowDragTrackers.get(webContentsId);
-
-  if (!tracker) {
-    return;
-  }
-
-  clearInterval(tracker.timer);
-  noteWindowDragTrackers.delete(webContentsId);
-
-  // 松手（或窗口关闭）时把最后一个 tick 内没来得及应用的光标位移补上，
-  // 判定永远基于真实松手位置。
-  if (noteWindow && !noteWindow.isDestroyed()) {
-    const cursor = screen.getCursorScreenPoint();
-    const bounds = noteWindow.getBounds();
-    const x = Math.round(cursor.x - tracker.offsetX);
-    const y = Math.round(cursor.y - tracker.offsetY);
-
-    if (bounds.x !== x || bounds.y !== y) {
-      noteWindow.setPosition(x, y, false);
-    }
-  }
-}
+// 拖动期间主进程按 renderer 每个 pointermove 发来的光标屏幕坐标直接
+// setPosition（事件驱动，与原生拖窗同源；16ms 轮询 getCursorScreenPoint 与
+// 输入事件、vsync 双双错相，同一帧移两次或零次，是真机卡顿/发黏的根因）。
+// 这里只存按下点相对窗口左上角的抓取偏移。
+const noteWindowDragOffsets = new Map<number, { offsetX: number; offsetY: number }>();
 
 // dev 与正式版共用安装身份,默认会读写同一份 userData(同一 notes.json)。
 // 开发模式提前切到独立目录,调试/删除永远碰不到正式数据;必须在
@@ -347,9 +320,9 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
 
   // 收起横条与贴边书签头的拖动不走 -webkit-app-region: drag：macOS 的 moved
   // 是 move 的别名，整个平台没有任何「拖动结束」窗口事件，基于 moved 静默期
-  // 的近似会把拖动中的停顿误判成松手。renderer 只在手势两端各发一次 IPC
-  // （start 带抓取偏移 / finish 即 pointerup/pointercancel），拖动期间主进程
-  // 自己用 screen.getCursorScreenPoint() 跟光标；finish 是唯一判定点。
+  // 的近似会把拖动中的停顿误判成松手。renderer 越过阈值后发 start（带抓取偏
+  // 移），拖动中每个 pointermove 发一次 move（带光标屏幕坐标），主进程直接
+  // setPosition 跟手；finish（pointerup/pointercancel）是唯一判定点。
   const dockDragSession = createNoteWindowDragSession({
     getPresentation: collapseController.getPresentation,
     getWorkAreas: () => screen.getAllDisplays().map((display) => display.workArea),
@@ -363,7 +336,7 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
   noteWindowDragSessions.set(noteWebContentsId, dockDragSession);
   noteWindow.on('closed', () => {
     noteWindowDragSessions.delete(noteWebContentsId);
-    stopNoteWindowDragTracker(noteWebContentsId);
+    noteWindowDragOffsets.delete(noteWebContentsId);
   });
   const flushPendingChanges = async (): Promise<void> => {
     await Promise.all([saveBounds.flush(), flushRendererPendingContent(noteWindow)]);
@@ -755,65 +728,83 @@ function registerIpcHandlers(): void {
     }
   });
 
-  // 收起横条/贴边书签头的手动拖动开始（renderer 指针超过拖动阈值后只发这
-  // 一次）：offset 是按下点相对窗口左上角的抓取偏移。之后主进程每个 tick
-  // 用 screen.getCursorScreenPoint() 直接跟光标 setPosition，拖动全程不再
-  // 走 renderer IPC。开始新拖动会即刻作废旧的 dock offer。
-  ipcMain.handle('sticky-notes:start-note-window-drag', (event, offsetX: unknown, offsetY: unknown) => {
+  // 收起横条/贴边书签头的手动拖动：三条通道全部 fire-and-forget（renderer
+  // 不用返回值），move 与 start/finish 在同一 IPC 管道上保持先后顺序。
+  // start 只带抓取偏移；之后每个 pointermove 发一次 move（带光标屏幕坐
+  // 标），主进程逐事件 setPosition——事件驱动与原生拖窗同源，不再有轮询
+  // 与 vsync 错相造成的抖动。开始新拖动会即刻作废旧的 dock offer。
+  ipcMain.on('sticky-notes:start-note-window-drag', (event, offsetX: unknown, offsetY: unknown) => {
     if (!isFiniteNumber(offsetX) || !isFiniteNumber(offsetY)) {
-      return false;
+      return;
     }
 
     const noteWindow = BrowserWindow.fromWebContents(event.sender);
     const session = noteWindowDragSessions.get(event.sender.id);
 
     if (!noteWindow || noteWindow.isDestroyed() || !session) {
-      return false;
+      return;
     }
 
-    // 展开态等不可手动拖动的状态直接拒绝，不挂光标跟踪。
+    // 展开态等不可手动拖动的状态直接拒绝，不记录抓取偏移。
     if (!session.beginDrag()) {
-      return false;
+      return;
     }
-
-    stopNoteWindowDragTracker(event.sender.id);
 
     const bounds = noteWindow.getBounds();
-    const tracker = {
+    noteWindowDragOffsets.set(event.sender.id, {
       // 抓取偏移夹进窗口矩形内，异常值不会让窗口松手前乱跳。
       offsetX: Math.min(Math.max(offsetX, 0), bounds.width),
-      offsetY: Math.min(Math.max(offsetY, 0), bounds.height),
-      timer: setInterval(() => {
-        if (noteWindow.isDestroyed()) {
-          stopNoteWindowDragTracker(event.sender.id);
-          return;
-        }
-
-        const cursor = screen.getCursorScreenPoint();
-        const current = noteWindow.getBounds();
-        const x = Math.round(cursor.x - tracker.offsetX);
-        const y = Math.round(cursor.y - tracker.offsetY);
-
-        if (current.x !== x || current.y !== y) {
-          noteWindow.setPosition(x, y, false);
-        }
-      }, NOTE_WINDOW_DRAG_FOLLOW_INTERVAL_MS)
-    };
-    noteWindowDragTrackers.set(event.sender.id, tracker);
-    return true;
+      offsetY: Math.min(Math.max(offsetY, 0), bounds.height)
+    });
   });
 
-  // 松手（pointerup/pointercancel）：停掉光标跟踪并补上最后一段位移后才
-  // 判定贴边/拖出/弹回。这是唯一的判定点——拖动中的任何停顿都不会触发判定。
-  ipcMain.handle('sticky-notes:finish-note-window-drag', (event) => {
+  ipcMain.on('sticky-notes:move-note-window-drag', (event, screenX: unknown, screenY: unknown) => {
+    if (!isFiniteNumber(screenX) || !isFiniteNumber(screenY)) {
+      return;
+    }
+
+    const offsets = noteWindowDragOffsets.get(event.sender.id);
+    const session = noteWindowDragSessions.get(event.sender.id);
+    const noteWindow = BrowserWindow.fromWebContents(event.sender);
+
+    // 未 start / 已 finish / 状态被拒绝的 move 一律忽略。
+    if (!offsets || !session?.isDragging() || !noteWindow || noteWindow.isDestroyed()) {
+      return;
+    }
+
+    const x = Math.round(screenX - offsets.offsetX);
+    const y = Math.round(screenY - offsets.offsetY);
+    const current = noteWindow.getBounds();
+
+    if (current.x !== x || current.y !== y) {
+      noteWindow.setPosition(x, y, false);
+    }
+  });
+
+  // 松手（pointerup/pointercancel）：先补上最后一个 move 之后的位移（事件自
+  // 带屏幕坐标），再判定贴边/拖出/弹回。这是唯一的判定点——拖动中的任何停
+  // 顿都不会触发判定。
+  ipcMain.on('sticky-notes:finish-note-window-drag', (event, screenX: unknown, screenY: unknown) => {
     const noteWindow = BrowserWindow.fromWebContents(event.sender);
     const session = noteWindowDragSessions.get(event.sender.id);
 
     if (!noteWindow || noteWindow.isDestroyed() || !session) {
-      return false;
+      return;
     }
 
-    stopNoteWindowDragTracker(event.sender.id, noteWindow);
+    const offsets = noteWindowDragOffsets.get(event.sender.id);
+    noteWindowDragOffsets.delete(event.sender.id);
+
+    if (offsets && isFiniteNumber(screenX) && isFiniteNumber(screenY)) {
+      const x = Math.round(screenX - offsets.offsetX);
+      const y = Math.round(screenY - offsets.offsetY);
+      const current = noteWindow.getBounds();
+
+      if (current.x !== x || current.y !== y) {
+        noteWindow.setPosition(x, y, false);
+      }
+    }
+
     const decision = session.endDrag(noteWindow.getBounds());
 
     if (decision.kind === 'dock-offer') {

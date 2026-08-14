@@ -57,11 +57,17 @@ contextBridge.exposeInMainWorld('stickyNotes', {
       ipcRenderer.removeListener('sticky-notes:undock-offer', subscription);
     };
   },
-  // 收起横条/贴边书签头的窗口拖动：手势两端各一次 IPC（start 带抓取偏移，
-  // finish 即松手），拖动期间由主进程自己跟光标。
-  startNoteWindowDrag: (offsetX: number, offsetY: number) =>
-    ipcRenderer.invoke('sticky-notes:start-note-window-drag', offsetX, offsetY),
-  finishNoteWindowDrag: () => ipcRenderer.invoke('sticky-notes:finish-note-window-drag'),
+  // 收起横条/贴边书签头的窗口拖动：start 带抓取偏移，之后每个 pointermove
+  // 发一次 move（带光标屏幕坐标），finish 即松手。全部 fire-and-forget。
+  startNoteWindowDrag: (offsetX: number, offsetY: number) => {
+    ipcRenderer.send('sticky-notes:start-note-window-drag', offsetX, offsetY);
+  },
+  moveNoteWindowDrag: (screenX: number, screenY: number) => {
+    ipcRenderer.send('sticky-notes:move-note-window-drag', screenX, screenY);
+  },
+  finishNoteWindowDrag: (screenX: number, screenY: number) => {
+    ipcRenderer.send('sticky-notes:finish-note-window-drag', screenX, screenY);
+  },
   acceptDock: (epoch: number) => ipcRenderer.invoke('sticky-notes:accept-dock', epoch),
   acceptUndock: (epoch: number) => ipcRenderer.invoke('sticky-notes:accept-undock', epoch),
   getAutoLaunchStatus: () => ipcRenderer.invoke('sticky-notes:get-auto-launch-status'),

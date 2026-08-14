@@ -34,7 +34,7 @@ describe('note window drag session', () => {
   it('produces no decision while the drag is in progress', () => {
     const session = createSession();
 
-    // 主进程跟光标期间（横条可能已停在左缘 10px 处）手势还没结束。
+    // 拖动期间（横条可能已停在左缘 10px 处）手势还没结束。
     expect(session.beginDrag()).toBe(true);
     expect(session.isDragging()).toBe(true);
 
@@ -47,7 +47,7 @@ describe('note window drag session', () => {
     const session = createSession({ presentation: 'expanded' });
 
     // 展开态横条走原生 app-region，手动拖动路径不得接管（主进程也不会
-    // 为它挂光标跟踪）。
+    // 为它记录抓取偏移、响应 move）。
     expect(session.beginDrag()).toBe(false);
     expect(session.isDragging()).toBe(false);
     expect(session.endDrag({ x: 0, y: 200, width: 280, height: 40 })).toEqual({ kind: 'none' });

@@ -131,25 +131,30 @@ describe('sticky note collapse wiring', () => {
     expect(globalTypes).toContain('acceptUndock: (epoch: number) => Promise<boolean>;');
   });
 
-  it('follows the cursor from the main process and decides only on a finished pointer drag', () => {
+  it('moves the window per pointer event and decides only on a finished pointer drag', () => {
     // macOS 的 moved 是 move 的别名，没有任何「拖动结束」窗口事件；收起/贴边态
-    // 不走 app-region。renderer 只在手势两端各发一次 IPC（start 带抓取偏移 /
-    // finish 即 pointerup/pointercancel），拖动期间主进程自己用
-    // screen.getCursorScreenPoint() 跟光标 setPosition——禁止每帧 IPC 拖窗。
-    expect(mainSource).toContain("ipcMain.handle('sticky-notes:start-note-window-drag'");
-    expect(mainSource).toContain("ipcMain.handle('sticky-notes:finish-note-window-drag'");
-    expect(mainSource).toContain('screen.getCursorScreenPoint()');
+    // 不走 app-region。renderer 越过阈值后发 start（带抓取偏移），拖动中每个
+    // pointermove 发一次 move（带光标屏幕坐标），主进程逐事件 setPosition——
+    // 事件驱动与原生拖窗同源；禁止回到固定间隔轮询 getCursorScreenPoint（与输
+    // 入事件、vsync 双双错相，是真机卡顿/发黏的根因）。
+    expect(mainSource).toContain("ipcMain.on('sticky-notes:start-note-window-drag'");
+    expect(mainSource).toContain("ipcMain.on('sticky-notes:move-note-window-drag'");
+    expect(mainSource).toContain("ipcMain.on('sticky-notes:finish-note-window-drag'");
+    expect(mainSource).not.toContain('NOTE_WINDOW_DRAG_FOLLOW_INTERVAL_MS');
+    expect(mainSource).not.toContain('noteWindowDragTrackers');
     expect(mainSource).not.toContain("'sticky-notes:drag-note-window'");
     expect(mainSource).not.toContain("noteWindow.on('will-move'");
     expect(mainSource).not.toContain("noteWindow.on('moved'");
     expect(mainSource).not.toContain('scheduleDockDragFinish');
-    expect(preloadSource).toContain("ipcRenderer.invoke('sticky-notes:start-note-window-drag'");
-    expect(preloadSource).toContain("ipcRenderer.invoke('sticky-notes:finish-note-window-drag')");
+    expect(preloadSource).toContain("ipcRenderer.send('sticky-notes:start-note-window-drag'");
+    expect(preloadSource).toContain("ipcRenderer.send('sticky-notes:move-note-window-drag'");
+    expect(preloadSource).toContain("ipcRenderer.send('sticky-notes:finish-note-window-drag'");
     expect(preloadSource).not.toContain('drag-note-window');
     expect(appSource).toContain('setPointerCapture');
     expect(appSource).toContain('onPointerUp');
     expect(appSource).toContain('startNoteWindowDrag');
-    expect(appSource).toContain('finishNoteWindowDrag()');
+    expect(appSource).toContain('moveNoteWindowDrag(event.screenX, event.screenY)');
+    expect(appSource).toContain('finishNoteWindowDrag(event.screenX, event.screenY)');
     expect(appSource).not.toContain('dragNoteWindow');
     expect(mainSource).toContain('resolveCollapsedDockSide');
     expect(mainSource).toContain("'sticky-notes:dock-offer'");
@@ -167,8 +172,8 @@ describe('sticky note collapse wiring', () => {
   });
 
   it('keeps manual drag surfaces off the native app-region in collapsed and docked states', () => {
-    // 收起横条与贴边书签头由主进程跟光标拖动；app-region drag 会与指针拖动
-    // 重复触发（原生拖窗 + 主进程移窗），必须显式 no-drag。展开态横条仍是原生拖动。
+    // 收起横条与贴边书签头由主进程按 move IPC 移窗；app-region drag 会与指针拖
+    // 动重复触发（原生拖窗 + 主进程移窗），必须显式 no-drag。展开态横条仍是原生拖动。
     expect(styles).toMatch(
       /\.note-shell--collapsed \.drag-bar\s*{[^}]*-webkit-app-region:\s*no-drag;/s
     );
@@ -195,7 +200,7 @@ describe('sticky note collapse wiring', () => {
     expect(styles).toMatch(/\.dock-tab-name\s*{[^}]*max-width:\s*100%;/s);
     expect(styles).not.toMatch(/\.dock-tab-name\s*{[^}]*writing-mode/s);
     expect(styles).toMatch(/\.dock-tab-name\s*{[^}]*pointer-events:\s*none;/s);
-    // 书签头的拖动由主进程跟光标（start/finish 各一次 IPC），松手才判定。
+    // 书签头的拖动由主进程按 move IPC 逐事件移窗，松手才判定。
     expect(appSource).toContain('onPointerDown={handleNoteWindowDragPointerDown}');
   });
 

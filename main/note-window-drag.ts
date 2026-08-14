@@ -35,11 +35,12 @@ type PendingDockOffer =
   | { kind: 'dock'; side: DockSide; y: number; epoch: number }
   | { kind: 'undock'; bounds: Rect; epoch: number };
 
-// 收起/贴边态的窗口移动由主进程直接跟光标（renderer 只在手势两端各发一次
-// IPC：start 带抓取偏移，finish 即 pointerup/pointercancel）。这个会话只
-// 回答两件事：拖动结束时按当前矩形判定贴边/拖出/弹回，以及 accept 是否是
-// 最后一次 offer。macOS 的 moved 是 move 的别名、没有任何「拖动结束」窗口
-// 事件，所以任何基于 moved 静默期的近似都不允许回到这里。
+// 收起/贴边态的窗口移动是事件驱动：renderer 越过阈值后发 start（带抓取偏
+// 移），拖动中每个 pointermove 发一次 move（带光标屏幕坐标），主进程逐事
+// 件 setPosition；finish 即 pointerup/pointercancel。这个会话只回答两件
+// 事：拖动结束时按当前矩形判定贴边/拖出/弹回，以及 accept 是否是最后一次
+// offer。macOS 的 moved 是 move 的别名、没有任何「拖动结束」窗口事件，所
+// 以任何基于 moved 静默期的近似都不允许回到这里。
 export function createNoteWindowDragSession(
   deps: NoteWindowDragSessionDeps
 ): NoteWindowDragSession {
@@ -50,7 +51,7 @@ export function createNoteWindowDragSession(
   return {
     beginDrag: () => {
       // 展开态不允许走这条手动拖动路径（它的横条仍是原生 app-region）；
-      // 拒绝开始，主进程也就不会为它挂光标跟踪。
+      // 拒绝开始，主进程也就不会为它记录抓取偏移、响应 move。
       const presentation = deps.getPresentation();
       if (presentation !== 'collapsed' && presentation !== 'docked') {
         return false;
