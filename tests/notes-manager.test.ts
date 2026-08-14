@@ -1,8 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import type { NoteImageStorage, SaveImageInput } from '../main/image-storage';
 import { createDefaultNote, NOTE_COLORS, type NoteRecord } from '../main/note-state';
-import { type CreateManagedNoteWindow, NotesManager, type ManagedNoteWindow } from '../main/notes-manager';
+import {
+  type CreateManagedNoteWindow,
+  NotesManager,
+  type ManagedNoteWindow
+} from '../main/notes-manager';
+import type {
+  NoteWindowDockTransition,
+  NoteWindowPresentation
+} from '../main/note-window-collapse';
 import type { NotesDocument } from '../main/storage';
+
+const DOCK_TEST_WORK_AREA = { x: 0, y: 25, width: 1440, height: 875 };
 
 describe('NotesManager', () => {
   it('creates and saves one default note window on first run', async () => {
@@ -891,6 +901,254 @@ describe('NotesManager', () => {
     ]);
   });
 
+  it('docks a collapsed note window and persists the dock without touching bounds', async () => {
+    const savedDocuments: NotesDocument[] = [];
+    const createdWindows: CreatedWindow[] = [];
+    const note = createDefaultNote({
+      id: 'note-1',
+      now: '2026-08-14T10:00:00.000Z'
+    });
+    note.bounds = { x: 200, y: 140, width: 360, height: 280 };
+    const manager = new NotesManager({
+      storage: {
+        load: async () => ({ version: 1, notes: [note] }),
+        save: async (document) => {
+          savedDocuments.push(document);
+        }
+      },
+      createWindow: createWindowFactory(createdWindows),
+      now: () => '2026-08-14T10:01:00.000Z'
+    });
+
+    await manager.start();
+    await manager.setCollapsedForWebContents(1, true);
+
+    await expect(
+      manager.dockNoteForWebContents(1, { side: 'left', y: 100, workArea: DOCK_TEST_WORK_AREA })
+    ).resolves.toBe(true);
+
+    expect(createdWindows[0].window.dockTransitions).toEqual([
+      { kind: 'dock', side: 'left', y: 100 }
+    ]);
+    expect(savedDocuments).toEqual([
+      {
+        version: 1,
+        notes: [
+          {
+            ...note,
+            dock: { side: 'left', y: 100 },
+            updatedAt: '2026-08-14T10:01:00.000Z'
+          }
+        ]
+      }
+    ]);
+    expect(savedDocuments[0].notes[0].bounds).toEqual({
+      x: 200,
+      y: 140,
+      width: 360,
+      height: 280
+    });
+  });
+
+  it('offsets a new sliver below an existing one docked on the same side', async () => {
+    const savedDocuments: NotesDocument[] = [];
+    const createdWindows: CreatedWindow[] = [];
+    const firstNote = createDefaultNote({
+      id: 'note-1',
+      now: '2026-08-14T10:00:00.000Z'
+    });
+    const secondNote = createDefaultNote({
+      id: 'note-2',
+      now: '2026-08-14T10:00:30.000Z'
+    });
+    secondNote.dock = { side: 'left', y: 100 };
+    const manager = new NotesManager({
+      storage: {
+        load: async () => ({ version: 1, notes: [firstNote, secondNote] }),
+        save: async (document) => {
+          savedDocuments.push(document);
+        }
+      },
+      createWindow: createWindowFactory(createdWindows)
+    });
+
+    await manager.start();
+    await manager.setCollapsedForWebContents(1, true);
+    await manager.dockNoteForWebContents(1, {
+      side: 'left',
+      y: 100,
+      workArea: DOCK_TEST_WORK_AREA
+    });
+
+    expect(createdWindows[0].window.dockTransitions).toEqual([
+      { kind: 'dock', side: 'left', y: 100 + 56 + 8 }
+    ]);
+    expect(savedDocuments.at(-1)?.notes[0]?.dock).toEqual({ side: 'left', y: 164 });
+    expect(savedDocuments.at(-1)?.notes[1]?.dock).toEqual({ side: 'left', y: 100 });
+  });
+
+  it('expands a docked note, clears the dock and stores the expanded bounds', async () => {
+    const savedDocuments: NotesDocument[] = [];
+    const createdWindows: CreatedWindow[] = [];
+    const note = createDefaultNote({
+      id: 'note-1',
+      now: '2026-08-14T10:00:00.000Z'
+    });
+    note.dock = { side: 'left', y: 100 };
+    const manager = new NotesManager({
+      storage: {
+        load: async () => ({ version: 1, notes: [note] }),
+        save: async (document) => {
+          savedDocuments.push(document);
+        }
+      },
+      createWindow: createWindowFactory(createdWindows),
+      now: () => '2026-08-14T10:02:00.000Z'
+    });
+
+    await manager.start();
+
+    await expect(
+      manager.undockNoteForWebContents(1, { x: 48, y: 100, width: 280, height: 220 })
+    ).resolves.toBe(true);
+
+    expect(createdWindows[0].window.dockTransitions).toEqual([
+      { kind: 'expand', bounds: { x: 48, y: 100, width: 280, height: 220 } }
+    ]);
+    expect(savedDocuments).toEqual([
+      {
+        version: 1,
+        notes: [
+          {
+            ...note,
+            bounds: { x: 48, y: 100, width: 280, height: 220 },
+            updatedAt: '2026-08-14T10:02:00.000Z'
+          }
+        ]
+      }
+    ]);
+    expect(savedDocuments[0].notes[0]).not.toHaveProperty('dock');
+  });
+
+  it('snaps a docked note back without persisting anything', async () => {
+    const savedDocuments: NotesDocument[] = [];
+    const createdWindows: CreatedWindow[] = [];
+    const note = createDefaultNote({
+      id: 'note-1',
+      now: '2026-08-14T10:00:00.000Z'
+    });
+    note.dock = { side: 'right', y: 100 };
+    const manager = new NotesManager({
+      storage: {
+        load: async () => ({ version: 1, notes: [note] }),
+        save: async (document) => {
+          savedDocuments.push(document);
+        }
+      },
+      createWindow: createWindowFactory(createdWindows)
+    });
+
+    await manager.start();
+
+    await expect(manager.snapBackDockForWebContents(1)).resolves.toBe(true);
+
+    expect(createdWindows[0].window.dockTransitions).toEqual([{ kind: 'snap-back' }]);
+    expect(savedDocuments).toEqual([]);
+    expect(manager.getNoteById('note-1')?.dock).toEqual({ side: 'right', y: 100 });
+  });
+
+  it('restores a persisted dock as a docked window on start', async () => {
+    const createdWindows: CreatedWindow[] = [];
+    const note = createDefaultNote({
+      id: 'note-1',
+      now: '2026-08-14T10:00:00.000Z'
+    });
+    note.dock = { side: 'left', y: 100 };
+    const manager = new NotesManager({
+      storage: {
+        load: async () => ({ version: 1, notes: [note] }),
+        save: async () => undefined
+      },
+      createWindow: createWindowFactory(createdWindows)
+    });
+
+    await manager.start();
+
+    expect(createdWindows[0].window.presentation).toBe('docked');
+    expect(manager.getNoteById('note-1')?.dock).toEqual({ side: 'left', y: 100 });
+  });
+
+  it('drops a persisted dock when the window could not be restored docked', async () => {
+    const savedDocuments: NotesDocument[] = [];
+    const createdWindows: CreatedWindow[] = [];
+    const note = createDefaultNote({
+      id: 'note-1',
+      now: '2026-08-14T10:00:00.000Z'
+    });
+    note.dock = { side: 'left', y: 100 };
+    const manager = new NotesManager({
+      storage: {
+        load: async () => ({ version: 1, notes: [note] }),
+        save: async (document) => {
+          savedDocuments.push(document);
+        }
+      },
+      createWindow: createWindowFactory(createdWindows, undefined, undefined, {
+        restoreDockedWindows: false
+      }),
+      now: () => '2026-08-14T10:03:00.000Z'
+    });
+
+    await manager.start();
+
+    expect(createdWindows[0].window.presentation).toBe('expanded');
+    expect(savedDocuments).toEqual([
+      {
+        version: 1,
+        notes: [
+          {
+            ...note,
+            updatedAt: '2026-08-14T10:03:00.000Z'
+          }
+        ]
+      }
+    ]);
+    expect(savedDocuments[0].notes[0]).not.toHaveProperty('dock');
+  });
+
+  it('keeps the dock and expanded bounds when a docked window reports native moves', async () => {
+    const savedDocuments: NotesDocument[] = [];
+    const createdWindows: CreatedWindow[] = [];
+    const note = createDefaultNote({
+      id: 'note-1',
+      now: '2026-08-14T10:00:00.000Z'
+    });
+    note.dock = { side: 'left', y: 100 };
+    const manager = new NotesManager({
+      storage: {
+        load: async () => ({ version: 1, notes: [note] }),
+        save: async (document) => {
+          savedDocuments.push(document);
+        }
+      },
+      createWindow: createWindowFactory(createdWindows),
+      now: () => '2026-08-14T10:04:00.000Z'
+    });
+
+    await manager.start();
+    // 主进程接线里 getBounds 返回的是持久化口径(展开矩形)，贴边拖动不会改写 bounds。
+    createdWindows[0].window.bounds = { x: 120, y: 80, width: 280, height: 220 };
+    await createdWindows[0].window.triggerBoundsChanged();
+
+    expect(savedDocuments.at(-1)?.notes[0]?.bounds).toEqual({
+      x: 120,
+      y: 80,
+      width: 280,
+      height: 220
+    });
+    expect(savedDocuments.at(-1)?.notes[0]?.dock).toEqual({ side: 'left', y: 100 });
+  });
+
   it('waits for note windows and queued storage writes to flush', async () => {
     const savedContents: string[] = [];
     let releaseWindowFlush: (() => void) | undefined;
@@ -955,6 +1213,9 @@ type TestWindow = ManagedNoteWindow & {
   focusCount: number;
   titles: string[];
   collapsedStates: boolean[];
+  dockTransitions: NoteWindowDockTransition[];
+  presentation: NoteWindowPresentation;
+  dock: NoteRecord['dock'];
   triggerBoundsChanged: () => Promise<void>;
   triggerClosed: () => void;
 };
@@ -988,13 +1249,15 @@ function createTestImageStorage(deletedImages: string[]): NoteImageStorage {
 function createWindowFactory(
   createdWindows: CreatedWindow[],
   flushPendingChanges: () => Promise<void> = async () => undefined,
-  applyCollapsed: (collapsed: boolean) => Promise<void> = async () => undefined
+  applyCollapsed: (collapsed: boolean) => Promise<void> = async () => undefined,
+  options: { restoreDockedWindows?: boolean } = {}
 ): CreateManagedNoteWindow {
   let nextWebContentsId = 1;
 
   return (note) => {
     let boundsChangedListener: (() => void | Promise<void>) | undefined;
     let closeListener: (() => void) | undefined;
+    const restoreDocked = options.restoreDockedWindows !== false && note.dock !== undefined;
     const window: TestWindow = {
       webContentsId: nextWebContentsId,
       bounds: note.bounds,
@@ -1004,7 +1267,12 @@ function createWindowFactory(
       focusCount: 0,
       titles: [],
       collapsedStates: [],
+      dockTransitions: [],
+      presentation: restoreDocked ? 'docked' : 'expanded',
+      dock: restoreDocked && note.dock ? { ...note.dock } : undefined,
       getBounds: () => window.bounds,
+      getPresentation: () => window.presentation,
+      getDockForPersistence: () => (window.dock ? { ...window.dock } : undefined),
       onBoundsChanged: (listener) => {
         boundsChangedListener = listener;
       },
@@ -1026,6 +1294,30 @@ function createWindowFactory(
       setCollapsed: async (collapsed) => {
         window.collapsedStates.push(collapsed);
         await applyCollapsed(collapsed);
+        if (collapsed && window.presentation === 'expanded') {
+          window.presentation = 'collapsed';
+        } else if (!collapsed && window.presentation === 'collapsed') {
+          window.presentation = 'expanded';
+        }
+      },
+      setDocked: async (next) => {
+        window.dockTransitions.push(next);
+        if (next.kind === 'dock') {
+          if (window.presentation !== 'collapsed') {
+            return;
+          }
+          window.presentation = 'docked';
+          window.dock = { side: next.side, y: next.y };
+          return;
+        }
+        if (next.kind === 'expand') {
+          if (window.presentation !== 'docked') {
+            return;
+          }
+          window.presentation = 'expanded';
+          window.dock = undefined;
+          window.bounds = { ...next.bounds };
+        }
       },
       flushPendingChanges: async () => {
         window.flushCount += 1;

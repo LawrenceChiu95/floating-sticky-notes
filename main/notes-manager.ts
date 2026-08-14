@@ -5,11 +5,17 @@ import {
   MAX_NOTE_COUNT,
   type NoteBounds,
   type NoteChecklistItemRecord,
+  type NoteDock,
   type NoteImageRecord,
   type NoteRecord
 } from './note-state';
 import type { NoteImageStorage, SaveImageInput } from './image-storage';
+import type {
+  NoteWindowDockTransition,
+  NoteWindowPresentation
+} from './note-window-collapse';
 import type { NotesDocument } from './storage';
+import { offsetDockYToAvoidOverlap, type DisplayWorkArea } from '../shared/note-dock';
 import { getNoteWindowTitle, normalizeNoteName } from '../shared/note-name';
 
 export type ManagedNoteWindow = {
@@ -22,6 +28,9 @@ export type ManagedNoteWindow = {
   focus: () => void;
   setTitle: (title: string) => void;
   setCollapsed: (collapsed: boolean) => Promise<void>;
+  setDocked: (next: NoteWindowDockTransition) => Promise<void>;
+  getPresentation: () => NoteWindowPresentation;
+  getDockForPersistence: () => NoteDock | undefined;
   close: () => void;
 };
 
@@ -327,7 +336,102 @@ export class NotesManager {
       return false;
     }
 
-    await this.windowsByNoteId.get(note.id)?.setCollapsed(collapsed);
+    const noteWindow = this.windowsByNoteId.get(note.id);
+    await noteWindow?.setCollapsed(collapsed);
+
+    // 防呆：收起/展开命令真正生效后，窗口不应还处于贴边；若 note 上残留
+    // dock（例如窗口未能按贴边恢复），一并清掉，避免脏数据留到下次启动。
+    if (note.dock && noteWindow?.getPresentation() !== 'docked') {
+      delete note.dock;
+      note.updatedAt = this.now();
+      await this.persist();
+    }
+
+    return true;
+  }
+
+  async dockNoteForWebContents(
+    webContentsId: number,
+    input: { side: 'left' | 'right'; y: number; workArea: DisplayWorkArea }
+  ): Promise<boolean> {
+    const note = this.getMutableNoteForWebContents(webContentsId);
+
+    if (!note) {
+      return false;
+    }
+
+    const noteWindow = this.windowsByNoteId.get(note.id);
+
+    if (!noteWindow) {
+      return false;
+    }
+
+    const y = offsetDockYToAvoidOverlap({
+      y: input.y,
+      side: input.side,
+      workArea: input.workArea,
+      occupied: this.getDockedSliversExcept(note.id)
+    });
+
+    await noteWindow.setDocked({ kind: 'dock', side: input.side, y });
+
+    const persistedDock = noteWindow.getDockForPersistence();
+
+    if (!persistedDock) {
+      return false;
+    }
+
+    note.dock = persistedDock;
+    note.updatedAt = this.now();
+    await this.persist();
+
+    return true;
+  }
+
+  async undockNoteForWebContents(
+    webContentsId: number,
+    bounds: Required<NoteBounds>
+  ): Promise<boolean> {
+    const note = this.getMutableNoteForWebContents(webContentsId);
+
+    if (!note) {
+      return false;
+    }
+
+    const noteWindow = this.windowsByNoteId.get(note.id);
+
+    if (!noteWindow) {
+      return false;
+    }
+
+    await noteWindow.setDocked({ kind: 'expand', bounds });
+
+    if (noteWindow.getPresentation() !== 'expanded') {
+      return false;
+    }
+
+    delete note.dock;
+    note.bounds = { ...bounds };
+    note.updatedAt = this.now();
+    await this.persist();
+
+    return true;
+  }
+
+  async snapBackDockForWebContents(webContentsId: number): Promise<boolean> {
+    const note = this.getMutableNoteForWebContents(webContentsId);
+
+    if (!note) {
+      return false;
+    }
+
+    const noteWindow = this.windowsByNoteId.get(note.id);
+
+    if (!noteWindow) {
+      return false;
+    }
+
+    await noteWindow.setDocked({ kind: 'snap-back' });
     return true;
   }
 
@@ -395,6 +499,14 @@ export class NotesManager {
     this.windowsByNoteId.set(note.id, noteWindow);
     this.noteIdByWebContentsId.set(noteWindow.webContentsId, note.id);
 
+    // 主进程在显示器夹不住缝时会按展开态建窗；此时持久化的 dock 已失效，
+    // 立即丢弃，避免下次启动再尝试恢复到一个不可见的贴边位置。
+    if (note.dock && noteWindow.getPresentation() !== 'docked') {
+      delete note.dock;
+      note.updatedAt = this.now();
+      void this.persist().catch(() => undefined);
+    }
+
     noteWindow.onBoundsChanged(() => {
       return this.updateBoundsForWebContents(noteWindow.webContentsId, noteWindow.getBounds());
     });
@@ -404,6 +516,25 @@ export class NotesManager {
     });
 
     return noteWindow;
+  }
+
+  private getDockedSliversExcept(noteId: string): Array<{ side: 'left' | 'right'; y: number }> {
+    const slivers: Array<{ side: 'left' | 'right'; y: number }> = [];
+
+    for (const [id, note] of this.notesById) {
+      if (id === noteId) {
+        continue;
+      }
+
+      const liveDock = this.windowsByNoteId.get(id)?.getDockForPersistence();
+      const dock = liveDock ?? note.dock;
+
+      if (dock) {
+        slivers.push(dock);
+      }
+    }
+
+    return slivers;
   }
 
   private async updateBoundsForWebContents(
