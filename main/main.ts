@@ -31,10 +31,6 @@ import { IMAGE_PROTOCOL, LocalImageStorage } from './image-storage';
 import { readLocalProfile } from './local-profile';
 import { createNoteWindowCollapseController } from './note-window-collapse';
 import {
-  createNoteWindowDragSession,
-  type NoteWindowDragSession
-} from './note-window-drag';
-import {
   createMacUpdateController,
   shouldEnableMacManualUpdates
 } from './mac-update-controller';
@@ -79,13 +75,14 @@ import {
   NOTE_MIN_HEIGHT,
   NOTE_MIN_WIDTH,
   NOTE_WINDOW_ICON_PATH,
-  clampNoteBoundsToWorkAreas,
   createNoteWindowOptions,
   type DisplayWorkArea
 } from './window-options';
 import { createDebouncedValueAction } from '../shared/debounced-action';
 import {
+  buildExpandBoundsFromDock,
   resolveCollapsedDockSide,
+  resolveDockedEdgeRelease,
   restoreDockedBounds
 } from '../shared/note-dock';
 import { DEFAULT_APP_COPY, getAppCopy, type AppCopy } from '../shared/app-copy';
@@ -110,14 +107,6 @@ let restoreNotesWhenReady = false;
 const AUTO_LAUNCH_DEFAULT_MARKER = '.auto-launch-default-applied';
 let diagnosticLogger: DiagnosticLogger | undefined;
 let disposeUpdateRequestDiagnostics: (() => void) | undefined;
-// 每个便签窗口一份拖动会话：拖动期间暂存状态，松手 IPC 到达时按当前矩形
-// 判定贴边/拖出/弹回，并用 epoch 使过期 accept 失效。
-const noteWindowDragSessions = new Map<number, NoteWindowDragSession>();
-// 拖动期间主进程按 renderer 每个 pointermove 发来的光标屏幕坐标直接
-// setPosition（事件驱动，与原生拖窗同源；16ms 轮询 getCursorScreenPoint 与
-// 输入事件、vsync 双双错相，同一帧移两次或零次，是真机卡顿/发黏的根因）。
-// 这里只存按下点相对窗口左上角的抓取偏移。
-const noteWindowDragOffsets = new Map<number, { offsetX: number; offsetY: number }>();
 
 // dev 与正式版共用安装身份,默认会读写同一份 userData(同一 notes.json)。
 // 开发模式提前切到独立目录,调试/删除永远碰不到正式数据;必须在
@@ -318,25 +307,92 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
     );
   }
 
-  // 收起横条与贴边书签头的拖动不走 -webkit-app-region: drag：macOS 的 moved
-  // 是 move 的别名，整个平台没有任何「拖动结束」窗口事件，基于 moved 静默期
-  // 的近似会把拖动中的停顿误判成松手。renderer 越过阈值后发 start（带抓取偏
-  // 移），拖动中每个 pointermove 发一次 move（带光标屏幕坐标），主进程直接
-  // setPosition 跟手；finish（pointerup/pointercancel）是唯一判定点。
-  const dockDragSession = createNoteWindowDragSession({
-    getPresentation: collapseController.getPresentation,
-    getWorkAreas: () => screen.getAllDisplays().map((display) => display.workArea),
-    getDockSide: () => collapseController.getDockForPersistence()?.side,
-    getDockedBounds: collapseController.getDockedBounds,
-    getExpandedSize: () => {
-      const persistedBounds = collapseController.getBoundsForPersistence();
-      return { width: persistedBounds.width, height: persistedBounds.height };
+  // 磁吸贴边：收起横条与贴边书签头都走原生 -webkit-app-region 拖窗（与展开
+  // 态同一套，不存在自定义拖窗的跟手损耗）。主进程在每个 move 上看当前矩形：
+  // 横条进入左右工作区缘 24px 内立即收成书签头；书签头被拖离边 ≥48px 立即
+  // 展开；未过阈值则把 x 钉回边缘（沿边滑动）。不看「松手」——macOS 没有拖
+  // 动结束事件，磁吸只关心当前位置过没过阈值，也不等 240ms 过渡。
+  let isMagneticTransitionInFlight = false;
+  noteWindow.on('move', () => {
+    if (isMagneticTransitionInFlight || noteWindow.isDestroyed()) {
+      return;
     }
-  });
-  noteWindowDragSessions.set(noteWebContentsId, dockDragSession);
-  noteWindow.on('closed', () => {
-    noteWindowDragSessions.delete(noteWebContentsId);
-    noteWindowDragOffsets.delete(noteWebContentsId);
+
+    const presentation = collapseController.getPresentation();
+
+    if (presentation === 'collapsed') {
+      const current = noteWindow.getBounds();
+      const workArea = screen.getDisplayMatching(current).workArea;
+      const side = resolveCollapsedDockSide(current, workArea);
+
+      if (!side) {
+        return;
+      }
+
+      isMagneticTransitionInFlight = true;
+      void getNotesManager()
+        .dockNoteForWebContents(noteWebContentsId, { side, y: current.y, workArea })
+        .then((didDock) => {
+          if (didDock && !noteWindow.isDestroyed()) {
+            noteWindow.webContents.send('sticky-notes:dock-applied', { dock: { side } });
+          }
+        })
+        .catch((error) => {
+          diagnosticLogger?.record('note_dock_failed', {
+            webContentsId: noteWebContentsId,
+            error
+          });
+        })
+        .finally(() => {
+          isMagneticTransitionInFlight = false;
+        });
+      return;
+    }
+
+    if (presentation !== 'docked') {
+      return;
+    }
+
+    const side = collapseController.getDockForPersistence()?.side;
+
+    if (!side) {
+      return;
+    }
+
+    const current = noteWindow.getBounds();
+    const workArea = screen.getDisplayMatching(current).workArea;
+
+    if (resolveDockedEdgeRelease({ side, current, workArea }) === 'stay') {
+      // 未过展开阈值：钉回边缘、y 跟随，书签头沿边滑动。
+      void collapseController.setDocked({ kind: 'slide', y: current.y });
+      return;
+    }
+
+    const persistedBounds = collapseController.getBoundsForPersistence();
+    const bounds = buildExpandBoundsFromDock({
+      side,
+      sliver: current,
+      expandedSize: { width: persistedBounds.width, height: persistedBounds.height },
+      workArea
+    });
+
+    isMagneticTransitionInFlight = true;
+    void getNotesManager()
+      .undockNoteForWebContents(noteWebContentsId, bounds)
+      .then((didUndock) => {
+        if (didUndock && !noteWindow.isDestroyed()) {
+          noteWindow.webContents.send('sticky-notes:dock-applied', { dock: null });
+        }
+      })
+      .catch((error) => {
+        diagnosticLogger?.record('note_undock_failed', {
+          webContentsId: noteWebContentsId,
+          error
+        });
+      })
+      .finally(() => {
+        isMagneticTransitionInFlight = false;
+      });
   });
   const flushPendingChanges = async (): Promise<void> => {
     await Promise.all([saveBounds.flush(), flushRendererPendingContent(noteWindow)]);
@@ -722,200 +778,6 @@ function registerIpcHandlers(): void {
       diagnosticLogger?.record('note_collapse_failed', {
         webContentsId: event.sender.id,
         collapsed,
-        error
-      });
-      return false;
-    }
-  });
-
-  // 收起横条/贴边书签头的手动拖动：三条通道全部 fire-and-forget（renderer
-  // 不用返回值），move 与 start/finish 在同一 IPC 管道上保持先后顺序。
-  // start 只带抓取偏移；之后每个 pointermove 发一次 move（带光标屏幕坐
-  // 标），主进程逐事件 setPosition——事件驱动与原生拖窗同源，不再有轮询
-  // 与 vsync 错相造成的抖动。开始新拖动会即刻作废旧的 dock offer。
-  ipcMain.on('sticky-notes:start-note-window-drag', (event, offsetX: unknown, offsetY: unknown) => {
-    if (!isFiniteNumber(offsetX) || !isFiniteNumber(offsetY)) {
-      return;
-    }
-
-    const noteWindow = BrowserWindow.fromWebContents(event.sender);
-    const session = noteWindowDragSessions.get(event.sender.id);
-
-    if (!noteWindow || noteWindow.isDestroyed() || !session) {
-      return;
-    }
-
-    // 展开态等不可手动拖动的状态直接拒绝，不记录抓取偏移。
-    if (!session.beginDrag()) {
-      return;
-    }
-
-    const bounds = noteWindow.getBounds();
-    noteWindowDragOffsets.set(event.sender.id, {
-      // 抓取偏移夹进窗口矩形内，异常值不会让窗口松手前乱跳。
-      offsetX: Math.min(Math.max(offsetX, 0), bounds.width),
-      offsetY: Math.min(Math.max(offsetY, 0), bounds.height)
-    });
-  });
-
-  ipcMain.on('sticky-notes:move-note-window-drag', (event, screenX: unknown, screenY: unknown) => {
-    if (!isFiniteNumber(screenX) || !isFiniteNumber(screenY)) {
-      return;
-    }
-
-    const offsets = noteWindowDragOffsets.get(event.sender.id);
-    const session = noteWindowDragSessions.get(event.sender.id);
-    const noteWindow = BrowserWindow.fromWebContents(event.sender);
-
-    // 未 start / 已 finish / 状态被拒绝的 move 一律忽略。
-    if (!offsets || !session?.isDragging() || !noteWindow || noteWindow.isDestroyed()) {
-      return;
-    }
-
-    const x = Math.round(screenX - offsets.offsetX);
-    const y = Math.round(screenY - offsets.offsetY);
-    const current = noteWindow.getBounds();
-
-    if (current.x !== x || current.y !== y) {
-      noteWindow.setPosition(x, y, false);
-    }
-  });
-
-  // 松手（pointerup/pointercancel）：先补上最后一个 move 之后的位移（事件自
-  // 带屏幕坐标），再判定贴边/拖出/弹回。这是唯一的判定点——拖动中的任何停
-  // 顿都不会触发判定。
-  ipcMain.on('sticky-notes:finish-note-window-drag', (event, screenX: unknown, screenY: unknown) => {
-    const noteWindow = BrowserWindow.fromWebContents(event.sender);
-    const session = noteWindowDragSessions.get(event.sender.id);
-
-    if (!noteWindow || noteWindow.isDestroyed() || !session) {
-      return;
-    }
-
-    const offsets = noteWindowDragOffsets.get(event.sender.id);
-    noteWindowDragOffsets.delete(event.sender.id);
-
-    if (offsets && isFiniteNumber(screenX) && isFiniteNumber(screenY)) {
-      const x = Math.round(screenX - offsets.offsetX);
-      const y = Math.round(screenY - offsets.offsetY);
-      const current = noteWindow.getBounds();
-
-      if (current.x !== x || current.y !== y) {
-        noteWindow.setPosition(x, y, false);
-      }
-    }
-
-    const decision = session.endDrag(noteWindow.getBounds());
-
-    if (decision.kind === 'dock-offer') {
-      if (!event.sender.isDestroyed()) {
-        event.sender.send('sticky-notes:dock-offer', {
-          side: decision.side,
-          y: decision.y,
-          epoch: decision.epoch
-        });
-      }
-      return true;
-    }
-
-    if (decision.kind === 'undock-offer') {
-      if (!event.sender.isDestroyed()) {
-        event.sender.send('sticky-notes:undock-offer', {
-          bounds: decision.bounds,
-          epoch: decision.epoch
-        });
-      }
-      return true;
-    }
-
-    if (decision.kind === 'snap-back') {
-      void getNotesManager()
-        .snapBackDockForWebContents(event.sender.id)
-        .catch((error) => {
-          diagnosticLogger?.record('note_dock_snap_back_failed', {
-            webContentsId: event.sender.id,
-            error
-          });
-        });
-    }
-
-    return true;
-  });
-
-  ipcMain.handle('sticky-notes:accept-dock', async (event, epoch: unknown) => {
-    if (!isFiniteNumber(epoch)) {
-      return false;
-    }
-
-    const session = noteWindowDragSessions.get(event.sender.id);
-    const senderWindow = BrowserWindow.fromWebContents(event.sender);
-
-    if (!session || !senderWindow || senderWindow.isDestroyed()) {
-      return false;
-    }
-
-    // epoch 只认最后一次 offer；手还在拖或已重新拖动时旧 offer 已作废。
-    const offer = session.acceptDockOffer(epoch);
-
-    if (!offer) {
-      return false;
-    }
-
-    const currentBounds = senderWindow.getBounds();
-    const workArea = screen.getDisplayMatching(currentBounds).workArea;
-
-    // renderer 播收缩视觉期间用户可能又把横条拖离边缘；滞后的 accept 不得贴边。
-    if (resolveCollapsedDockSide(currentBounds, workArea) !== offer.side) {
-      return false;
-    }
-
-    try {
-      return await getNotesManager().dockNoteForWebContents(event.sender.id, {
-        side: offer.side,
-        y: offer.y,
-        workArea
-      });
-    } catch (error) {
-      diagnosticLogger?.record('note_dock_failed', {
-        webContentsId: event.sender.id,
-        error
-      });
-      return false;
-    }
-  });
-
-  ipcMain.handle('sticky-notes:accept-undock', async (event, epoch: unknown) => {
-    if (!isFiniteNumber(epoch)) {
-      return false;
-    }
-
-    const session = noteWindowDragSessions.get(event.sender.id);
-
-    if (!session) {
-      return false;
-    }
-
-    // 展开矩形由主进程在松手判定时算好并存在会话里；renderer 传任何值都
-    // 不参与，松手位移不足 48px 时根本不会有 undock offer。
-    const offer = session.acceptUndockOffer(epoch);
-
-    if (!offer) {
-      return false;
-    }
-
-    const workAreas = screen.getAllDisplays().map((display) => display.workArea);
-    const clampedBounds = clampNoteBoundsToWorkAreas(offer.bounds, workAreas);
-
-    try {
-      return await getNotesManager().undockNoteForWebContents(event.sender.id, {
-        x: clampedBounds.x ?? offer.bounds.x,
-        y: clampedBounds.y ?? offer.bounds.y,
-        width: clampedBounds.width,
-        height: clampedBounds.height
-      });
-    } catch (error) {
-      diagnosticLogger?.record('note_undock_failed', {
-        webContentsId: event.sender.id,
         error
       });
       return false;

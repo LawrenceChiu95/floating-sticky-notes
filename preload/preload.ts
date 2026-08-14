@@ -5,20 +5,8 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 // 而 sandbox:true 的预览窗 preload 不允许 require 相对文件,会导致预览窗桥建立失败、整页黑屏。
 const IMAGE_PREVIEW_OPEN_CHANNEL = 'sticky-notes:image-preview:open';
 
-type DockOfferPayload = {
-  side: 'left' | 'right';
-  y: number;
-  epoch: number;
-};
-
-type UndockOfferPayload = {
-  bounds: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  };
-  epoch: number;
+type DockAppliedPayload = {
+  dock: { side: 'left' | 'right' } | null;
 };
 
 contextBridge.exposeInMainWorld('stickyNotes', {
@@ -39,37 +27,17 @@ contextBridge.exposeInMainWorld('stickyNotes', {
     ipcRenderer.invoke('sticky-notes:update-appearance', appearance),
   setCollapsed: (collapsed: boolean) =>
     ipcRenderer.invoke('sticky-notes:set-collapsed', collapsed),
-  onDockOffer: (listener: (payload: DockOfferPayload) => void) => {
-    const subscription = (_event: IpcRendererEvent, payload: DockOfferPayload): void => {
+  // 磁吸贴边/展开由主进程在原生拖动的 move 上直接改窗口几何，完成后用
+  // dock-applied 通知 renderer 切 DOM；不再有 offer/accept 与自定义拖窗 IPC。
+  onDockApplied: (listener: (payload: DockAppliedPayload) => void) => {
+    const subscription = (_event: IpcRendererEvent, payload: DockAppliedPayload): void => {
       listener(payload);
     };
-    ipcRenderer.on('sticky-notes:dock-offer', subscription);
+    ipcRenderer.on('sticky-notes:dock-applied', subscription);
     return () => {
-      ipcRenderer.removeListener('sticky-notes:dock-offer', subscription);
+      ipcRenderer.removeListener('sticky-notes:dock-applied', subscription);
     };
   },
-  onUndockOffer: (listener: (payload: UndockOfferPayload) => void) => {
-    const subscription = (_event: IpcRendererEvent, payload: UndockOfferPayload): void => {
-      listener(payload);
-    };
-    ipcRenderer.on('sticky-notes:undock-offer', subscription);
-    return () => {
-      ipcRenderer.removeListener('sticky-notes:undock-offer', subscription);
-    };
-  },
-  // 收起横条/贴边书签头的窗口拖动：start 带抓取偏移，之后每个 pointermove
-  // 发一次 move（带光标屏幕坐标），finish 即松手。全部 fire-and-forget。
-  startNoteWindowDrag: (offsetX: number, offsetY: number) => {
-    ipcRenderer.send('sticky-notes:start-note-window-drag', offsetX, offsetY);
-  },
-  moveNoteWindowDrag: (screenX: number, screenY: number) => {
-    ipcRenderer.send('sticky-notes:move-note-window-drag', screenX, screenY);
-  },
-  finishNoteWindowDrag: (screenX: number, screenY: number) => {
-    ipcRenderer.send('sticky-notes:finish-note-window-drag', screenX, screenY);
-  },
-  acceptDock: (epoch: number) => ipcRenderer.invoke('sticky-notes:accept-dock', epoch),
-  acceptUndock: (epoch: number) => ipcRenderer.invoke('sticky-notes:accept-undock', epoch),
   getAutoLaunchStatus: () => ipcRenderer.invoke('sticky-notes:get-auto-launch-status'),
   setAutoLaunchEnabled: (enabled: boolean) =>
     ipcRenderer.invoke('sticky-notes:set-auto-launch-enabled', enabled),

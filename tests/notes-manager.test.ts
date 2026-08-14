@@ -1030,33 +1030,6 @@ describe('NotesManager', () => {
     expect(savedDocuments[0].notes[0]).not.toHaveProperty('dock');
   });
 
-  it('snaps a docked note back without persisting anything', async () => {
-    const savedDocuments: NotesDocument[] = [];
-    const createdWindows: CreatedWindow[] = [];
-    const note = createDefaultNote({
-      id: 'note-1',
-      now: '2026-08-14T10:00:00.000Z'
-    });
-    note.dock = { side: 'right', y: 100 };
-    const manager = new NotesManager({
-      storage: {
-        load: async () => ({ version: 1, notes: [note] }),
-        save: async (document) => {
-          savedDocuments.push(document);
-        }
-      },
-      createWindow: createWindowFactory(createdWindows)
-    });
-
-    await manager.start();
-
-    await expect(manager.snapBackDockForWebContents(1)).resolves.toBe(true);
-
-    expect(createdWindows[0].window.dockTransitions).toEqual([{ kind: 'snap-back' }]);
-    expect(savedDocuments).toEqual([]);
-    expect(manager.getNoteById('note-1')?.dock).toEqual({ side: 'right', y: 100 });
-  });
-
   it('restores a persisted dock as a docked window on start', async () => {
     const createdWindows: CreatedWindow[] = [];
     const note = createDefaultNote({
@@ -1116,7 +1089,7 @@ describe('NotesManager', () => {
     expect(savedDocuments[0].notes[0]).not.toHaveProperty('dock');
   });
 
-  it('keeps the dock and expanded bounds when a docked window reports native moves', async () => {
+  it('keeps expanded bounds and follows the live dock y when a docked window reports native moves', async () => {
     const savedDocuments: NotesDocument[] = [];
     const createdWindows: CreatedWindow[] = [];
     const note = createDefaultNote({
@@ -1136,8 +1109,10 @@ describe('NotesManager', () => {
     });
 
     await manager.start();
-    // 主进程接线里 getBounds 返回的是持久化口径(展开矩形)，贴边拖动不会改写 bounds。
+    // 主进程接线里 getBounds 返回的是持久化口径(展开矩形)，磁吸沿边滑动不会
+    // 改写 bounds；dock.y 跟随当前位置。
     createdWindows[0].window.bounds = { x: 120, y: 80, width: 280, height: 220 };
+    createdWindows[0].window.dock = { side: 'left', y: 132 };
     await createdWindows[0].window.triggerBoundsChanged();
 
     expect(savedDocuments.at(-1)?.notes[0]?.bounds).toEqual({
@@ -1146,7 +1121,7 @@ describe('NotesManager', () => {
       width: 280,
       height: 220
     });
-    expect(savedDocuments.at(-1)?.notes[0]?.dock).toEqual({ side: 'left', y: 100 });
+    expect(savedDocuments.at(-1)?.notes[0]?.dock).toEqual({ side: 'left', y: 132 });
   });
 
   it('waits for note windows and queued storage writes to flush', async () => {

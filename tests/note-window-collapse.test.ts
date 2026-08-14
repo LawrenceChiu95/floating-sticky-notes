@@ -192,22 +192,40 @@ describe('note window dock controller', () => {
     });
   });
 
-  it('snaps a docked sliver back to its pre-drag bounds', async () => {
+  it('slides a docked tab along the edge: x pinned, y follows clamped to the work area', async () => {
     const harness = createWindowHarness({ x: 120, y: 80, width: 320, height: 260 });
     const controller = createController(harness);
     await controller.setCollapsed(true);
     await controller.setDocked({ kind: 'dock', side: 'left', y: 80 });
+    // 原生拖动把书签头拖离边缘（x=60）并下移：未过展开阈值时钉回 x、跟随 y。
     harness.moveTo(60, 132);
 
-    await controller.setDocked({ kind: 'snap-back' });
+    await controller.setDocked({ kind: 'slide', y: 132 });
 
     expect(harness.getNativeState()).toEqual({
-      bounds: { x: 0, y: 80, width: 96, height: 32 },
+      bounds: { x: 0, y: 132, width: 96, height: 32 },
       minimumSize: [96, 32],
       resizable: false
     });
     expect(controller.getPresentation()).toBe('docked');
-    expect(controller.getDockForPersistence()).toEqual({ side: 'left', y: 80 });
+    expect(controller.getDockedBounds()).toEqual({ x: 0, y: 132, width: 96, height: 32 });
+    expect(controller.getDockForPersistence()).toEqual({ side: 'left', y: 132 });
+  });
+
+  it('clamps the slide y into the work area', async () => {
+    const harness = createWindowHarness({ x: 120, y: 80, width: 320, height: 260 });
+    const controller = createController(harness);
+    await controller.setCollapsed(true);
+    await controller.setDocked({ kind: 'dock', side: 'right', y: 80 });
+
+    await controller.setDocked({ kind: 'slide', y: 5000 });
+
+    expect(harness.getNativeState().bounds).toEqual({
+      x: 1440 - 96,
+      y: 900 - 32,
+      width: 96,
+      height: 32
+    });
   });
 
   it('rolls back a failed dock entry and allows the same transition to be retried', async () => {
@@ -268,16 +286,16 @@ describe('note window dock controller', () => {
     });
   });
 
-  it('ignores a snap-back when the sliver never left its dock bounds', async () => {
+  it('ignores a slide that lands on the current dock bounds', async () => {
     const harness = createWindowHarness({ x: 120, y: 80, width: 320, height: 260 });
     const controller = createController(harness);
     await controller.setCollapsed(true);
     await controller.setDocked({ kind: 'dock', side: 'left', y: 80 });
     harness.failNext('setBounds');
 
-    // 已经在贴边矩形上时 snap-back 不得再触发 setBounds（macOS 上 moved 连续
-    // 触发，没有这道短路会反复重设同一个矩形）。
-    await controller.setDocked({ kind: 'snap-back' });
+    // 已经在目标矩形上时 slide 不得再触发 setBounds（磁吸在 move 上连续触发，
+    // 没有这道短路会反复重设同一个矩形）。
+    await controller.setDocked({ kind: 'slide', y: 80 });
 
     expect(controller.getPresentation()).toBe('docked');
     expect(harness.getNativeState().bounds).toEqual({ x: 0, y: 80, width: 96, height: 32 });

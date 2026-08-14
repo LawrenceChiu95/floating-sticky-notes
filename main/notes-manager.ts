@@ -418,23 +418,6 @@ export class NotesManager {
     return true;
   }
 
-  async snapBackDockForWebContents(webContentsId: number): Promise<boolean> {
-    const note = this.getMutableNoteForWebContents(webContentsId);
-
-    if (!note) {
-      return false;
-    }
-
-    const noteWindow = this.windowsByNoteId.get(note.id);
-
-    if (!noteWindow) {
-      return false;
-    }
-
-    await noteWindow.setDocked({ kind: 'snap-back' });
-    return true;
-  }
-
   async deleteNoteForWebContents(webContentsId: number): Promise<boolean> {
     const noteId = this.noteIdByWebContentsId.get(webContentsId);
 
@@ -508,7 +491,11 @@ export class NotesManager {
     }
 
     noteWindow.onBoundsChanged(() => {
-      return this.updateBoundsForWebContents(noteWindow.webContentsId, noteWindow.getBounds());
+      return this.updateBoundsForWebContents(
+        noteWindow.webContentsId,
+        noteWindow.getBounds(),
+        noteWindow.getDockForPersistence()
+      );
     });
     noteWindow.onClose(() => {
       this.windowsByNoteId.delete(note.id);
@@ -539,7 +526,8 @@ export class NotesManager {
 
   private async updateBoundsForWebContents(
     webContentsId: number,
-    bounds: NoteBounds
+    bounds: NoteBounds,
+    dock?: { side: 'left' | 'right'; y: number }
   ): Promise<void> {
     const note = this.getMutableNoteForWebContents(webContentsId);
 
@@ -548,6 +536,11 @@ export class NotesManager {
     }
 
     note.bounds = bounds;
+    // 贴边窗口的磁吸沿边滑动也算 bounds 变化：dock.y 跟随当前位置，
+    // bounds 仍只记展开态矩形（getBounds 已保证）。
+    if (dock) {
+      note.dock = dock;
+    }
     note.updatedAt = this.now();
     await this.persist();
   }

@@ -29,7 +29,7 @@ export type NoteWindowPresentation = 'expanded' | 'collapsed' | 'docked';
 export type NoteWindowDockTransition =
   | { kind: 'dock'; side: DockSide; y: number }
   | { kind: 'expand'; bounds: NativeNoteWindowBounds }
-  | { kind: 'snap-back' };
+  | { kind: 'slide'; y: number };
 
 type NoteWindowCollapseControllerOptions = {
   window: CollapsibleNoteWindow;
@@ -209,21 +209,37 @@ export function createNoteWindowCollapseController(
       return;
     }
 
-    if (presentation !== 'docked' || !dockedBounds) {
+    // 磁吸沿边滑动：书签头被原生拖动但未过展开阈值时，把 x 钉回贴边那一侧、
+    // y 跟随（夹进工作区）。没有「松手」事件可用，所以拖动中持续钉边，
+    // 松手停在边上就一定是贴边位置。
+    if (presentation !== 'docked' || !dockedBounds || !dockSide) {
       return;
     }
 
     const currentBounds = noteWindow.getBounds();
+    const workArea = findNearestWorkArea(currentBounds, options.getWorkAreas());
+    const minY = workArea ? workArea.y : Number.NEGATIVE_INFINITY;
+    const maxY = workArea
+      ? workArea.y + workArea.height - NOTE_DOCK_HEIGHT
+      : Number.POSITIVE_INFINITY;
+    const targetBounds: NativeNoteWindowBounds = {
+      x: dockedBounds.x,
+      y: Math.min(Math.max(next.y, minY), Math.max(minY, maxY)),
+      width: NOTE_DOCK_WIDTH,
+      height: NOTE_DOCK_HEIGHT
+    };
+
     if (
-      currentBounds.x === dockedBounds.x &&
-      currentBounds.y === dockedBounds.y &&
-      currentBounds.width === dockedBounds.width &&
-      currentBounds.height === dockedBounds.height
+      currentBounds.x === targetBounds.x &&
+      currentBounds.y === targetBounds.y &&
+      currentBounds.width === targetBounds.width &&
+      currentBounds.height === targetBounds.height
     ) {
       return;
     }
 
-    noteWindow.setBounds(dockedBounds, false);
+    noteWindow.setBounds(targetBounds, false);
+    dockedBounds = targetBounds;
   };
 
   return {

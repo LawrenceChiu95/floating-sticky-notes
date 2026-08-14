@@ -7,7 +7,7 @@ import {
   NOTE_DOCK_STACK_GAP_PX,
   NOTE_DOCK_MIN_GRAB_PX,
   resolveCollapsedDockSide,
-  resolveDockedRelease,
+  resolveDockedEdgeRelease,
   buildDockedBounds,
   buildExpandBoundsFromDock,
   offsetDockYToAvoidOverlap,
@@ -41,35 +41,36 @@ describe('note dock geometry', () => {
     ).toBe('left');
   });
 
-  it('unfolds a docked sliver only after 48px inward travel', () => {
+  it('unfolds a docked tab once it sits 48px inside the work-area edge', () => {
     expect(
-      resolveDockedRelease({
+      resolveDockedEdgeRelease({
         side: 'left',
-        origin: { x: 0, y: 80, width: 96, height: 32 },
-        current: { x: 47, y: 90, width: 96, height: 32 }
+        current: { x: 47, y: 80, width: 96, height: 32 },
+        workArea
       })
-    ).toBe('snap-back');
+    ).toBe('stay');
     expect(
-      resolveDockedRelease({
+      resolveDockedEdgeRelease({
         side: 'left',
-        origin: { x: 0, y: 80, width: 96, height: 32 },
-        current: { x: 48, y: 90, width: 96, height: 32 }
+        current: { x: 48, y: 80, width: 96, height: 32 },
+        workArea
+      })
+    ).toBe('expand');
+    // 右侧：距边 = workArea.right - (x + width)，48px 即 x = 1440 - 96 - 48。
+    expect(
+      resolveDockedEdgeRelease({
+        side: 'right',
+        current: { x: 1296, y: 80, width: 96, height: 32 },
+        workArea
       })
     ).toBe('expand');
     expect(
-      resolveDockedRelease({
+      resolveDockedEdgeRelease({
         side: 'right',
-        origin: { x: 1344, y: 80, width: 96, height: 32 },
-        current: { x: 1296, y: 80, width: 96, height: 32 }
+        current: { x: 1297, y: 80, width: 96, height: 32 },
+        workArea
       })
-    ).toBe('expand');
-    expect(
-      resolveDockedRelease({
-        side: 'right',
-        origin: { x: 1344, y: 80, width: 96, height: 32 },
-        current: { x: 1302, y: 80, width: 96, height: 32 }
-      })
-    ).toBe('snap-back');
+    ).toBe('stay');
   });
 
   it('grows left docks to the right and right docks to the left', () => {

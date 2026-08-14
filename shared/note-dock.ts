@@ -38,14 +38,19 @@ export function resolveCollapsedDockSide(
   return undefined;
 }
 
-export function resolveDockedRelease(input: {
+// 磁吸判定：书签头被原生拖动时看当前矩形距工作区边缘的水平距离——
+// ≥48px 立即展开，不足则继续沿边滑动。只看当前位置，不依赖拖动起点，
+// 因为原生 app-region 拖动没有「拖动开始/结束」事件可用。
+export function resolveDockedEdgeRelease(input: {
   side: DockSide;
-  origin: Rect;
   current: Rect;
-}): 'expand' | 'snap-back' {
-  const delta =
-    input.side === 'left' ? input.current.x - input.origin.x : input.origin.x - input.current.x;
-  return delta >= NOTE_DOCK_UNFOLD_THRESHOLD_PX ? 'expand' : 'snap-back';
+  workArea: DisplayWorkArea;
+}): 'expand' | 'stay' {
+  const distance =
+    input.side === 'left'
+      ? input.current.x - input.workArea.x
+      : input.workArea.x + input.workArea.width - (input.current.x + input.current.width);
+  return distance >= NOTE_DOCK_UNFOLD_THRESHOLD_PX ? 'expand' : 'stay';
 }
 
 export function buildDockedBounds(input: {

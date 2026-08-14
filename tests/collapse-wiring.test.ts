@@ -7,10 +7,6 @@ const collapseControllerSource = readFileSync(
   resolve(__dirname, '../main/note-window-collapse.ts'),
   'utf8'
 );
-const dragSessionSource = readFileSync(
-  resolve(__dirname, '../main/note-window-drag.ts'),
-  'utf8'
-);
 const preloadSource = readFileSync(resolve(__dirname, '../preload/preload.ts'), 'utf8');
 const appSource = readFileSync(resolve(__dirname, '../renderer/src/App.tsx'), 'utf8');
 const globalTypes = readFileSync(resolve(__dirname, '../renderer/src/global.d.ts'), 'utf8');
@@ -48,7 +44,8 @@ describe('sticky note collapse wiring', () => {
   it('grows the native window before revealing expanded content', () => {
     const nativeExpandIndex = appSource.indexOf('window.stickyNotes.setCollapsed(collapsed)');
     const viewportWaitIndex = appSource.indexOf('await waitForExpandedViewport();');
-    const revealExpandedIndex = appSource.indexOf('setIsCollapsed(false);');
+    // 从收起确认调用之后找，避免命中 dock-applied 等其他路径的同名调用。
+    const revealExpandedIndex = appSource.indexOf('setIsCollapsed(false);', nativeExpandIndex);
 
     expect(viewportWaitIndex).toBeGreaterThan(nativeExpandIndex);
     expect(revealExpandedIndex).toBeGreaterThan(nativeExpandIndex);
@@ -120,65 +117,58 @@ describe('sticky note collapse wiring', () => {
     expect(appSource).toContain('NOTE_SHELL_TRANSITION_FALLBACK_MS = 320');
   });
 
-  it('exposes the dock offers and accept commands through preload', () => {
-    expect(preloadSource).toContain("ipcRenderer.on('sticky-notes:dock-offer'");
-    expect(preloadSource).toContain("ipcRenderer.on('sticky-notes:undock-offer'");
-    expect(preloadSource).toContain("ipcRenderer.invoke('sticky-notes:accept-dock', epoch)");
-    expect(preloadSource).toContain("ipcRenderer.invoke('sticky-notes:accept-undock', epoch)");
-    expect(globalTypes).toContain('onDockOffer:');
-    expect(globalTypes).toContain('onUndockOffer:');
-    expect(globalTypes).toContain('acceptDock: (epoch: number) => Promise<boolean>;');
-    expect(globalTypes).toContain('acceptUndock: (epoch: number) => Promise<boolean>;');
+  it('exposes only the dock-applied notification through preload', () => {
+    // 磁吸由主进程在原生拖动的 move 上直接改窗口几何，renderer 只收单向通知
+    // 切 DOM；offer/accept 与 start/move/finish 自定义拖窗通道不允许回来。
+    expect(preloadSource).toContain("ipcRenderer.on('sticky-notes:dock-applied'");
+    expect(globalTypes).toContain('onDockApplied:');
+    expect(preloadSource).not.toContain('dock-offer');
+    expect(preloadSource).not.toContain('undock-offer');
+    expect(preloadSource).not.toContain('accept-dock');
+    expect(preloadSource).not.toContain('accept-undock');
+    expect(preloadSource).not.toContain('note-window-drag');
+    expect(globalTypes).not.toContain('startNoteWindowDrag');
+    expect(globalTypes).not.toContain('acceptDock');
+    expect(globalTypes).not.toContain('epoch');
   });
 
-  it('moves the window per pointer event and decides only on a finished pointer drag', () => {
-    // macOS 的 moved 是 move 的别名，没有任何「拖动结束」窗口事件；收起/贴边态
-    // 不走 app-region。renderer 越过阈值后发 start（带抓取偏移），拖动中每个
-    // pointermove 发一次 move（带光标屏幕坐标），主进程逐事件 setPosition——
-    // 事件驱动与原生拖窗同源；禁止回到固定间隔轮询 getCursorScreenPoint（与输
-    // 入事件、vsync 双双错相，是真机卡顿/发黏的根因）。
-    expect(mainSource).toContain("ipcMain.on('sticky-notes:start-note-window-drag'");
-    expect(mainSource).toContain("ipcMain.on('sticky-notes:move-note-window-drag'");
-    expect(mainSource).toContain("ipcMain.on('sticky-notes:finish-note-window-drag'");
-    expect(mainSource).not.toContain('NOTE_WINDOW_DRAG_FOLLOW_INTERVAL_MS');
-    expect(mainSource).not.toContain('noteWindowDragTrackers');
-    expect(mainSource).not.toContain("'sticky-notes:drag-note-window'");
-    expect(mainSource).not.toContain("noteWindow.on('will-move'");
-    expect(mainSource).not.toContain("noteWindow.on('moved'");
-    expect(mainSource).not.toContain('scheduleDockDragFinish');
-    expect(preloadSource).toContain("ipcRenderer.send('sticky-notes:start-note-window-drag'");
-    expect(preloadSource).toContain("ipcRenderer.send('sticky-notes:move-note-window-drag'");
-    expect(preloadSource).toContain("ipcRenderer.send('sticky-notes:finish-note-window-drag'");
-    expect(preloadSource).not.toContain('drag-note-window');
-    expect(appSource).toContain('setPointerCapture');
-    expect(appSource).toContain('onPointerUp');
-    expect(appSource).toContain('startNoteWindowDrag');
-    expect(appSource).toContain('moveNoteWindowDrag(event.screenX, event.screenY)');
-    expect(appSource).toContain('finishNoteWindowDrag(event.screenX, event.screenY)');
-    expect(appSource).not.toContain('dragNoteWindow');
+  it('applies magnetic dock and expand from native move events, never on release', () => {
+    // 收起横条与贴边书签头都走原生 app-region 拖窗；主进程在每个 move 上看当
+    // 前矩形：横条进左右缘 24px 立即贴边，书签头离边 ≥48px 立即展开，未过阈
+    // 值把 x 钉回边缘（slide）。没有「松手判定」，也没有 240ms 过渡编排。
+    expect(mainSource).toContain("noteWindow.on('move'");
     expect(mainSource).toContain('resolveCollapsedDockSide');
-    expect(mainSource).toContain("'sticky-notes:dock-offer'");
-    expect(mainSource).toContain("'sticky-notes:undock-offer'");
+    expect(mainSource).toContain('resolveDockedEdgeRelease');
+    expect(mainSource).toContain('buildExpandBoundsFromDock');
+    expect(mainSource).toContain("kind: 'slide'");
+    expect(mainSource).toContain("'sticky-notes:dock-applied'");
+    expect(mainSource).toContain('dockNoteForWebContents');
+    expect(mainSource).toContain('undockNoteForWebContents');
+    // 自定义拖窗整条链路不许回来：拖动 IPC、轮询跟光标、松手判定、offer/accept。
+    expect(mainSource).not.toContain('note-window-drag');
+    expect(mainSource).not.toContain('noteWindowDragSessions');
+    expect(mainSource).not.toContain('noteWindowDragOffsets');
+    expect(mainSource).not.toContain('NOTE_WINDOW_DRAG_FOLLOW_INTERVAL_MS');
+    expect(mainSource).not.toContain('setInterval');
+    expect(mainSource).not.toContain('dock-offer');
+    expect(mainSource).not.toContain('undock-offer');
+    expect(mainSource).not.toContain('accept-dock');
+    expect(mainSource).not.toContain('accept-undock');
+    expect(mainSource).not.toContain('snapBackDockForWebContents');
+    expect(appSource).not.toContain('startNoteWindowDrag');
+    expect(appSource).not.toContain('handleNoteWindowDragPointerDown');
+    expect(appSource).not.toContain('handleDockOffer');
+    expect(appSource).not.toContain('handleUndockOffer');
   });
 
-  it('scopes dock offers to an epoch so stale accepts are rejected', () => {
-    // accept 只回传 epoch；主进程用会话里存的 offer 参数，重新拖动即刻作废旧
-    // offer（epoch 对不上即拒绝），renderer 传的矩形不参与判定。
-    expect(mainSource).toContain('acceptDockOffer(');
-    expect(mainSource).toContain('acceptUndockOffer(');
-    expect(dragSessionSource).toContain('pendingOffer = undefined;');
-    expect(dragSessionSource).toContain('offerEpoch += 1;');
-    expect(globalTypes).toContain('epoch: number;');
-  });
-
-  it('keeps manual drag surfaces off the native app-region in collapsed and docked states', () => {
-    // 收起横条与贴边书签头由主进程按 move IPC 移窗；app-region drag 会与指针拖
-    // 动重复触发（原生拖窗 + 主进程移窗），必须显式 no-drag。展开态横条仍是原生拖动。
-    expect(styles).toMatch(
+  it('keeps collapsed and docked surfaces on the native app-region drag', () => {
+    // 三态同一套原生拖窗：展开/收起横条与贴边书签头全部 app-region drag，
+    // 收起态不得再有 no-drag 覆盖（那是自定义拖窗时代的残留）。
+    expect(styles).toMatch(/\.drag-bar\s*{[^}]*-webkit-app-region:\s*drag;/s);
+    expect(styles).not.toMatch(
       /\.note-shell--collapsed \.drag-bar\s*{[^}]*-webkit-app-region:\s*no-drag;/s
     );
-    expect(styles).toMatch(/\.note-shell--docked\s*{[^}]*-webkit-app-region:\s*no-drag;/s);
-    expect(styles).toMatch(/\.drag-bar\s*{[^}]*-webkit-app-region:\s*drag;/s);
+    expect(styles).toMatch(/\.note-shell--docked\s*{[^}]*-webkit-app-region:\s*drag;/s);
   });
 
   it('restores persisted docks as sliver-sized windows', () => {
@@ -188,9 +178,9 @@ describe('sticky note collapse wiring', () => {
 
   it('renders the docked state as a draggable bookmark tab without note chrome', () => {
     expect(appSource).toContain('note-shell--docked');
-    expect(styles).toMatch(/\.note-shell--docked\s*{[^}]*-webkit-app-region:\s*no-drag;/s);
+    expect(styles).toMatch(/\.note-shell--docked\s*{[^}]*-webkit-app-region:\s*drag;/s);
     expect(styles).toMatch(
-      /\.note-shell--docked,\s*\.note-shell--dock-shrinking,\s*\.note-shell--undock-grow\s*{[^}]*width:\s*var\(--note-dock-width\);[^}]*height:\s*var\(--note-dock-height\);/s
+      /\.note-shell--docked\s*{[^}]*width:\s*var\(--note-dock-width\);[^}]*height:\s*var\(--note-dock-height\);/s
     );
     expect(appSource).toContain("'--note-dock-width': `${NOTE_DOCK_WIDTH}px`");
     expect(appSource).toContain("'--note-dock-height': `${NOTE_DOCK_HEIGHT}px`");
@@ -200,8 +190,8 @@ describe('sticky note collapse wiring', () => {
     expect(styles).toMatch(/\.dock-tab-name\s*{[^}]*max-width:\s*100%;/s);
     expect(styles).not.toMatch(/\.dock-tab-name\s*{[^}]*writing-mode/s);
     expect(styles).toMatch(/\.dock-tab-name\s*{[^}]*pointer-events:\s*none;/s);
-    // 书签头的拖动由主进程按 move IPC 逐事件移窗，松手才判定。
-    expect(appSource).toContain('onPointerDown={handleNoteWindowDragPointerDown}');
+    // 书签头走原生拖窗，renderer 不挂任何窗口拖动的指针处理器。
+    expect(appSource).not.toContain('onPointerDown={handleNoteWindowDragPointerDown}');
   });
 
   it('renders the first frame as a sliver for restored docked notes', () => {
@@ -218,36 +208,17 @@ describe('sticky note collapse wiring', () => {
     );
   });
 
-  it('scopes dock size transitions to the dock transitioning state', () => {
-    expect(styles).toMatch(
-      /\.note-shell--dock-transitioning\s*{[^}]*transition:\s*width 240ms cubic-bezier\(0\.33, 0\.75, 0\.35, 1\),\s*height 240ms cubic-bezier\(0\.33, 0\.75, 0\.35, 1\)/s
-    );
-    // 基础态禁止挂 width/height 过渡（与收起同一红线）。
+  it('keeps dock geometry changes free of shell size transitions', () => {
+    // 磁吸直接改窗口几何，进出贴边不演 240ms 壳体过渡：dock 相关的过渡态
+    // class 与 CSS 块都不允许回来（基础态挂尺寸过渡的红线不变）。
+    expect(styles).not.toContain('note-shell--dock-transitioning');
+    expect(styles).not.toContain('note-shell--dock-shrinking');
+    expect(styles).not.toContain('note-shell--undock-grow');
+    expect(appSource).not.toContain('note-shell--dock-transitioning');
+    expect(appSource).not.toContain('note-shell--dock-shrinking');
+    expect(appSource).not.toContain('note-shell--undock-grow');
     expect(styles).not.toMatch(/\.note-shell\s*{[^}]*transition:[^;}]*width/s);
     expect(styles).not.toMatch(/\.note-shell\s*{[^}]*transition:[^;}]*height/s);
-  });
-
-  it('shrinks the bar visually before confirming native dock bounds', () => {
-    const shrinkIndex = appSource.indexOf('setIsDockShrinking(true);');
-    const shrinkWaitIndex = appSource.indexOf('await dockVisualTransition;');
-    const acceptDockIndex = appSource.indexOf('window.stickyNotes.acceptDock(');
-
-    expect(shrinkIndex).toBeGreaterThan(-1);
-    expect(acceptDockIndex).toBeGreaterThan(shrinkIndex);
-    expect(shrinkWaitIndex).toBeGreaterThan(shrinkIndex);
-    expect(acceptDockIndex).toBeGreaterThan(shrinkWaitIndex);
-  });
-
-  it('grows native bounds before revealing the undock expand animation', () => {
-    const acceptUndockIndex = appSource.indexOf('window.stickyNotes.acceptUndock(');
-    const viewportWaitIndex = appSource.indexOf('await waitForResizedViewport(payload.bounds);');
-    const growStartIndex = appSource.indexOf('setIsUndockGrowing(true);');
-    const growReleaseIndex = appSource.indexOf('setIsUndockGrowing(false);');
-
-    expect(acceptUndockIndex).toBeGreaterThan(-1);
-    expect(viewportWaitIndex).toBeGreaterThan(acceptUndockIndex);
-    expect(growStartIndex).toBeGreaterThan(viewportWaitIndex);
-    expect(growReleaseIndex).toBeGreaterThan(growStartIndex);
   });
 
   it('folds toolbar buttons into the toggle with a right-to-left cascade on collapse', () => {
