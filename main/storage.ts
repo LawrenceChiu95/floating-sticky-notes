@@ -8,6 +8,7 @@ import {
   isNoteColor,
   type NoteBounds,
   type NoteChecklistItemRecord,
+  type NoteDock,
   type NoteImageRecord,
   type NoteRecord
 } from './note-state';
@@ -136,11 +137,14 @@ function normalizeNoteRecord(value: unknown): NoteRecord | undefined {
     return undefined;
   }
 
+  const dock = normalizeNoteDock(candidate.dock);
+
   return {
     id: candidate.id,
     name: typeof candidate.name === 'string' ? candidate.name : '',
     content: typeof candidate.content === 'string' ? candidate.content : '',
     bounds: normalizeNoteBounds(candidate.bounds),
+    ...(dock ? { dock } : {}),
     color:
       typeof candidate.color === 'string' && isNoteColor(candidate.color)
         ? candidate.color
@@ -155,6 +159,24 @@ function normalizeNoteRecord(value: unknown): NoteRecord | undefined {
     createdAt: typeof candidate.createdAt === 'string' ? candidate.createdAt : '',
     updatedAt: typeof candidate.updatedAt === 'string' ? candidate.updatedAt : ''
   };
+}
+
+function normalizeNoteDock(value: unknown): NoteDock | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+
+  const candidate = value as { side?: unknown; y?: unknown };
+
+  if (candidate.side !== 'left' && candidate.side !== 'right') {
+    return undefined;
+  }
+
+  if (typeof candidate.y !== 'number' || !Number.isFinite(candidate.y)) {
+    return undefined;
+  }
+
+  return { side: candidate.side, y: candidate.y };
 }
 
 function normalizeNoteChecklist(value: unknown): NoteChecklistItemRecord[] {

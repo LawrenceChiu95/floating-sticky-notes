@@ -472,6 +472,7 @@ function cloneNote(note: NoteRecord): NoteRecord {
     bounds: {
       ...note.bounds
     },
+    ...(note.dock ? { dock: { ...note.dock } } : {}),
     checklist: note.checklist.map((item) => ({
       ...item
     })),

@@ -25,6 +25,11 @@ export type NoteBounds = {
   height: number;
 };
 
+export type NoteDock = {
+  side: 'left' | 'right';
+  y: number;
+};
+
 export type NoteImageRecord = {
   id: string;
   filename: string;
@@ -47,6 +52,7 @@ export type NoteRecord = {
   name: string;
   content: string;
   bounds: NoteBounds;
+  dock?: NoteDock;
   color: string;
   opacity: number;
   checklist: NoteChecklistItemRecord[];

@@ -205,6 +205,46 @@ describe('JsonNotesStorage', () => {
     await expect(storage.load()).resolves.toEqual(loaded);
   });
 
+  it('persists a valid dock and drops an invalid one', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'floating-notes-storage-'));
+    const filePath = join(dir, 'notes.json');
+    const storage = new JsonNotesStorage(filePath);
+    const valid = createDefaultNote({ id: 'note-1', now: '2026-08-14T00:00:00.000Z' });
+    valid.dock = { side: 'left', y: 120 };
+    const invalid = createDefaultNote({ id: 'note-2', now: '2026-08-14T00:00:00.000Z' });
+    const invalidY = createDefaultNote({ id: 'note-3', now: '2026-08-14T00:00:00.000Z' });
+    await writeFile(
+      filePath,
+      `${JSON.stringify(
+        {
+          version: 1,
+          notes: [
+            valid,
+            { ...invalid, dock: { side: 'top', y: 10 } },
+            { ...invalidY, dock: { side: 'right', y: 'high' } }
+          ]
+        },
+        null,
+        2
+      )}\n`,
+      'utf8'
+    );
+
+    const loaded = await storage.load();
+    expect(loaded.notes[0]?.dock).toEqual({ side: 'left', y: 120 });
+    expect(loaded.notes[1]?.dock).toBeUndefined();
+    expect(loaded.notes[2]?.dock).toBeUndefined();
+
+    await storage.save(loaded);
+    const raw = await readFile(filePath, 'utf8');
+    const persisted = JSON.parse(raw) as {
+      notes: Array<{ id: string; dock?: unknown }>;
+    };
+    expect(persisted.notes[0]?.dock).toEqual({ side: 'left', y: 120 });
+    expect(persisted.notes[1]).not.toHaveProperty('dock');
+    expect(persisted.notes[2]).not.toHaveProperty('dock');
+  });
+
   it('normalizes malformed individual notes without discarding the whole document', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'floating-notes-storage-'));
     const filePath = join(dir, 'notes.json');
