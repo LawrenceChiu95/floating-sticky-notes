@@ -45,29 +45,29 @@ describe('note dock geometry', () => {
     expect(
       resolveDockedRelease({
         side: 'left',
-        origin: { x: 0, y: 80, width: 8, height: 56 },
-        current: { x: 47, y: 90, width: 8, height: 56 }
+        origin: { x: 0, y: 80, width: 36, height: 96 },
+        current: { x: 47, y: 90, width: 36, height: 96 }
       })
     ).toBe('snap-back');
     expect(
       resolveDockedRelease({
         side: 'left',
-        origin: { x: 0, y: 80, width: 8, height: 56 },
-        current: { x: 48, y: 90, width: 8, height: 56 }
+        origin: { x: 0, y: 80, width: 36, height: 96 },
+        current: { x: 48, y: 90, width: 36, height: 96 }
       })
     ).toBe('expand');
     expect(
       resolveDockedRelease({
         side: 'right',
-        origin: { x: 1432, y: 80, width: 8, height: 56 },
-        current: { x: 1384, y: 80, width: 8, height: 56 }
+        origin: { x: 1404, y: 80, width: 36, height: 96 },
+        current: { x: 1356, y: 80, width: 36, height: 96 }
       })
     ).toBe('expand');
     expect(
       resolveDockedRelease({
         side: 'right',
-        origin: { x: 1432, y: 80, width: 8, height: 56 },
-        current: { x: 1390, y: 80, width: 8, height: 56 }
+        origin: { x: 1404, y: 80, width: 36, height: 96 },
+        current: { x: 1362, y: 80, width: 36, height: 96 }
       })
     ).toBe('snap-back');
   });
@@ -76,7 +76,7 @@ describe('note dock geometry', () => {
     expect(
       buildExpandBoundsFromDock({
         side: 'left',
-        sliver: { x: 80, y: 120, width: 8, height: 56 },
+        sliver: { x: 80, y: 120, width: 36, height: 96 },
         expandedSize: { width: 280, height: 220 },
         workArea
       })
@@ -85,18 +85,18 @@ describe('note dock geometry', () => {
     expect(
       buildExpandBoundsFromDock({
         side: 'right',
-        sliver: { x: 1100, y: 120, width: 8, height: 56 },
+        sliver: { x: 1100, y: 120, width: 36, height: 96 },
         expandedSize: { width: 280, height: 220 },
         workArea
       })
-    ).toEqual({ x: 828, y: 120, width: 280, height: 220 });
+    ).toEqual({ x: 856, y: 120, width: 280, height: 220 });
   });
 
   it('clamps expanded bounds into the work area', () => {
     expect(
       buildExpandBoundsFromDock({
         side: 'left',
-        sliver: { x: 1400, y: 800, width: 8, height: 56 },
+        sliver: { x: 1400, y: 800, width: 36, height: 96 },
         expandedSize: { width: 280, height: 220 },
         workArea
       })
@@ -160,14 +160,14 @@ describe('note dock geometry', () => {
 
   it('keeps at least the minimum grab height when no free slot exists', () => {
     const minY = workArea.y;
-    // Slots every 64px at 25/89/153 in a 220px-tall area: a fourth full slot
-    // would need y=217, but the clamped maximum is 189, so the sliver falls
-    // back to a 24px grab sliver below the bottommost occupied slot.
+    // Slots every 104px at 25/129/233 in a 220px-tall area: a fourth full slot
+    // would need y=337, but the clamped maximum is 149, so the tab falls back
+    // to a 24px grab strip below the bottommost occupied slot (clamped to 149).
     const tightArea = { ...workArea, height: 220 };
-    const occupied = [minY, minY + 64, minY + 128].map((y) => ({ side: 'left' as const, y }));
+    const occupied = [minY, minY + 104, minY + 208].map((y) => ({ side: 'left' as const, y }));
     expect(
       offsetDockYToAvoidOverlap({ y: minY, side: 'left', workArea: tightArea, occupied })
-    ).toBe(minY + 128 + NOTE_DOCK_MIN_GRAB_PX);
+    ).toBe(tightArea.y + tightArea.height - NOTE_DOCK_HEIGHT);
   });
 
   it('restores a docked sliver on a visible work area and drops it when none fits', () => {
@@ -196,10 +196,11 @@ describe('note dock geometry', () => {
   });
 
   it('exposes the design thresholds', () => {
-    expect(NOTE_DOCK_WIDTH).toBe(8);
-    expect(NOTE_DOCK_HEIGHT).toBe(56);
+    expect(NOTE_DOCK_WIDTH).toBe(36);
+    expect(NOTE_DOCK_HEIGHT).toBe(96);
     expect(NOTE_DOCK_EDGE_THRESHOLD_PX).toBe(24);
     expect(NOTE_DOCK_UNFOLD_THRESHOLD_PX).toBe(48);
     expect(NOTE_DOCK_STACK_GAP_PX).toBe(8);
+    expect(NOTE_DOCK_MIN_GRAB_PX).toBe(24);
   });
 });

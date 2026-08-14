@@ -970,8 +970,8 @@ function App(): JSX.Element {
     void window.stickyNotes.finishNoteWindowDrag(drag.pendingDx, drag.pendingDy);
   };
 
-  // 横条松手时已贴近工作区边缘：先把壳体视觉收到 8×56，再由主进程把窗口
-  // setBounds 成缝（先视觉后缩窗，否则 280px 横条会被立刻裁掉）。
+  // 横条松手时已贴近工作区边缘：先把壳体视觉收到 36×96 的书签头，再由主进程
+  // 把窗口 setBounds 成贴边矩形（先视觉后缩窗，否则 280px 横条会被立刻裁掉）。
   const handleDockOffer = async (payload: {
     side: 'left' | 'right';
     y: number;
@@ -1139,9 +1139,10 @@ function App(): JSX.Element {
     </>
   );
 
-  // 贴边态只渲染一条着色缝：没有名称、按钮和正文，整条可拖（renderer 指针
-  // 拖动，松手才由主进程判定展开或弹回）。拖出展开的生长动画由完整 DOM +
-  // undock-grow 尺寸钉住来演，这里让位。
+  // 贴边态只渲染一枚书签头：便签色实心底，有名字就竖排显示一小段（认得出是
+  // 哪张），没有按钮和正文，整枚可拖（renderer 指针拖动，松手才由主进程判定
+  // 展开或弹回）。拖出展开的生长动画由完整 DOM + undock-grow 尺寸钉住来演，
+  // 这里让位。
   if (dock && !isUndockGrowing) {
     return (
       <main
@@ -1157,7 +1158,13 @@ function App(): JSX.Element {
         onPointerUp={handleNoteWindowDragPointerUp}
         onPointerCancel={handleNoteWindowDragPointerUp}
         onLostPointerCapture={handleNoteWindowDragPointerUp}
-      />
+      >
+        {namePresentation.kind === 'name' ? (
+          <span className="dock-tab-name" aria-hidden="true">
+            {namePresentation.text}
+          </span>
+        ) : null}
+      </main>
     );
   }
 

@@ -950,7 +950,7 @@ describe('NotesManager', () => {
     });
   });
 
-  it('offsets a new sliver below an existing one docked on the same side', async () => {
+  it('offsets a new bookmark tab below an existing one docked on the same side', async () => {
     const savedDocuments: NotesDocument[] = [];
     const createdWindows: CreatedWindow[] = [];
     const firstNote = createDefaultNote({
@@ -981,9 +981,9 @@ describe('NotesManager', () => {
     });
 
     expect(createdWindows[0].window.dockTransitions).toEqual([
-      { kind: 'dock', side: 'left', y: 100 + 56 + 8 }
+      { kind: 'dock', side: 'left', y: 100 + 96 + 8 }
     ]);
-    expect(savedDocuments.at(-1)?.notes[0]?.dock).toEqual({ side: 'left', y: 164 });
+    expect(savedDocuments.at(-1)?.notes[0]?.dock).toEqual({ side: 'left', y: 204 });
     expect(savedDocuments.at(-1)?.notes[1]?.dock).toEqual({ side: 'left', y: 100 });
   });
 

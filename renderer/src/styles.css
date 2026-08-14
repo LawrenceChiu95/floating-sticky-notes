@@ -75,15 +75,15 @@ textarea {
   height: var(--note-dock-height);
 }
 
-/* 缝靠屏幕内侧的两角用与纸面一致的小圆角;右侧贴边反过来。 */
+/* 书签头靠屏幕内侧的两角用与纸面一致的小圆角;右侧贴边反过来。 */
 .note-shell--docked,
 .note-shell--dock-shrinking {
-  border-radius: 0 8px 8px 0;
+  border-radius: 0 10px 10px 0;
 }
 
 .note-shell--dock-right.note-shell--docked,
 .note-shell--dock-right.note-shell--dock-shrinking {
-  border-radius: 8px 0 0 8px;
+  border-radius: 10px 0 0 10px;
 }
 
 /* 右贴边时壳体锚住窗口右缘:收缩往右靠,生长往左长。 */
@@ -94,9 +94,13 @@ textarea {
 }
 
 .note-shell--docked {
-  /* 缝由 renderer 指针拖动；app-region 会与指针拖动重复触发（原生拖窗 +
+  /* 书签头由 renderer 指针拖动；app-region 会与指针拖动重复触发（原生拖窗 +
      IPC 移窗）。展开态横条仍是原生拖动。 */
   -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24),
     inset -1px 0 0 rgba(43, 42, 39, 0.1);
 }
@@ -104,6 +108,23 @@ textarea {
 .note-shell--dock-right.note-shell--docked {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24),
     inset 1px 0 0 rgba(43, 42, 39, 0.1);
+}
+
+/* 书签头上的名字：竖排、只露一小段，认得出是哪张即可；没名字就是纯色头。 */
+.dock-tab-name {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  max-height: calc(var(--note-dock-height) - 16px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  color: rgba(43, 42, 39, 0.72);
+  pointer-events: none;
+  user-select: none;
 }
 
 .note-shell--dock-transitioning {

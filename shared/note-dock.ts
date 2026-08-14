@@ -1,5 +1,5 @@
-export const NOTE_DOCK_WIDTH = 8;
-export const NOTE_DOCK_HEIGHT = 56;
+export const NOTE_DOCK_WIDTH = 36;
+export const NOTE_DOCK_HEIGHT = 96;
 export const NOTE_DOCK_EDGE_THRESHOLD_PX = 24;
 export const NOTE_DOCK_UNFOLD_THRESHOLD_PX = 48;
 export const NOTE_DOCK_STACK_GAP_PX = 8;
