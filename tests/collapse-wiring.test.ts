@@ -186,6 +186,20 @@ describe('sticky note collapse wiring', () => {
     expect(appSource).toContain('onPointerDown={handleNoteWindowDragPointerDown}');
   });
 
+  it('renders the first frame as a sliver for restored docked notes', () => {
+    // 主进程按持久化 dock 建 8×56 缝窗时把 side 写进 URL query；preload 同步
+    // 读取，renderer 的 dock 初始 state 在 getCurrentNote resolve 之前就是
+    // 贴边态——首帧 DOM 就是缝，不会先挂完整便签再切。
+    expect(mainSource).toContain('?dock=${initialDockSide}');
+    expect(mainSource).toContain('query: { dock: initialDockSide }');
+    expect(preloadSource).toContain('getInitialDockSide');
+    expect(preloadSource).toContain('URLSearchParams(window.location.search)');
+    expect(globalTypes).toContain("getInitialDockSide: () => 'left' | 'right' | null;");
+    expect(appSource).toMatch(
+      /useState<\{ side: 'left' \| 'right' \} \| null>\(\(\) => \{[\s\S]*?window\.stickyNotes\.getInitialDockSide\(\)/
+    );
+  });
+
   it('scopes dock size transitions to the dock transitioning state', () => {
     expect(styles).toMatch(
       /\.note-shell--dock-transitioning\s*{[^}]*transition:\s*width 240ms cubic-bezier\(0\.33, 0\.75, 0\.35, 1\),\s*height 240ms cubic-bezier\(0\.33, 0\.75, 0\.35, 1\)/s

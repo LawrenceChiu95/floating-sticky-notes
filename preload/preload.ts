@@ -23,6 +23,12 @@ type UndockOfferPayload = {
 
 contextBridge.exposeInMainWorld('stickyNotes', {
   platform: process.platform,
+  // 主进程按持久化 dock 建缝窗时把 side 写进 URL query；同步读取让 renderer
+  // 首帧就渲染缝，不等 getCurrentNote。
+  getInitialDockSide: (): 'left' | 'right' | null => {
+    const side = new URLSearchParams(window.location.search).get('dock');
+    return side === 'left' || side === 'right' ? side : null;
+  },
   getAppCopy: () => ipcRenderer.invoke('sticky-notes:get-app-copy'),
   getCurrentNote: () => ipcRenderer.invoke('sticky-notes:get-current-note'),
   createNote: () => ipcRenderer.invoke('sticky-notes:create-note'),

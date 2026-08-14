@@ -31,6 +31,7 @@ declare global {
   interface Window {
     stickyNotes: {
       platform: NodeJS.Platform;
+      getInitialDockSide: () => 'left' | 'right' | null;
       getAppCopy: () => Promise<AppCopy>;
       getCurrentNote: () => Promise<NoteView | undefined>;
       createNote: () => Promise<CreateNoteResult>;

@@ -91,10 +91,15 @@ function App(): JSX.Element {
     setOpenPopover(open ? 'note-delete' : null);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isCollapseTransitioning, setIsCollapseTransitioning] = useState(false);
-  // 贴边第三态：dock 非空时整个壳体只渲染一条着色缝。isDockShrinking /
-  // isUndockGrowing 是进出贴边的视觉过渡，窗口矩形由主进程在两端各 setBounds
-  // 一次（先视觉后缩窗、先放大窗再视觉），这里只管壳体动画。
-  const [dock, setDock] = useState<{ side: 'left' | 'right' } | null>(null);
+  // 贴边第三态：dock 非空时整个壳体只渲染一条着色缝。初始值同步读自主进程
+  // 注入 URL query 的 side——恢复贴边的窗口首帧 DOM 就是缝，不会先挂完整
+  // 便签再切换；getCurrentNote 回来后以记录为准 reconcile。
+  // isDockShrinking / isUndockGrowing 是进出贴边的视觉过渡，窗口矩形由主进程
+  // 在两端各 setBounds 一次（先视觉后缩窗、先放大窗再视觉），这里只管壳体动画。
+  const [dock, setDock] = useState<{ side: 'left' | 'right' } | null>(() => {
+    const initialDockSide = window.stickyNotes.getInitialDockSide();
+    return initialDockSide ? { side: initialDockSide } : null;
+  });
   const [isDockShrinking, setIsDockShrinking] = useState(false);
   const [isUndockGrowing, setIsUndockGrowing] = useState(false);
   const [isDockTransitioning, setIsDockTransitioning] = useState(false);
@@ -186,7 +191,8 @@ function App(): JSX.Element {
         setImages(note?.images ?? []);
         setColor(note?.color ?? DEFAULT_NOTE_COLOR);
         setOpacity(note?.opacity ?? DEFAULT_NOTE_OPACITY);
-        // 主进程已按 dock 把窗口建成 8×56 的缝；首帧就是贴边态，不会先闪完整便签。
+        // 以持久化记录为准 reconcile：URL query 只是首帧引导（例如窗口重建后
+        // dock 已被丢弃的边界情况，这里会纠正回完整便签）。
         setDock(note?.dock ? { side: note.dock.side } : null);
       })
       .catch(() => {

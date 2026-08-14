@@ -277,10 +277,18 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
     noteWindow.show();
   });
 
+  // 贴边恢复时把 side 同步写进 URL query：preload 读取后 renderer 首帧就渲染
+  // 缝，不会先挂完整便签 DOM 再切换（getCurrentNote 回来后再以记录为准）。
+  const initialDockSide = restoredDockBounds && note.dock ? note.dock.side : undefined;
   if (is.dev && process.env.ELECTRON_RENDERER_URL) {
-    void noteWindow.loadURL(process.env.ELECTRON_RENDERER_URL);
+    void noteWindow.loadURL(
+      `${process.env.ELECTRON_RENDERER_URL}${initialDockSide ? `?dock=${initialDockSide}` : ''}`
+    );
   } else {
-    void noteWindow.loadFile(join(__dirname, '../renderer/index.html'));
+    void noteWindow.loadFile(
+      join(__dirname, '../renderer/index.html'),
+      initialDockSide ? { query: { dock: initialDockSide } } : undefined
+    );
   }
 
   const listenerBag: {
