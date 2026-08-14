@@ -189,16 +189,18 @@ describe('sticky note collapse wiring', () => {
     );
     expect(appSource).toContain("'--note-dock-width': `${NOTE_DOCK_WIDTH}px`");
     expect(appSource).toContain("'--note-dock-height': `${NOTE_DOCK_HEIGHT}px`");
-    // 有名字时书签头上竖排露出一小段；没名字就是纯色头。名字不可交互（不抢拖动）。
+    // 有名字时书签头上横排露出一小段；没名字就是纯色头。名字不可交互（不抢拖动）。
     expect(appSource).toContain('dock-tab-name');
-    expect(styles).toMatch(/\.dock-tab-name\s*{[^}]*writing-mode:\s*vertical-rl;/s);
+    expect(styles).toMatch(/\.dock-tab-name\s*{[^}]*white-space:\s*nowrap;/s);
+    expect(styles).toMatch(/\.dock-tab-name\s*{[^}]*max-width:\s*100%;/s);
+    expect(styles).not.toMatch(/\.dock-tab-name\s*{[^}]*writing-mode/s);
     expect(styles).toMatch(/\.dock-tab-name\s*{[^}]*pointer-events:\s*none;/s);
     // 书签头的拖动由主进程跟光标（start/finish 各一次 IPC），松手才判定。
     expect(appSource).toContain('onPointerDown={handleNoteWindowDragPointerDown}');
   });
 
   it('renders the first frame as a sliver for restored docked notes', () => {
-    // 主进程按持久化 dock 建 36×96 书签头窗口时把 side 写进 URL query；preload 同步
+    // 主进程按持久化 dock 建 96×32 书签头窗口时把 side 写进 URL query；preload 同步
     // 读取，renderer 的 dock 初始 state 在 getCurrentNote resolve 之前就是
     // 贴边态——首帧 DOM 就是书签头，不会先挂完整便签再切。
     expect(mainSource).toContain('?dock=${initialDockSide}');

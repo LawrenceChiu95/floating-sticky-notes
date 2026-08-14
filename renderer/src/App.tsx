@@ -91,9 +91,9 @@ function App(): JSX.Element {
     setOpenPopover(open ? 'note-delete' : null);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isCollapseTransitioning, setIsCollapseTransitioning] = useState(false);
-  // 贴边第三态：dock 非空时整个壳体只渲染一条着色缝。初始值同步读自主进程
-  // 注入 URL query 的 side——恢复贴边的窗口首帧 DOM 就是缝，不会先挂完整
-  // 便签再切换；getCurrentNote 回来后以记录为准 reconcile。
+  // 贴边第三态：dock 非空时整个壳体只渲染一枚横着的着色书签头。初始值同步
+  // 读自主进程注入 URL query 的 side——恢复贴边的窗口首帧 DOM 就是书签头，
+  // 不会先挂完整便签再切换；getCurrentNote 回来后以记录为准 reconcile。
   // isDockShrinking / isUndockGrowing 是进出贴边的视觉过渡，窗口矩形由主进程
   // 在两端各 setBounds 一次（先视觉后缩窗、先放大窗再视觉），这里只管壳体动画。
   const [dock, setDock] = useState<{ side: 'left' | 'right' } | null>(() => {
@@ -943,7 +943,7 @@ function App(): JSX.Element {
     void window.stickyNotes.finishNoteWindowDrag();
   };
 
-  // 横条松手时已贴近工作区边缘：先把壳体视觉收到 36×96 的书签头，再由主进程
+  // 横条松手时已贴近工作区边缘：先把壳体视觉收到 96×32 的书签头，再由主进程
   // 把窗口 setBounds 成贴边矩形（先视觉后缩窗，否则 280px 横条会被立刻裁掉）。
   const handleDockOffer = async (payload: {
     side: 'left' | 'right';
@@ -1112,9 +1112,9 @@ function App(): JSX.Element {
     </>
   );
 
-  // 贴边态只渲染一枚书签头：便签色实心底，有名字就竖排显示一小段（认得出是
-  // 哪张），没有按钮和正文，整枚可拖（主进程跟光标，松手才由主进程判定展开
-  // 或弹回）。拖出展开的生长动画由完整 DOM + undock-grow 尺寸钉住来演，
+  // 贴边态只渲染一枚横着的书签头：便签色实心底，有名字就横排显示一小段
+  // （认得出是哪张），没有按钮和正文，整枚可拖（主进程跟光标，松手才由主进程
+  // 判定展开或弹回）。拖出展开的生长动画由完整 DOM + undock-grow 尺寸钉住来演，
   // 这里让位。
   if (dock && !isUndockGrowing) {
     return (

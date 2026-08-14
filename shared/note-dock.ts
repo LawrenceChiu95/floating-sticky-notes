@@ -1,5 +1,7 @@
-export const NOTE_DOCK_WIDTH = 36;
-export const NOTE_DOCK_HEIGHT = 96;
+// 贴边书签头是一枚横条：96px 伸进桌面、32px 沿边，明显扁于竖胶囊，
+// 像便利书签从屏幕边缘探出的头。
+export const NOTE_DOCK_WIDTH = 96;
+export const NOTE_DOCK_HEIGHT = 32;
 export const NOTE_DOCK_EDGE_THRESHOLD_PX = 24;
 export const NOTE_DOCK_UNFOLD_THRESHOLD_PX = 48;
 export const NOTE_DOCK_STACK_GAP_PX = 8;

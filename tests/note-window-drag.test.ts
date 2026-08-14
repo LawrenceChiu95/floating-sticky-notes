@@ -28,7 +28,7 @@ function createSession(overrides: SessionOverrides = {}): NoteWindowDragSession 
 }
 
 const COLLAPSED_BAR: Rect = { x: 500, y: 200, width: 280, height: 40 };
-const DOCKED_TAB: Rect = { x: 0, y: 200, width: 36, height: 96 };
+const DOCKED_TAB: Rect = { x: 0, y: 200, width: 96, height: 32 };
 
 describe('note window drag session', () => {
   it('produces no decision while the drag is in progress', () => {
@@ -128,7 +128,7 @@ describe('note window drag session', () => {
     });
 
     session.beginDrag();
-    const decision = session.endDrag({ x: 30, y: 240, width: 36, height: 96 });
+    const decision = session.endDrag({ x: 30, y: 240, width: 96, height: 32 });
 
     expect(decision).toEqual({ kind: 'snap-back' });
     expect(session.acceptUndockOffer(1)).toBeUndefined();
@@ -143,7 +143,7 @@ describe('note window drag session', () => {
     });
 
     session.beginDrag();
-    const released: Rect = { x: 96, y: 212, width: 36, height: 96 };
+    const released: Rect = { x: 96, y: 212, width: 96, height: 32 };
     const decision = session.endDrag(released);
 
     expect(decision).toEqual({
@@ -158,7 +158,7 @@ describe('note window drag session', () => {
   });
 
   it('grows a right-side dock toward the left when expanding', () => {
-    const rightTab: Rect = { x: 1244, y: 300, width: 36, height: 96 };
+    const rightTab: Rect = { x: 1184, y: 300, width: 96, height: 32 };
     const session = createSession({
       presentation: 'docked',
       dockSide: 'right',
@@ -167,11 +167,11 @@ describe('note window drag session', () => {
     });
 
     session.beginDrag();
-    const decision = session.endDrag({ x: 1124, y: 300, width: 36, height: 96 });
+    const decision = session.endDrag({ x: 1124, y: 300, width: 96, height: 32 });
 
     expect(decision).toMatchObject({
       kind: 'undock-offer',
-      bounds: { x: 1124 + 36 - 280, y: 300, width: 280, height: 320 }
+      bounds: { x: 1124 + 96 - 280, y: 300, width: 280, height: 320 }
     });
   });
 
@@ -185,6 +185,6 @@ describe('note window drag session', () => {
     const session = createSession({ presentation: 'docked', dockSide: 'left' });
 
     session.beginDrag();
-    expect(session.endDrag({ x: 100, y: 200, width: 36, height: 96 })).toEqual({ kind: 'none' });
+    expect(session.endDrag({ x: 100, y: 200, width: 96, height: 32 })).toEqual({ kind: 'none' });
   });
 });

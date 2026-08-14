@@ -981,9 +981,9 @@ describe('NotesManager', () => {
     });
 
     expect(createdWindows[0].window.dockTransitions).toEqual([
-      { kind: 'dock', side: 'left', y: 100 + 96 + 8 }
+      { kind: 'dock', side: 'left', y: 100 + 32 + 8 }
     ]);
-    expect(savedDocuments.at(-1)?.notes[0]?.dock).toEqual({ side: 'left', y: 204 });
+    expect(savedDocuments.at(-1)?.notes[0]?.dock).toEqual({ side: 'left', y: 140 });
     expect(savedDocuments.at(-1)?.notes[1]?.dock).toEqual({ side: 'left', y: 100 });
   });
 

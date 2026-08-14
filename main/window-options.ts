@@ -25,7 +25,7 @@ export function createNoteWindowOptions(
   workAreas: DisplayWorkArea[] = [],
   dockedBounds?: Required<NoteBounds>
 ): BrowserWindowConstructorOptions {
-  // 贴边恢复时窗口直接建成 36×96 的书签头：最小尺寸不能用 NOTE_MIN_WIDTH，
+  // 贴边恢复时窗口直接建成 96×32 的书签头：最小尺寸不能用 NOTE_MIN_WIDTH，
   // 否则 Math.max 会把书签头撑成 200px 宽。
   const isDocked = dockedBounds !== undefined;
   const windowBounds = dockedBounds ?? clampNoteBounds(bounds, workAreas);
