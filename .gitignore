@@ -19,3 +19,6 @@ pnpm-debug.log*
 # 本地交接材料，仅本机保留，不公开跟踪
 /HANDOFF.md
 /.claude/
+
+# 本地演示素材，不公开跟踪
+/assets/demo/
