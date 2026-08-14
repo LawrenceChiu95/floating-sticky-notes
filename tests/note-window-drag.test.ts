@@ -28,15 +28,14 @@ function createSession(overrides: SessionOverrides = {}): NoteWindowDragSession 
 }
 
 const COLLAPSED_BAR: Rect = { x: 500, y: 200, width: 280, height: 40 };
-const DOCKED_SLIVER: Rect = { x: 0, y: 200, width: 8, height: 56 };
+const DOCKED_TAB: Rect = { x: 0, y: 200, width: 36, height: 96 };
 
 describe('note window drag session', () => {
-  it('moves the window by rounded deltas without producing any decision mid-drag', () => {
+  it('produces no decision while the drag is in progress', () => {
     const session = createSession();
 
-    // 把横条一路拖到左缘 10px 处（已进入贴边阈值），但手势还没结束。
-    const moved = session.applyDragDelta(COLLAPSED_BAR, -490.2, 24.6);
-    expect(moved).toEqual({ x: 10, y: 225, width: 280, height: 40 });
+    // 主进程跟光标期间（横条可能已停在左缘 10px 处）手势还没结束。
+    expect(session.beginDrag()).toBe(true);
     expect(session.isDragging()).toBe(true);
 
     // 拖动中的停顿不等于松手：不得产生 offer，accept 一律落空。
@@ -44,10 +43,20 @@ describe('note window drag session', () => {
     expect(session.acceptUndockOffer(1)).toBeUndefined();
   });
 
+  it('refuses to start a drag for expanded windows', () => {
+    const session = createSession({ presentation: 'expanded' });
+
+    // 展开态横条走原生 app-region，手动拖动路径不得接管（主进程也不会
+    // 为它挂光标跟踪）。
+    expect(session.beginDrag()).toBe(false);
+    expect(session.isDragging()).toBe(false);
+    expect(session.endDrag({ x: 0, y: 200, width: 280, height: 40 })).toEqual({ kind: 'none' });
+  });
+
   it('offers a dock only when the drag ends next to a work-area edge', () => {
     const session = createSession();
 
-    session.applyDragDelta(COLLAPSED_BAR, -490, 25);
+    session.beginDrag();
     const decision = session.endDrag({ x: 10, y: 225, width: 280, height: 40 });
 
     expect(decision).toEqual({ kind: 'dock-offer', side: 'left', y: 225, epoch: 1 });
@@ -61,7 +70,7 @@ describe('note window drag session', () => {
     const session = createSession();
 
     const bar: Rect = { x: 1280 - 280 - 12, y: 100, width: 280, height: 40 };
-    session.applyDragDelta(bar, 0, 0);
+    session.beginDrag();
     const decision = session.endDrag(bar);
 
     expect(decision).toEqual({ kind: 'dock-offer', side: 'right', y: 100, epoch: 1 });
@@ -70,31 +79,24 @@ describe('note window drag session', () => {
   it('decides nothing when the collapsed bar is released away from any edge', () => {
     const session = createSession();
 
-    session.applyDragDelta(COLLAPSED_BAR, 12, 8);
+    session.beginDrag();
     const decision = session.endDrag({ x: 512, y: 208, width: 280, height: 40 });
 
     expect(decision).toEqual({ kind: 'none' });
     expect(session.acceptDockOffer(1)).toBeUndefined();
   });
 
-  it('decides nothing for expanded windows', () => {
-    const session = createSession({ presentation: 'expanded' });
-
-    session.applyDragDelta(COLLAPSED_BAR, -500, 0);
-    expect(session.endDrag({ x: 0, y: 200, width: 280, height: 40 })).toEqual({ kind: 'none' });
-  });
-
   it('rejects stale accepts once a new drag invalidates the pending offer', () => {
     const session = createSession();
 
-    session.applyDragDelta(COLLAPSED_BAR, -490, 25);
+    session.beginDrag();
     expect(session.endDrag({ x: 10, y: 225, width: 280, height: 40 })).toMatchObject({
       kind: 'dock-offer',
       epoch: 1
     });
 
     // renderer 播收缩视觉期间用户又把横条拖走：旧 offer 立即作废。
-    session.applyDragDelta({ x: 10, y: 225, width: 280, height: 40 }, 300, 0);
+    session.beginDrag();
     expect(session.acceptDockOffer(1)).toBeUndefined();
 
     // 新一轮拖动落到右缘：只认新 epoch。
@@ -107,26 +109,26 @@ describe('note window drag session', () => {
   it('rejects accepts while the pointer is still down', () => {
     const session = createSession();
 
-    session.applyDragDelta(COLLAPSED_BAR, -490, 25);
+    session.beginDrag();
     expect(session.endDrag({ x: 10, y: 225, width: 280, height: 40 })).toMatchObject({
       kind: 'dock-offer'
     });
 
     // 手再次按下开始拖（即便尚未移动）：offer 作废，accept 不得贴边。
-    session.applyDragDelta({ x: 10, y: 225, width: 280, height: 40 }, 0, 0);
+    session.beginDrag();
     expect(session.acceptDockOffer(1)).toBeUndefined();
     session.endDrag({ x: 10, y: 225, width: 280, height: 40 });
   });
 
-  it('snaps the sliver back when the release travel is below the unfold threshold', () => {
+  it('snaps the tab back when the release travel is below the unfold threshold', () => {
     const session = createSession({
       presentation: 'docked',
       dockSide: 'left',
-      dockedBounds: DOCKED_SLIVER
+      dockedBounds: DOCKED_TAB
     });
 
-    session.applyDragDelta(DOCKED_SLIVER, 30, 40);
-    const decision = session.endDrag({ x: 30, y: 240, width: 8, height: 56 });
+    session.beginDrag();
+    const decision = session.endDrag({ x: 30, y: 240, width: 36, height: 96 });
 
     expect(decision).toEqual({ kind: 'snap-back' });
     expect(session.acceptUndockOffer(1)).toBeUndefined();
@@ -136,12 +138,12 @@ describe('note window drag session', () => {
     const session = createSession({
       presentation: 'docked',
       dockSide: 'left',
-      dockedBounds: DOCKED_SLIVER,
+      dockedBounds: DOCKED_TAB,
       expandedSize: { width: 280, height: 320 }
     });
 
-    session.applyDragDelta(DOCKED_SLIVER, 96, 12);
-    const released: Rect = { x: 96, y: 212, width: 8, height: 56 };
+    session.beginDrag();
+    const released: Rect = { x: 96, y: 212, width: 36, height: 96 };
     const decision = session.endDrag(released);
 
     expect(decision).toEqual({
@@ -156,20 +158,20 @@ describe('note window drag session', () => {
   });
 
   it('grows a right-side dock toward the left when expanding', () => {
-    const rightSliver: Rect = { x: 1272, y: 300, width: 8, height: 56 };
+    const rightTab: Rect = { x: 1244, y: 300, width: 36, height: 96 };
     const session = createSession({
       presentation: 'docked',
       dockSide: 'right',
-      dockedBounds: rightSliver,
+      dockedBounds: rightTab,
       expandedSize: { width: 280, height: 320 }
     });
 
-    session.applyDragDelta(rightSliver, -120, 0);
-    const decision = session.endDrag({ x: 1152, y: 300, width: 8, height: 56 });
+    session.beginDrag();
+    const decision = session.endDrag({ x: 1124, y: 300, width: 36, height: 96 });
 
     expect(decision).toMatchObject({
       kind: 'undock-offer',
-      bounds: { x: 1152 + 8 - 280, y: 300, width: 280, height: 320 }
+      bounds: { x: 1124 + 36 - 280, y: 300, width: 280, height: 320 }
     });
   });
 
@@ -182,7 +184,7 @@ describe('note window drag session', () => {
   it('decides nothing when a docked window has no dock origin', () => {
     const session = createSession({ presentation: 'docked', dockSide: 'left' });
 
-    session.applyDragDelta(DOCKED_SLIVER, 100, 0);
-    expect(session.endDrag({ x: 100, y: 200, width: 8, height: 56 })).toEqual({ kind: 'none' });
+    session.beginDrag();
+    expect(session.endDrag({ x: 100, y: 200, width: 36, height: 96 })).toEqual({ kind: 'none' });
   });
 });

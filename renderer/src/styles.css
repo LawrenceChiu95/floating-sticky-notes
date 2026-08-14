@@ -66,7 +66,7 @@ textarea {
   will-change: height;
 }
 
-/* 贴边缝与进出贴边的尺寸钉住。与收起同理:width/height 过渡只属于
+/* 贴边书签头与进出贴边的尺寸钉住。与收起同理:width/height 过渡只属于
    dock-transitioning 过渡态,基础态壳体逐帧贴住窗口,不能挂尺寸过渡。 */
 .note-shell--docked,
 .note-shell--dock-shrinking,
@@ -94,8 +94,8 @@ textarea {
 }
 
 .note-shell--docked {
-  /* 书签头由 renderer 指针拖动；app-region 会与指针拖动重复触发（原生拖窗 +
-     IPC 移窗）。展开态横条仍是原生拖动。 */
+  /* 书签头由主进程跟光标拖动；app-region 会与指针拖动重复触发（原生拖窗 +
+     主进程移窗）。展开态横条仍是原生拖动。 */
   -webkit-app-region: no-drag;
   display: flex;
   align-items: center;
@@ -146,7 +146,7 @@ textarea {
 }
 
 .note-shell--collapsed .drag-bar {
-  /* 收起横条由 renderer 指针拖动（松手才判定贴边），关闭原生 app-region。 */
+  /* 收起横条由主进程跟光标拖动（松手才判定贴边），关闭原生 app-region。 */
   -webkit-app-region: no-drag;
   height: calc(var(--note-collapsed-height) - 2px);
   min-height: 0;

@@ -135,18 +135,21 @@ function App(): JSX.Element {
   isCollapsedRef.current = isCollapsed;
   isCollapseTransitioningRef.current = isCollapseTransitioning;
   isUndockGrowingRef.current = isUndockGrowing;
-  // 收起横条与贴边缝的窗口拖动（图片预览窗同款手动拖动）：macOS 没有任何
-  // 「拖动结束」窗口事件，moved 是 move 的别名，只有这里的 pointerup /
-  // pointercancel 才是真正的松手。started 之前不碰 IPC，单击/双击命名不
-  // 会触发任何窗口移动。展开态横条仍走原生 -webkit-app-region。
+  // 收起横条与贴边书签头的窗口拖动：macOS 没有任何「拖动结束」窗口事件，
+  // moved 是 move 的别名，只有这里的 pointerup / pointercancel 才是真正的
+  // 松手。超过阈值后只发一次 start（带按下点相对窗口的抓取偏移），拖动期间
+  // 主进程自己跟光标，松手再发一次 finish——不逐帧走 IPC。started 之前不碰
+  // IPC，单击/双击命名不会触发任何窗口移动。展开态横条仍走原生
+  // -webkit-app-region。
   const noteWindowDragRef = useRef<{
     pointerId: number;
+    offsetX: number;
+    offsetY: number;
     lastX: number;
     lastY: number;
     pendingDx: number;
     pendingDy: number;
     started: boolean;
-    frame?: number;
   }>();
   const noteInputRef = useRef<HTMLTextAreaElement | null>(null);
   const noteContentRef = useRef<HTMLDivElement | null>(null);
@@ -221,10 +224,7 @@ function App(): JSX.Element {
       isMounted = false;
       unsubscribeDockOffer();
       unsubscribeUndockOffer();
-      if (noteWindowDragRef.current?.frame !== undefined) {
-        cancelAnimationFrame(noteWindowDragRef.current.frame);
-        noteWindowDragRef.current = undefined;
-      }
+      noteWindowDragRef.current = undefined;
       window.removeEventListener('beforeunload', flushPendingContent);
       if (window.__stickyNotesFlushPendingContent === flushPendingContent) {
         delete window.__stickyNotesFlushPendingContent;
@@ -867,26 +867,6 @@ function App(): JSX.Element {
   const isManualWindowDragEnabled = (): boolean =>
     isCollapsedRef.current || (dockRef.current !== null && !isUndockGrowingRef.current);
 
-  const flushNoteWindowDrag = (): void => {
-    const drag = noteWindowDragRef.current;
-
-    if (!drag) {
-      return;
-    }
-
-    drag.frame = undefined;
-    const dx = drag.pendingDx;
-    const dy = drag.pendingDy;
-
-    if (dx === 0 && dy === 0) {
-      return;
-    }
-
-    drag.pendingDx = 0;
-    drag.pendingDy = 0;
-    void window.stickyNotes.dragNoteWindow(dx, dy);
-  };
-
   const handleNoteWindowDragPointerDown = (event: ReactPointerEvent<HTMLElement>): void => {
     if (event.button !== 0 || !isManualWindowDragEnabled()) {
       return;
@@ -904,16 +884,14 @@ function App(): JSX.Element {
     }
 
     // 上一个手势若因系统中断没收到 up/cancel，新按下时丢弃残留状态。
-    if (noteWindowDragRef.current) {
-      if (noteWindowDragRef.current.frame !== undefined) {
-        cancelAnimationFrame(noteWindowDragRef.current.frame);
-      }
-      noteWindowDragRef.current = undefined;
-    }
+    noteWindowDragRef.current = undefined;
 
     event.currentTarget.setPointerCapture(event.pointerId);
     noteWindowDragRef.current = {
       pointerId: event.pointerId,
+      // 无边框窗口内容原点即窗口原点：clientX/Y 就是抓取偏移。
+      offsetX: event.clientX,
+      offsetY: event.clientY,
       lastX: event.screenX,
       lastY: event.screenY,
       pendingDx: 0,
@@ -925,7 +903,7 @@ function App(): JSX.Element {
   const handleNoteWindowDragPointerMove = (event: ReactPointerEvent<HTMLElement>): void => {
     const drag = noteWindowDragRef.current;
 
-    if (!drag || drag.pointerId !== event.pointerId) {
+    if (!drag || drag.pointerId !== event.pointerId || drag.started) {
       return;
     }
 
@@ -934,15 +912,14 @@ function App(): JSX.Element {
     drag.lastX = event.screenX;
     drag.lastY = event.screenY;
 
-    if (!drag.started && Math.hypot(drag.pendingDx, drag.pendingDy) < NOTE_WINDOW_DRAG_THRESHOLD_PX) {
+    if (Math.hypot(drag.pendingDx, drag.pendingDy) < NOTE_WINDOW_DRAG_THRESHOLD_PX) {
       return;
     }
 
+    // 超过阈值才通知主进程开始跟光标；窗口尚未移动过，按下时的 clientX/Y
+    // 仍是准确的抓取偏移。
     drag.started = true;
-
-    if (drag.frame === undefined) {
-      drag.frame = requestAnimationFrame(flushNoteWindowDrag);
-    }
+    void window.stickyNotes.startNoteWindowDrag(drag.offsetX, drag.offsetY);
   };
 
   const handleNoteWindowDragPointerUp = (event: ReactPointerEvent<HTMLElement>): void => {
@@ -962,12 +939,8 @@ function App(): JSX.Element {
       return;
     }
 
-    if (drag.frame !== undefined) {
-      cancelAnimationFrame(drag.frame);
-    }
-
-    // 松手才是真正的判定点：剩余增量随 finish 一起发出，主进程先应用再判定。
-    void window.stickyNotes.finishNoteWindowDrag(drag.pendingDx, drag.pendingDy);
+    // 松手才是真正的判定点：主进程停掉光标跟踪、补最后一段位移后判定。
+    void window.stickyNotes.finishNoteWindowDrag();
   };
 
   // 横条松手时已贴近工作区边缘：先把壳体视觉收到 36×96 的书签头，再由主进程
@@ -1140,8 +1113,8 @@ function App(): JSX.Element {
   );
 
   // 贴边态只渲染一枚书签头：便签色实心底，有名字就竖排显示一小段（认得出是
-  // 哪张），没有按钮和正文，整枚可拖（renderer 指针拖动，松手才由主进程判定
-  // 展开或弹回）。拖出展开的生长动画由完整 DOM + undock-grow 尺寸钉住来演，
+  // 哪张），没有按钮和正文，整枚可拖（主进程跟光标，松手才由主进程判定展开
+  // 或弹回）。拖出展开的生长动画由完整 DOM + undock-grow 尺寸钉住来演，
   // 这里让位。
   if (dock && !isUndockGrowing) {
     return (

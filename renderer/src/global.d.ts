@@ -42,8 +42,8 @@ declare global {
       setCollapsed: (collapsed: boolean) => Promise<boolean>;
       onDockOffer: (listener: (payload: DockOfferPayload) => void) => () => void;
       onUndockOffer: (listener: (payload: UndockOfferPayload) => void) => () => void;
-      dragNoteWindow: (dx: number, dy: number) => Promise<boolean>;
-      finishNoteWindowDrag: (dx: number, dy: number) => Promise<boolean>;
+      startNoteWindowDrag: (offsetX: number, offsetY: number) => Promise<boolean>;
+      finishNoteWindowDrag: () => Promise<boolean>;
       acceptDock: (epoch: number) => Promise<boolean>;
       acceptUndock: (epoch: number) => Promise<boolean>;
       getAutoLaunchStatus: () => Promise<AutoLaunchStatus>;

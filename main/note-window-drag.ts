@@ -16,7 +16,7 @@ export type NoteWindowDragDecision =
   | { kind: 'snap-back' };
 
 export type NoteWindowDragSession = {
-  applyDragDelta: (current: Rect, dx: number, dy: number) => Rect;
+  beginDrag: () => boolean;
   endDrag: (current: Rect) => NoteWindowDragDecision;
   acceptDockOffer: (epoch: number) => { side: DockSide; y: number } | undefined;
   acceptUndockOffer: (epoch: number) => { bounds: Rect } | undefined;
@@ -35,11 +35,11 @@ type PendingDockOffer =
   | { kind: 'dock'; side: DockSide; y: number; epoch: number }
   | { kind: 'undock'; bounds: Rect; epoch: number };
 
-// 收起/贴边态的窗口移动由 renderer 指针事件驱动（图片预览窗同款模式），
-// 松手 = pointerup/pointercancel 发来的 finish IPC。这个会话只回答两件事：
-// 拖动结束时按当前矩形判定贴边/拖出/弹回，以及 accept 是否是最后一次
-// offer。macOS 的 moved 是 move 的别名、没有任何「拖动结束」窗口事件，
-// 所以任何基于 moved 静默期的近似都不允许回到这里。
+// 收起/贴边态的窗口移动由主进程直接跟光标（renderer 只在手势两端各发一次
+// IPC：start 带抓取偏移，finish 即 pointerup/pointercancel）。这个会话只
+// 回答两件事：拖动结束时按当前矩形判定贴边/拖出/弹回，以及 accept 是否是
+// 最后一次 offer。macOS 的 moved 是 move 的别名、没有任何「拖动结束」窗口
+// 事件，所以任何基于 moved 静默期的近似都不允许回到这里。
 export function createNoteWindowDragSession(
   deps: NoteWindowDragSessionDeps
 ): NoteWindowDragSession {
@@ -47,25 +47,20 @@ export function createNoteWindowDragSession(
   let offerEpoch = 0;
   let pendingOffer: PendingDockOffer | undefined;
 
-  const beginDrag = (): void => {
-    dragging = true;
-    // 新一轮拖动即刻作废旧 offer：renderer 播过渡视觉期间用户再次按住横条，
-    // 之后到达的 accept 因 epoch 对不上而被拒绝。
-    pendingOffer = undefined;
-  };
-
   return {
-    applyDragDelta: (current, dx, dy) => {
-      if (!dragging) {
-        beginDrag();
+    beginDrag: () => {
+      // 展开态不允许走这条手动拖动路径（它的横条仍是原生 app-region）；
+      // 拒绝开始，主进程也就不会为它挂光标跟踪。
+      const presentation = deps.getPresentation();
+      if (presentation !== 'collapsed' && presentation !== 'docked') {
+        return false;
       }
 
-      return {
-        x: Math.round(current.x + dx),
-        y: Math.round(current.y + dy),
-        width: current.width,
-        height: current.height
-      };
+      dragging = true;
+      // 新一轮拖动即刻作废旧 offer：renderer 播过渡视觉期间用户再次按住
+      // 横条，之后到达的 accept 因 epoch 对不上而被拒绝。
+      pendingOffer = undefined;
+      return true;
     },
     endDrag: (current) => {
       if (!dragging) {

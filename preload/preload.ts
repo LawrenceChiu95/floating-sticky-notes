@@ -57,11 +57,11 @@ contextBridge.exposeInMainWorld('stickyNotes', {
       ipcRenderer.removeListener('sticky-notes:undock-offer', subscription);
     };
   },
-  // 收起横条/贴边缝的窗口拖动：renderer 指针事件 + 增量 IPC，松手才判定。
-  dragNoteWindow: (dx: number, dy: number) =>
-    ipcRenderer.invoke('sticky-notes:drag-note-window', dx, dy),
-  finishNoteWindowDrag: (dx: number, dy: number) =>
-    ipcRenderer.invoke('sticky-notes:finish-note-window-drag', dx, dy),
+  // 收起横条/贴边书签头的窗口拖动：手势两端各一次 IPC（start 带抓取偏移，
+  // finish 即松手），拖动期间由主进程自己跟光标。
+  startNoteWindowDrag: (offsetX: number, offsetY: number) =>
+    ipcRenderer.invoke('sticky-notes:start-note-window-drag', offsetX, offsetY),
+  finishNoteWindowDrag: () => ipcRenderer.invoke('sticky-notes:finish-note-window-drag'),
   acceptDock: (epoch: number) => ipcRenderer.invoke('sticky-notes:accept-dock', epoch),
   acceptUndock: (epoch: number) => ipcRenderer.invoke('sticky-notes:accept-undock', epoch),
   getAutoLaunchStatus: () => ipcRenderer.invoke('sticky-notes:get-auto-launch-status'),
