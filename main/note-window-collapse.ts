@@ -1,4 +1,11 @@
-import type { NoteBounds } from './note-state';
+import type { NoteBounds, NoteDock } from './note-state';
+import {
+  buildDockedBounds,
+  findNearestWorkArea,
+  NOTE_DOCK_HEIGHT,
+  NOTE_DOCK_WIDTH,
+  type DockSide
+} from '../shared/note-dock';
 import {
   NOTE_COLLAPSED_HEIGHT,
   NOTE_MIN_HEIGHT,
@@ -17,6 +24,13 @@ export type CollapsibleNoteWindow = {
   setResizable: (resizable: boolean) => void;
 };
 
+export type NoteWindowPresentation = 'expanded' | 'collapsed' | 'docked';
+
+export type NoteWindowDockTransition =
+  | { kind: 'dock'; side: DockSide; y: number }
+  | { kind: 'expand'; bounds: NativeNoteWindowBounds }
+  | { kind: 'snap-back' };
+
 type NoteWindowCollapseControllerOptions = {
   window: CollapsibleNoteWindow;
   getWorkAreas: () => DisplayWorkArea[];
@@ -25,12 +39,21 @@ type NoteWindowCollapseControllerOptions = {
 export function createNoteWindowCollapseController(
   options: NoteWindowCollapseControllerOptions
 ): {
+  getPresentation: () => NoteWindowPresentation;
   getBoundsForPersistence: () => NativeNoteWindowBounds;
+  getDockForPersistence: () => NoteDock | undefined;
   setCollapsed: (collapsed: boolean) => Promise<void>;
+  setDocked: (next: NoteWindowDockTransition) => Promise<void>;
+  applyRestoredDock: (
+    dock: { side: DockSide; y: number },
+    restoredExpandedBounds: NativeNoteWindowBounds
+  ) => void;
 } {
   const noteWindow = options.window;
-  let isCollapsed = false;
+  let presentation: NoteWindowPresentation = 'expanded';
   let expandedBounds = noteWindow.getBounds();
+  let dockedBounds: NativeNoteWindowBounds | undefined;
+  let dockSide: DockSide | undefined;
 
   const rollbackToExpanded = (bounds: NativeNoteWindowBounds): void => {
     bestEffort(() => noteWindow.setResizable(true));
@@ -44,12 +67,23 @@ export function createNoteWindowCollapseController(
     bestEffort(() => noteWindow.setResizable(false));
   };
 
+  const rollbackToDocked = (bounds: NativeNoteWindowBounds): void => {
+    bestEffort(() => noteWindow.setMinimumSize(NOTE_DOCK_WIDTH, NOTE_DOCK_HEIGHT));
+    bestEffort(() => noteWindow.setBounds(bounds, false));
+    bestEffort(() => noteWindow.setResizable(false));
+  };
+
   const setCollapsed = async (collapsed: boolean): Promise<void> => {
-    if (isCollapsed === collapsed || noteWindow.isDestroyed()) {
+    if (noteWindow.isDestroyed()) {
       return;
     }
 
     if (collapsed) {
+      // 贴边不允许回到横条；只有展开态能收成横条。
+      if (presentation !== 'expanded') {
+        return;
+      }
+
       const nextExpandedBounds = noteWindow.getBounds();
 
       try {
@@ -70,7 +104,12 @@ export function createNoteWindowCollapseController(
       }
 
       expandedBounds = nextExpandedBounds;
-      isCollapsed = true;
+      presentation = 'collapsed';
+      return;
+    }
+
+    // 贴边的展开走 setDocked({ kind: 'expand' })，不能复用横条锚点路径。
+    if (presentation !== 'collapsed') {
       return;
     }
 
@@ -100,12 +139,90 @@ export function createNoteWindowCollapseController(
     }
 
     expandedBounds = restoredBounds;
-    isCollapsed = false;
+    presentation = 'expanded';
+  };
+
+  const setDocked = async (next: NoteWindowDockTransition): Promise<void> => {
+    if (noteWindow.isDestroyed()) {
+      return;
+    }
+
+    if (next.kind === 'dock') {
+      // 只有横条能贴边；展开态不允许直接贴边。
+      if (presentation !== 'collapsed') {
+        return;
+      }
+
+      const collapsedBounds = noteWindow.getBounds();
+      const workArea = findNearestWorkArea(collapsedBounds, options.getWorkAreas());
+
+      if (!workArea) {
+        return;
+      }
+
+      const targetBounds = buildDockedBounds({ side: next.side, y: next.y, workArea });
+
+      try {
+        noteWindow.setMinimumSize(NOTE_DOCK_WIDTH, NOTE_DOCK_HEIGHT);
+        noteWindow.setBounds(targetBounds, false);
+        if (!noteWindow.isDestroyed()) {
+          noteWindow.setResizable(false);
+        }
+      } catch (error) {
+        rollbackToCollapsed(collapsedBounds);
+        throw error;
+      }
+
+      // bounds 始终记展开态：横条 x/y + 展开宽高，与收起持久化口径一致。
+      expandedBounds = {
+        ...expandedBounds,
+        x: collapsedBounds.x,
+        y: collapsedBounds.y
+      };
+      dockedBounds = targetBounds;
+      dockSide = next.side;
+      presentation = 'docked';
+      return;
+    }
+
+    if (next.kind === 'expand') {
+      if (presentation !== 'docked') {
+        return;
+      }
+
+      const sliverBounds = noteWindow.getBounds();
+
+      try {
+        noteWindow.setResizable(true);
+        noteWindow.setBounds(next.bounds, false);
+        noteWindow.setMinimumSize(NOTE_MIN_WIDTH, NOTE_MIN_HEIGHT);
+      } catch (error) {
+        rollbackToDocked(sliverBounds);
+        throw error;
+      }
+
+      expandedBounds = next.bounds;
+      dockedBounds = undefined;
+      dockSide = undefined;
+      presentation = 'expanded';
+      return;
+    }
+
+    if (presentation !== 'docked' || !dockedBounds) {
+      return;
+    }
+
+    noteWindow.setBounds(dockedBounds, false);
   };
 
   return {
+    getPresentation: () => presentation,
     getBoundsForPersistence: () => {
-      if (!isCollapsed) {
+      if (presentation === 'docked') {
+        return { ...expandedBounds };
+      }
+
+      if (presentation === 'expanded') {
         return noteWindow.getBounds();
       }
 
@@ -116,7 +233,21 @@ export function createNoteWindowCollapseController(
         y: collapsedBounds.y
       };
     },
-    setCollapsed
+    getDockForPersistence: () => {
+      if (presentation !== 'docked' || !dockSide) {
+        return undefined;
+      }
+
+      return { side: dockSide, y: noteWindow.getBounds().y };
+    },
+    setCollapsed,
+    setDocked,
+    applyRestoredDock: (dock, restoredExpandedBounds) => {
+      presentation = 'docked';
+      dockSide = dock.side;
+      dockedBounds = noteWindow.getBounds();
+      expandedBounds = restoredExpandedBounds;
+    }
   };
 }
 

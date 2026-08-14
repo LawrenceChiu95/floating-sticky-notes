@@ -9,7 +9,7 @@ type NativeBounds = Required<NoteBounds>;
 
 function createWindowHarness(initialBounds: NativeBounds): {
   window: CollapsibleNoteWindow;
-  failNext: (operation: string) => void;
+  failNext: (operation: 'setBounds' | 'setMinimumSize' | 'setResizable') => void;
   moveTo: (x: number, y: number) => void;
   getNativeState: () => {
     bounds: NativeBounds;
@@ -34,15 +34,15 @@ function createWindowHarness(initialBounds: NativeBounds): {
       getBounds: () => ({ ...bounds }),
       isDestroyed: () => false,
       setBounds: (nextBounds) => {
-        maybeFail(nextBounds.height === 40 ? 'collapse-bounds' : 'expand-bounds');
+        maybeFail('setBounds');
         bounds = { ...nextBounds };
       },
       setMinimumSize: (width, height) => {
-        maybeFail(height === 40 ? 'collapse-minimum' : 'expand-minimum');
+        maybeFail('setMinimumSize');
         minimumSize = [width, height];
       },
       setResizable: (nextResizable) => {
-        maybeFail(nextResizable ? 'expand-resizable' : 'collapse-resizable');
+        maybeFail('setResizable');
         resizable = nextResizable;
       }
     },
@@ -60,16 +60,22 @@ function createWindowHarness(initialBounds: NativeBounds): {
   };
 }
 
+const WORK_AREAS = [{ x: 0, y: 0, width: 1440, height: 900 }];
+
+function createController(harness: ReturnType<typeof createWindowHarness>) {
+  return createNoteWindowCollapseController({
+    window: harness.window,
+    getWorkAreas: () => WORK_AREAS
+  });
+}
+
 describe('note window collapse controller', () => {
   it('rolls back a failed collapse and allows the same transition to be retried', async () => {
     const harness = createWindowHarness({ x: 120, y: 80, width: 320, height: 260 });
-    const controller = createNoteWindowCollapseController({
-      window: harness.window,
-      getWorkAreas: () => [{ x: 0, y: 0, width: 1440, height: 900 }]
-    });
-    harness.failNext('collapse-resizable');
+    const controller = createController(harness);
+    harness.failNext('setResizable');
 
-    await expect(controller.setCollapsed(true)).rejects.toThrow('Failed collapse-resizable');
+    await expect(controller.setCollapsed(true)).rejects.toThrow('Failed setResizable');
     expect(harness.getNativeState()).toEqual({
       bounds: { x: 120, y: 80, width: 320, height: 260 },
       minimumSize: [200, 140],
@@ -92,10 +98,7 @@ describe('note window collapse controller', () => {
 
   it('rolls back a failed expansion and allows the same transition to be retried', async () => {
     const harness = createWindowHarness({ x: 120, y: 80, width: 320, height: 260 });
-    const controller = createNoteWindowCollapseController({
-      window: harness.window,
-      getWorkAreas: () => [{ x: 0, y: 0, width: 1440, height: 900 }]
-    });
+    const controller = createController(harness);
     await controller.setCollapsed(true);
     harness.moveTo(360, 200);
     expect(controller.getBoundsForPersistence()).toEqual({
@@ -104,9 +107,9 @@ describe('note window collapse controller', () => {
       width: 320,
       height: 260
     });
-    harness.failNext('expand-minimum');
+    harness.failNext('setMinimumSize');
 
-    await expect(controller.setCollapsed(false)).rejects.toThrow('Failed expand-minimum');
+    await expect(controller.setCollapsed(false)).rejects.toThrow('Failed setMinimumSize');
     expect(harness.getNativeState()).toEqual({
       bounds: { x: 360, y: 200, width: 320, height: 40 },
       minimumSize: [200, 40],
@@ -119,5 +122,199 @@ describe('note window collapse controller', () => {
       minimumSize: [200, 140],
       resizable: true
     });
+  });
+});
+
+describe('note window dock controller', () => {
+  it('docks a collapsed bar into a left sliver and keeps expanded bounds for persistence', async () => {
+    const harness = createWindowHarness({ x: 120, y: 80, width: 320, height: 260 });
+    const controller = createController(harness);
+    await controller.setCollapsed(true);
+
+    await controller.setDocked({ kind: 'dock', side: 'left', y: 80 });
+
+    expect(harness.getNativeState()).toEqual({
+      bounds: { x: 0, y: 80, width: 8, height: 56 },
+      minimumSize: [8, 56],
+      resizable: false
+    });
+    expect(controller.getPresentation()).toBe('docked');
+    expect(controller.getBoundsForPersistence()).toEqual({
+      x: 120,
+      y: 80,
+      width: 320,
+      height: 260
+    });
+    expect(controller.getDockForPersistence()).toEqual({ side: 'left', y: 80 });
+  });
+
+  it('pins a right dock to the right work-area edge with the y clamped vertically', async () => {
+    const harness = createWindowHarness({ x: 120, y: 80, width: 320, height: 260 });
+    const controller = createController(harness);
+    await controller.setCollapsed(true);
+
+    await controller.setDocked({ kind: 'dock', side: 'right', y: 5000 });
+
+    expect(harness.getNativeState().bounds).toEqual({
+      x: 1440 - 8,
+      y: 900 - 56,
+      width: 8,
+      height: 56
+    });
+    expect(controller.getDockForPersistence()).toEqual({ side: 'right', y: 900 - 56 });
+  });
+
+  it('expands a docked sliver into the offered bounds and clears the dock', async () => {
+    const harness = createWindowHarness({ x: 120, y: 80, width: 320, height: 260 });
+    const controller = createController(harness);
+    await controller.setCollapsed(true);
+    await controller.setDocked({ kind: 'dock', side: 'left', y: 80 });
+
+    await controller.setDocked({
+      kind: 'expand',
+      bounds: { x: 48, y: 96, width: 320, height: 260 }
+    });
+
+    expect(harness.getNativeState()).toEqual({
+      bounds: { x: 48, y: 96, width: 320, height: 260 },
+      minimumSize: [200, 140],
+      resizable: true
+    });
+    expect(controller.getPresentation()).toBe('expanded');
+    expect(controller.getDockForPersistence()).toBeUndefined();
+    expect(controller.getBoundsForPersistence()).toEqual({
+      x: 48,
+      y: 96,
+      width: 320,
+      height: 260
+    });
+  });
+
+  it('snaps a docked sliver back to its pre-drag bounds', async () => {
+    const harness = createWindowHarness({ x: 120, y: 80, width: 320, height: 260 });
+    const controller = createController(harness);
+    await controller.setCollapsed(true);
+    await controller.setDocked({ kind: 'dock', side: 'left', y: 80 });
+    harness.moveTo(60, 132);
+
+    await controller.setDocked({ kind: 'snap-back' });
+
+    expect(harness.getNativeState()).toEqual({
+      bounds: { x: 0, y: 80, width: 8, height: 56 },
+      minimumSize: [8, 56],
+      resizable: false
+    });
+    expect(controller.getPresentation()).toBe('docked');
+    expect(controller.getDockForPersistence()).toEqual({ side: 'left', y: 80 });
+  });
+
+  it('rolls back a failed dock entry and allows the same transition to be retried', async () => {
+    const harness = createWindowHarness({ x: 120, y: 80, width: 320, height: 260 });
+    const controller = createController(harness);
+    await controller.setCollapsed(true);
+    harness.failNext('setBounds');
+
+    await expect(controller.setDocked({ kind: 'dock', side: 'left', y: 80 })).rejects.toThrow(
+      'Failed setBounds'
+    );
+    expect(harness.getNativeState()).toEqual({
+      bounds: { x: 120, y: 80, width: 320, height: 40 },
+      minimumSize: [200, 40],
+      resizable: false
+    });
+    expect(controller.getPresentation()).toBe('collapsed');
+    expect(controller.getDockForPersistence()).toBeUndefined();
+
+    await expect(
+      controller.setDocked({ kind: 'dock', side: 'left', y: 80 })
+    ).resolves.toBeUndefined();
+    expect(controller.getPresentation()).toBe('docked');
+    expect(harness.getNativeState().bounds).toEqual({ x: 0, y: 80, width: 8, height: 56 });
+  });
+
+  it('rolls back a failed dock expansion and allows the same transition to be retried', async () => {
+    const harness = createWindowHarness({ x: 120, y: 80, width: 320, height: 260 });
+    const controller = createController(harness);
+    await controller.setCollapsed(true);
+    await controller.setDocked({ kind: 'dock', side: 'left', y: 80 });
+    harness.failNext('setBounds');
+
+    await expect(
+      controller.setDocked({
+        kind: 'expand',
+        bounds: { x: 48, y: 96, width: 320, height: 260 }
+      })
+    ).rejects.toThrow('Failed setBounds');
+    expect(harness.getNativeState()).toEqual({
+      bounds: { x: 0, y: 80, width: 8, height: 56 },
+      minimumSize: [8, 56],
+      resizable: false
+    });
+    expect(controller.getPresentation()).toBe('docked');
+
+    await expect(
+      controller.setDocked({
+        kind: 'expand',
+        bounds: { x: 48, y: 96, width: 320, height: 260 }
+      })
+    ).resolves.toBeUndefined();
+    expect(controller.getPresentation()).toBe('expanded');
+    expect(harness.getNativeState()).toEqual({
+      bounds: { x: 48, y: 96, width: 320, height: 260 },
+      minimumSize: [200, 140],
+      resizable: true
+    });
+  });
+
+  it('ignores collapse commands while docked', async () => {
+    const harness = createWindowHarness({ x: 120, y: 80, width: 320, height: 260 });
+    const controller = createController(harness);
+    await controller.setCollapsed(true);
+    await controller.setDocked({ kind: 'dock', side: 'left', y: 80 });
+
+    await controller.setCollapsed(true);
+    await controller.setCollapsed(false);
+
+    expect(controller.getPresentation()).toBe('docked');
+    expect(harness.getNativeState()).toEqual({
+      bounds: { x: 0, y: 80, width: 8, height: 56 },
+      minimumSize: [8, 56],
+      resizable: false
+    });
+    expect(controller.getDockForPersistence()).toEqual({ side: 'left', y: 80 });
+  });
+
+  it('rejects docking from the expanded state', async () => {
+    const harness = createWindowHarness({ x: 120, y: 80, width: 320, height: 260 });
+    const controller = createController(harness);
+
+    await controller.setDocked({ kind: 'dock', side: 'left', y: 80 });
+
+    expect(controller.getPresentation()).toBe('expanded');
+    expect(harness.getNativeState()).toEqual({
+      bounds: { x: 120, y: 80, width: 320, height: 260 },
+      minimumSize: [200, 140],
+      resizable: true
+    });
+  });
+
+  it('restores a persisted dock without moving the window', async () => {
+    const harness = createWindowHarness({ x: 0, y: 120, width: 8, height: 56 });
+    const controller = createController(harness);
+
+    controller.applyRestoredDock(
+      { side: 'left', y: 120 },
+      { x: 100, y: 100, width: 320, height: 260 }
+    );
+
+    expect(controller.getPresentation()).toBe('docked');
+    expect(controller.getBoundsForPersistence()).toEqual({
+      x: 100,
+      y: 100,
+      width: 320,
+      height: 260
+    });
+    expect(controller.getDockForPersistence()).toEqual({ side: 'left', y: 120 });
+    expect(harness.getNativeState().bounds).toEqual({ x: 0, y: 120, width: 8, height: 56 });
   });
 });
