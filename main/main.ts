@@ -72,11 +72,21 @@ import {
 } from './update-progress-window';
 import {
   NOTE_ALWAYS_ON_TOP_LEVEL,
+  NOTE_MIN_HEIGHT,
+  NOTE_MIN_WIDTH,
   NOTE_WINDOW_ICON_PATH,
+  clampNoteBoundsToWorkAreas,
   createNoteWindowOptions,
   type DisplayWorkArea
 } from './window-options';
 import { createDebouncedValueAction } from '../shared/debounced-action';
+import {
+  buildExpandBoundsFromDock,
+  findNearestWorkArea,
+  resolveCollapsedDockSide,
+  resolveDockedRelease,
+  restoreDockedBounds
+} from '../shared/note-dock';
 import { DEFAULT_APP_COPY, getAppCopy, type AppCopy } from '../shared/app-copy';
 import {
   isReleaseFeedbackRenderedPayload,
@@ -235,7 +245,14 @@ function createElectronImagePreviewWindow(
 }
 function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
   const workAreas = screen.getAllDisplays().map((display) => display.workArea);
-  const noteWindow = new BrowserWindow(createNoteWindowOptions(note.bounds, workAreas));
+  // 启动恢复贴边：缝夹取后仍落在某块可见工作区内才按贴边建窗，否则按
+  // bounds 展开（notes-manager 会发现窗口不是 docked 并丢弃失效的 dock）。
+  const restoredDockBounds = note.dock
+    ? restoreDockedBounds({ dock: note.dock, workAreas })
+    : undefined;
+  const noteWindow = new BrowserWindow(
+    createNoteWindowOptions(note.bounds, workAreas, restoredDockBounds ?? undefined)
+  );
   observeWindowDiagnostics(noteWindow, 'note');
   const noteWebContentsId = noteWindow.webContents.id;
 
@@ -271,6 +288,112 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
   const collapseController = createNoteWindowCollapseController({
     window: noteWindow,
     getWorkAreas: () => screen.getAllDisplays().map((display) => display.workArea)
+  });
+  if (restoredDockBounds && note.dock) {
+    collapseController.applyRestoredDock(
+      { side: note.dock.side, y: restoredDockBounds.y },
+      {
+        x: note.bounds.x ?? restoredDockBounds.x,
+        y: note.bounds.y ?? restoredDockBounds.y,
+        width: Math.max(NOTE_MIN_WIDTH, note.bounds.width),
+        height: Math.max(NOTE_MIN_HEIGHT, note.bounds.height)
+      }
+    );
+  }
+
+  // 窗口拖动走 -webkit-app-region: drag，renderer 收不到 drag-bar 的 mouseup；
+  // 贴边/拖出判定只能在主进程做。will-move 只在用户手动拖动时触发（程序化
+  // setBounds 不触发），所以它是「拖动手势进行中」的可靠信号。
+  let dockDragInProgress = false;
+  const decideDockRelease = (): void => {
+    if (noteWindow.isDestroyed()) {
+      return;
+    }
+
+    const presentation = collapseController.getPresentation();
+    const currentBounds = noteWindow.getBounds();
+
+    if (presentation === 'collapsed') {
+      const workArea = findNearestWorkArea(
+        currentBounds,
+        screen.getAllDisplays().map((display) => display.workArea)
+      );
+      const side = workArea ? resolveCollapsedDockSide(currentBounds, workArea) : undefined;
+
+      if (side && !noteWindow.webContents.isDestroyed()) {
+        noteWindow.webContents.send('sticky-notes:dock-offer', {
+          side,
+          y: currentBounds.y
+        });
+      }
+      return;
+    }
+
+    if (presentation !== 'docked') {
+      return;
+    }
+
+    const dock = collapseController.getDockForPersistence();
+    const dockOrigin = collapseController.getDockedBounds();
+
+    if (!dock || !dockOrigin) {
+      return;
+    }
+
+    if (
+      resolveDockedRelease({ side: dock.side, origin: dockOrigin, current: currentBounds }) ===
+      'snap-back'
+    ) {
+      void collapseController.setDocked({ kind: 'snap-back' }).catch(() => undefined);
+      return;
+    }
+
+    const workArea = findNearestWorkArea(
+      currentBounds,
+      screen.getAllDisplays().map((display) => display.workArea)
+    );
+
+    if (!workArea) {
+      return;
+    }
+
+    const expandedBounds = collapseController.getBoundsForPersistence();
+    const targetBounds = buildExpandBoundsFromDock({
+      side: dock.side,
+      sliver: currentBounds,
+      expandedSize: { width: expandedBounds.width, height: expandedBounds.height },
+      workArea
+    });
+
+    if (!noteWindow.webContents.isDestroyed()) {
+      noteWindow.webContents.send('sticky-notes:undock-offer', { bounds: targetBounds });
+    }
+  };
+  const finishDockDrag = (): void => {
+    dockDragInProgress = false;
+    decideDockRelease();
+  };
+  // Windows 的 moved 在松手时触发一次；macOS 的 moved 是 move 的别名（拖动中
+  // 连续触发），用静默期近似松手：最后一条 moved 之后 250ms 没有新事件就
+  // 当作本次拖动结束。中途停顿超过 250ms 会提前按当前位置落定，继续拖动仍
+  // 会收敛（贴边/展开/弹回都按新位置重新判定）。
+  const scheduleDockDragFinish = createDebouncedValueAction<void>(finishDockDrag, 250);
+  noteWindow.on('will-move', () => {
+    dockDragInProgress = true;
+  });
+  noteWindow.on('moved', () => {
+    if (!dockDragInProgress) {
+      return;
+    }
+    if (process.platform === 'win32') {
+      scheduleDockDragFinish.cancel();
+      finishDockDrag();
+      return;
+    }
+    scheduleDockDragFinish.schedule(undefined);
+  });
+  noteWindow.on('closed', () => {
+    scheduleDockDragFinish.cancel();
   });
   const flushPendingChanges = async (): Promise<void> => {
     await Promise.all([saveBounds.flush(), flushRendererPendingContent(noteWindow)]);
@@ -317,6 +440,9 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
       noteWindow.setTitle(title);
     },
     setCollapsed: collapseController.setCollapsed,
+    setDocked: collapseController.setDocked,
+    getPresentation: collapseController.getPresentation,
+    getDockForPersistence: collapseController.getDockForPersistence,
     close: () => {
       noteWindow.close();
     }
@@ -653,6 +779,68 @@ function registerIpcHandlers(): void {
       diagnosticLogger?.record('note_collapse_failed', {
         webContentsId: event.sender.id,
         collapsed,
+        error
+      });
+      return false;
+    }
+  });
+
+  ipcMain.handle('sticky-notes:accept-dock', async (event, payload: unknown) => {
+    const dockPayload = normalizeDockAcceptPayload(payload);
+
+    if (!dockPayload) {
+      return false;
+    }
+
+    const senderWindow = BrowserWindow.fromWebContents(event.sender);
+
+    if (!senderWindow || senderWindow.isDestroyed()) {
+      return false;
+    }
+
+    const currentBounds = senderWindow.getBounds();
+    const workArea = screen.getDisplayMatching(currentBounds).workArea;
+
+    // renderer 播收缩视觉期间用户可能又把横条拖离边缘；滞后的 accept 不得贴边。
+    if (resolveCollapsedDockSide(currentBounds, workArea) !== dockPayload.side) {
+      return false;
+    }
+
+    try {
+      return await getNotesManager().dockNoteForWebContents(event.sender.id, {
+        side: dockPayload.side,
+        y: dockPayload.y,
+        workArea
+      });
+    } catch (error) {
+      diagnosticLogger?.record('note_dock_failed', {
+        webContentsId: event.sender.id,
+        error
+      });
+      return false;
+    }
+  });
+
+  ipcMain.handle('sticky-notes:accept-undock', async (event, payload: unknown) => {
+    const bounds = normalizeRequiredNoteBounds(payload);
+
+    if (!bounds) {
+      return false;
+    }
+
+    const workAreas = screen.getAllDisplays().map((display) => display.workArea);
+    const clampedBounds = clampNoteBoundsToWorkAreas(bounds, workAreas);
+
+    try {
+      return await getNotesManager().undockNoteForWebContents(event.sender.id, {
+        x: clampedBounds.x ?? bounds.x,
+        y: clampedBounds.y ?? bounds.y,
+        width: clampedBounds.width,
+        height: clampedBounds.height
+      });
+    } catch (error) {
+      diagnosticLogger?.record('note_undock_failed', {
+        webContentsId: event.sender.id,
         error
       });
       return false;
@@ -1009,4 +1197,50 @@ async function flushRendererPendingContent(noteWindow: BrowserWindow): Promise<v
     )
     .then(() => undefined)
     .catch(() => undefined);
+}
+
+function normalizeDockAcceptPayload(
+  value: unknown
+): { side: 'left' | 'right'; y: number } | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+
+  const candidate = value as { side?: unknown; y?: unknown };
+
+  if (candidate.side !== 'left' && candidate.side !== 'right') {
+    return undefined;
+  }
+
+  if (typeof candidate.y !== 'number' || !Number.isFinite(candidate.y)) {
+    return undefined;
+  }
+
+  return { side: candidate.side, y: candidate.y };
+}
+
+function normalizeRequiredNoteBounds(value: unknown): Required<NoteBounds> | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+
+  const candidate = value as Partial<Record<keyof Required<NoteBounds>, unknown>>;
+  const { x, y, width, height } = candidate;
+
+  if (
+    typeof x !== 'number' ||
+    !Number.isFinite(x) ||
+    typeof y !== 'number' ||
+    !Number.isFinite(y) ||
+    typeof width !== 'number' ||
+    !Number.isFinite(width) ||
+    width <= 0 ||
+    typeof height !== 'number' ||
+    !Number.isFinite(height) ||
+    height <= 0
+  ) {
+    return undefined;
+  }
+
+  return { x, y, width, height };
 }

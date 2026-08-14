@@ -146,6 +146,7 @@ describe('note window dock controller', () => {
       height: 260
     });
     expect(controller.getDockForPersistence()).toEqual({ side: 'left', y: 80 });
+    expect(controller.getDockedBounds()).toEqual({ x: 0, y: 80, width: 8, height: 56 });
   });
 
   it('pins a right dock to the right work-area edge with the y clamped vertically', async () => {
@@ -182,6 +183,7 @@ describe('note window dock controller', () => {
     });
     expect(controller.getPresentation()).toBe('expanded');
     expect(controller.getDockForPersistence()).toBeUndefined();
+    expect(controller.getDockedBounds()).toBeUndefined();
     expect(controller.getBoundsForPersistence()).toEqual({
       x: 48,
       y: 96,
@@ -264,6 +266,21 @@ describe('note window dock controller', () => {
       minimumSize: [200, 140],
       resizable: true
     });
+  });
+
+  it('ignores a snap-back when the sliver never left its dock bounds', async () => {
+    const harness = createWindowHarness({ x: 120, y: 80, width: 320, height: 260 });
+    const controller = createController(harness);
+    await controller.setCollapsed(true);
+    await controller.setDocked({ kind: 'dock', side: 'left', y: 80 });
+    harness.failNext('setBounds');
+
+    // 已经在贴边矩形上时 snap-back 不得再触发 setBounds（macOS 上 moved 连续
+    // 触发，没有这道短路会反复重设同一个矩形）。
+    await controller.setDocked({ kind: 'snap-back' });
+
+    expect(controller.getPresentation()).toBe('docked');
+    expect(harness.getNativeState().bounds).toEqual({ x: 0, y: 80, width: 8, height: 56 });
   });
 
   it('ignores collapse commands while docked', async () => {

@@ -42,6 +42,7 @@ export function createNoteWindowCollapseController(
   getPresentation: () => NoteWindowPresentation;
   getBoundsForPersistence: () => NativeNoteWindowBounds;
   getDockForPersistence: () => NoteDock | undefined;
+  getDockedBounds: () => NativeNoteWindowBounds | undefined;
   setCollapsed: (collapsed: boolean) => Promise<void>;
   setDocked: (next: NoteWindowDockTransition) => Promise<void>;
   applyRestoredDock: (
@@ -212,6 +213,16 @@ export function createNoteWindowCollapseController(
       return;
     }
 
+    const currentBounds = noteWindow.getBounds();
+    if (
+      currentBounds.x === dockedBounds.x &&
+      currentBounds.y === dockedBounds.y &&
+      currentBounds.width === dockedBounds.width &&
+      currentBounds.height === dockedBounds.height
+    ) {
+      return;
+    }
+
     noteWindow.setBounds(dockedBounds, false);
   };
 
@@ -240,6 +251,7 @@ export function createNoteWindowCollapseController(
 
       return { side: dockSide, y: noteWindow.getBounds().y };
     },
+    getDockedBounds: () => (dockedBounds ? { ...dockedBounds } : undefined),
     setCollapsed,
     setDocked,
     applyRestoredDock: (dock, restoredExpandedBounds) => {

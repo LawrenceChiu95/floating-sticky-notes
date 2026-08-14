@@ -11,6 +11,20 @@ import type { AppCopy } from '../../shared/app-copy';
 
 export {};
 
+type DockOfferPayload = {
+  side: 'left' | 'right';
+  y: number;
+};
+
+type UndockOfferPayload = {
+  bounds: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+};
+
 declare global {
   interface Window {
     stickyNotes: {
@@ -23,6 +37,10 @@ declare global {
       updateChecklist: (checklist: NoteChecklistItemRecord[]) => Promise<NoteView | undefined>;
       updateAppearance: (appearance: NoteAppearanceInput) => Promise<NoteView | undefined>;
       setCollapsed: (collapsed: boolean) => Promise<boolean>;
+      onDockOffer: (listener: (payload: DockOfferPayload) => void) => () => void;
+      onUndockOffer: (listener: (payload: UndockOfferPayload) => void) => () => void;
+      acceptDock: (payload: DockOfferPayload) => Promise<boolean>;
+      acceptUndock: (payload: UndockOfferPayload) => Promise<boolean>;
       getAutoLaunchStatus: () => Promise<AutoLaunchStatus>;
       setAutoLaunchEnabled: (enabled: boolean) => Promise<AutoLaunchStatus>;
       pasteClipboardImage: () => Promise<AddImageResult | { ok: false; reason: 'empty-clipboard' }>;

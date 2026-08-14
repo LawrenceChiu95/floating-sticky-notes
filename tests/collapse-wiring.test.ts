@@ -116,6 +116,37 @@ describe('sticky note collapse wiring', () => {
     expect(appSource).toContain('NOTE_SHELL_TRANSITION_FALLBACK_MS = 320');
   });
 
+  it('exposes the dock offers and accept commands through preload', () => {
+    expect(preloadSource).toContain("ipcRenderer.on('sticky-notes:dock-offer'");
+    expect(preloadSource).toContain("ipcRenderer.on('sticky-notes:undock-offer'");
+    expect(preloadSource).toContain("ipcRenderer.invoke('sticky-notes:accept-dock'");
+    expect(preloadSource).toContain("ipcRenderer.invoke('sticky-notes:accept-undock'");
+    expect(globalTypes).toContain('onDockOffer:');
+    expect(globalTypes).toContain('onUndockOffer:');
+    expect(globalTypes).toContain('acceptDock: (payload: DockOfferPayload) => Promise<boolean>;');
+    expect(globalTypes).toContain(
+      'acceptUndock: (payload: UndockOfferPayload) => Promise<boolean>;'
+    );
+  });
+
+  it('decides docking on the native window moved event instead of renderer pointerup', () => {
+    // .drag-bar 是 -webkit-app-region: drag，拖动期间 renderer 收不到 mouseup；
+    // 判定必须在主进程 moved 上做，renderer 只接收 offer 并回 accept。
+    expect(mainSource).toContain("noteWindow.on('will-move'");
+    expect(mainSource).toContain("noteWindow.on('moved'");
+    expect(mainSource).toContain('resolveCollapsedDockSide');
+    expect(mainSource).toContain('resolveDockedRelease');
+    expect(mainSource).toContain('buildExpandBoundsFromDock');
+    expect(mainSource).toContain("'sticky-notes:dock-offer'");
+    expect(mainSource).toContain("'sticky-notes:undock-offer'");
+    expect(appSource).not.toContain('onPointerUp');
+  });
+
+  it('restores persisted docks as sliver-sized windows', () => {
+    expect(mainSource).toContain('restoreDockedBounds');
+    expect(mainSource).toContain('applyRestoredDock');
+  });
+
   it('folds toolbar buttons into the toggle with a right-to-left cascade on collapse', () => {
     // Buttons anchor at the fixed right edge so the fold yields space without sliding.
     expect(styles).toMatch(/\.toolbar\s*{[^}]*justify-content:\s*flex-end;/s);

@@ -6,6 +6,7 @@ import {
   NOTE_MIN_HEIGHT,
   NOTE_MIN_WIDTH
 } from '../shared/note-window';
+import { NOTE_DOCK_HEIGHT, NOTE_DOCK_WIDTH } from '../shared/note-dock';
 
 export { NOTE_COLLAPSED_HEIGHT, NOTE_MIN_HEIGHT, NOTE_MIN_WIDTH } from '../shared/note-window';
 
@@ -21,21 +22,25 @@ export type DisplayWorkArea = {
 
 export function createNoteWindowOptions(
   bounds: NoteBounds = DEFAULT_NOTE_BOUNDS,
-  workAreas: DisplayWorkArea[] = []
+  workAreas: DisplayWorkArea[] = [],
+  dockedBounds?: Required<NoteBounds>
 ): BrowserWindowConstructorOptions {
-  const windowBounds = clampNoteBounds(bounds, workAreas);
+  // 贴边恢复时窗口直接建成 8×56 的缝：最小尺寸不能用 NOTE_MIN_WIDTH，
+  // 否则 Math.max 会把缝撑成 200px 宽。
+  const isDocked = dockedBounds !== undefined;
+  const windowBounds = dockedBounds ?? clampNoteBounds(bounds, workAreas);
 
   return {
     x: windowBounds.x,
     y: windowBounds.y,
     width: windowBounds.width,
     height: windowBounds.height,
-    minWidth: NOTE_MIN_WIDTH,
-    minHeight: NOTE_MIN_HEIGHT,
+    minWidth: isDocked ? NOTE_DOCK_WIDTH : NOTE_MIN_WIDTH,
+    minHeight: isDocked ? NOTE_DOCK_HEIGHT : NOTE_MIN_HEIGHT,
     alwaysOnTop: true,
     frame: false,
     transparent: true,
-    resizable: true,
+    resizable: !isDocked,
     skipTaskbar: false,
     show: false,
     icon: NOTE_WINDOW_ICON_PATH,
