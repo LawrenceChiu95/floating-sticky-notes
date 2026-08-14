@@ -20,6 +20,7 @@ import {
   type DragEvent,
   type KeyboardEvent,
   type MouseEvent,
+  type PointerEvent,
   type ReactNode
 } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -68,6 +69,7 @@ import './styles.css';
 const STATUS_MESSAGE_DURATION_MS = 2000;
 const NOTE_SHELL_TRANSITION_FALLBACK_MS = 320;
 const NOTE_VIEWPORT_RESIZE_FALLBACK_MS = 500;
+const NOTE_WINDOW_DRAG_THRESHOLD_PX = 3;
 const PERSISTENT_STATUS_MESSAGES = new Set(['读取失败']);
 
 function App(): JSX.Element {
@@ -123,9 +125,24 @@ function App(): JSX.Element {
   const isCollapsedRef = useRef(false);
   const isCollapseTransitioningRef = useRef(false);
   const isDockTransitioningRef = useRef(false);
+  const isUndockGrowingRef = useRef(false);
   dockRef.current = dock;
   isCollapsedRef.current = isCollapsed;
   isCollapseTransitioningRef.current = isCollapseTransitioning;
+  isUndockGrowingRef.current = isUndockGrowing;
+  // 收起横条与贴边缝的窗口拖动（图片预览窗同款手动拖动）：macOS 没有任何
+  // 「拖动结束」窗口事件，moved 是 move 的别名，只有这里的 pointerup /
+  // pointercancel 才是真正的松手。started 之前不碰 IPC，单击/双击命名不
+  // 会触发任何窗口移动。展开态横条仍走原生 -webkit-app-region。
+  const noteWindowDragRef = useRef<{
+    pointerId: number;
+    lastX: number;
+    lastY: number;
+    pendingDx: number;
+    pendingDy: number;
+    started: boolean;
+    frame?: number;
+  }>();
   const noteInputRef = useRef<HTMLTextAreaElement | null>(null);
   const noteContentRef = useRef<HTMLDivElement | null>(null);
   const collapsedScrollTopRef = useRef<number>();
@@ -198,6 +215,10 @@ function App(): JSX.Element {
       isMounted = false;
       unsubscribeDockOffer();
       unsubscribeUndockOffer();
+      if (noteWindowDragRef.current?.frame !== undefined) {
+        cancelAnimationFrame(noteWindowDragRef.current.frame);
+        noteWindowDragRef.current = undefined;
+      }
       window.removeEventListener('beforeunload', flushPendingContent);
       if (window.__stickyNotesFlushPendingContent === flushPendingContent) {
         delete window.__stickyNotesFlushPendingContent;
@@ -837,9 +858,119 @@ function App(): JSX.Element {
     })();
   };
 
+  const isManualWindowDragEnabled = (): boolean =>
+    isCollapsedRef.current || (dockRef.current !== null && !isUndockGrowingRef.current);
+
+  const flushNoteWindowDrag = (): void => {
+    const drag = noteWindowDragRef.current;
+
+    if (!drag) {
+      return;
+    }
+
+    drag.frame = undefined;
+    const dx = drag.pendingDx;
+    const dy = drag.pendingDy;
+
+    if (dx === 0 && dy === 0) {
+      return;
+    }
+
+    drag.pendingDx = 0;
+    drag.pendingDy = 0;
+    void window.stickyNotes.dragNoteWindow(dx, dy);
+  };
+
+  const handleNoteWindowDragPointerDown = (event: PointerEvent<HTMLElement>): void => {
+    if (event.button !== 0 || !isManualWindowDragEnabled()) {
+      return;
+    }
+
+    const target = event.target as HTMLElement | null;
+
+    // 按钮、命名输入与命名热区保持原有交互，不从它们身上起拖。
+    if (
+      target &&
+      target !== event.currentTarget &&
+      target.closest('button, input, textarea, .note-name-hit-area')
+    ) {
+      return;
+    }
+
+    // 上一个手势若因系统中断没收到 up/cancel，新按下时丢弃残留状态。
+    if (noteWindowDragRef.current) {
+      if (noteWindowDragRef.current.frame !== undefined) {
+        cancelAnimationFrame(noteWindowDragRef.current.frame);
+      }
+      noteWindowDragRef.current = undefined;
+    }
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+    noteWindowDragRef.current = {
+      pointerId: event.pointerId,
+      lastX: event.screenX,
+      lastY: event.screenY,
+      pendingDx: 0,
+      pendingDy: 0,
+      started: false
+    };
+  };
+
+  const handleNoteWindowDragPointerMove = (event: PointerEvent<HTMLElement>): void => {
+    const drag = noteWindowDragRef.current;
+
+    if (!drag || drag.pointerId !== event.pointerId) {
+      return;
+    }
+
+    drag.pendingDx += event.screenX - drag.lastX;
+    drag.pendingDy += event.screenY - drag.lastY;
+    drag.lastX = event.screenX;
+    drag.lastY = event.screenY;
+
+    if (!drag.started && Math.hypot(drag.pendingDx, drag.pendingDy) < NOTE_WINDOW_DRAG_THRESHOLD_PX) {
+      return;
+    }
+
+    drag.started = true;
+
+    if (drag.frame === undefined) {
+      drag.frame = requestAnimationFrame(flushNoteWindowDrag);
+    }
+  };
+
+  const handleNoteWindowDragPointerUp = (event: PointerEvent<HTMLElement>): void => {
+    const drag = noteWindowDragRef.current;
+
+    if (!drag || drag.pointerId !== event.pointerId) {
+      return;
+    }
+
+    noteWindowDragRef.current = undefined;
+
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+
+    if (!drag.started) {
+      return;
+    }
+
+    if (drag.frame !== undefined) {
+      cancelAnimationFrame(drag.frame);
+    }
+
+    // 松手才是真正的判定点：剩余增量随 finish 一起发出，主进程先应用再判定。
+    void window.stickyNotes.finishNoteWindowDrag(drag.pendingDx, drag.pendingDy);
+  };
+
   // 横条松手时已贴近工作区边缘：先把壳体视觉收到 8×56，再由主进程把窗口
   // setBounds 成缝（先视觉后缩窗，否则 280px 横条会被立刻裁掉）。
-  const handleDockOffer = async (payload: { side: 'left' | 'right'; y: number }): Promise<void> => {
+  const handleDockOffer = async (payload: {
+    side: 'left' | 'right';
+    y: number;
+    epoch: number;
+  }): Promise<void> => {
     if (
       !isCollapsedRef.current ||
       isCollapseTransitioningRef.current ||
@@ -858,10 +989,7 @@ function App(): JSX.Element {
       setIsDockShrinking(true);
       await dockVisualTransition;
 
-      const didDock = await window.stickyNotes.acceptDock({
-        side: payload.side,
-        y: payload.y
-      });
+      const didDock = await window.stickyNotes.acceptDock(payload.epoch);
 
       if (!didDock) {
         throw new Error('Dock was not accepted');
@@ -886,6 +1014,7 @@ function App(): JSX.Element {
   // 不可见），壳体再从缝的视觉尺寸长到满窗。顺序反了展开动画会被 8px 窗裁掉。
   const handleUndockOffer = async (payload: {
     bounds: { x: number; y: number; width: number; height: number };
+    epoch: number;
   }): Promise<void> => {
     if (!dockRef.current || isDockTransitioningRef.current) {
       return;
@@ -895,7 +1024,7 @@ function App(): JSX.Element {
     setIsDockTransitioning(true);
 
     try {
-      const didUndock = await window.stickyNotes.acceptUndock({ bounds: payload.bounds });
+      const didUndock = await window.stickyNotes.acceptUndock(payload.epoch);
 
       if (!didUndock) {
         throw new Error('Undock was not accepted');
@@ -1004,8 +1133,9 @@ function App(): JSX.Element {
     </>
   );
 
-  // 贴边态只渲染一条着色缝：没有名称、按钮和正文，整条可拖（app-region）。
-  // 拖出展开的生长动画由完整 DOM + undock-grow 尺寸钉住来演，这里让位。
+  // 贴边态只渲染一条着色缝：没有名称、按钮和正文，整条可拖（renderer 指针
+  // 拖动，松手才由主进程判定展开或弹回）。拖出展开的生长动画由完整 DOM +
+  // undock-grow 尺寸钉住来演，这里让位。
   if (dock && !isUndockGrowing) {
     return (
       <main
@@ -1016,6 +1146,11 @@ function App(): JSX.Element {
         data-preload-status={preloadStatus}
         style={shellStyle}
         aria-label="已贴边的便签，向右或向左拖动可展开"
+        onPointerDown={handleNoteWindowDragPointerDown}
+        onPointerMove={handleNoteWindowDragPointerMove}
+        onPointerUp={handleNoteWindowDragPointerUp}
+        onPointerCancel={handleNoteWindowDragPointerUp}
+        onLostPointerCapture={handleNoteWindowDragPointerUp}
       />
     );
   }
@@ -1039,7 +1174,14 @@ function App(): JSX.Element {
       onDragLeave={handleDragLeave}
       onDrop={handleDropImage}
     >
-      <div className="drag-bar">
+      <div
+        className="drag-bar"
+        onPointerDown={handleNoteWindowDragPointerDown}
+        onPointerMove={handleNoteWindowDragPointerMove}
+        onPointerUp={handleNoteWindowDragPointerUp}
+        onPointerCancel={handleNoteWindowDragPointerUp}
+        onLostPointerCapture={handleNoteWindowDragPointerUp}
+      >
         <span className="drag-grip" aria-hidden="true" />
         <div className="drag-bar-title">
           {!isCollapsed || isCollapseTransitioning ? (

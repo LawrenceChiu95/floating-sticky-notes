@@ -14,6 +14,7 @@ export {};
 type DockOfferPayload = {
   side: 'left' | 'right';
   y: number;
+  epoch: number;
 };
 
 type UndockOfferPayload = {
@@ -23,6 +24,7 @@ type UndockOfferPayload = {
     width: number;
     height: number;
   };
+  epoch: number;
 };
 
 declare global {
@@ -39,8 +41,10 @@ declare global {
       setCollapsed: (collapsed: boolean) => Promise<boolean>;
       onDockOffer: (listener: (payload: DockOfferPayload) => void) => () => void;
       onUndockOffer: (listener: (payload: UndockOfferPayload) => void) => () => void;
-      acceptDock: (payload: DockOfferPayload) => Promise<boolean>;
-      acceptUndock: (payload: UndockOfferPayload) => Promise<boolean>;
+      dragNoteWindow: (dx: number, dy: number) => Promise<boolean>;
+      finishNoteWindowDrag: (dx: number, dy: number) => Promise<boolean>;
+      acceptDock: (epoch: number) => Promise<boolean>;
+      acceptUndock: (epoch: number) => Promise<boolean>;
       getAutoLaunchStatus: () => Promise<AutoLaunchStatus>;
       setAutoLaunchEnabled: (enabled: boolean) => Promise<AutoLaunchStatus>;
       pasteClipboardImage: () => Promise<AddImageResult | { ok: false; reason: 'empty-clipboard' }>;

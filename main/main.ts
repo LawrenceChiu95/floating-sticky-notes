@@ -31,6 +31,10 @@ import { IMAGE_PROTOCOL, LocalImageStorage } from './image-storage';
 import { readLocalProfile } from './local-profile';
 import { createNoteWindowCollapseController } from './note-window-collapse';
 import {
+  createNoteWindowDragSession,
+  type NoteWindowDragSession
+} from './note-window-drag';
+import {
   createMacUpdateController,
   shouldEnableMacManualUpdates
 } from './mac-update-controller';
@@ -81,10 +85,7 @@ import {
 } from './window-options';
 import { createDebouncedValueAction } from '../shared/debounced-action';
 import {
-  buildExpandBoundsFromDock,
-  findNearestWorkArea,
   resolveCollapsedDockSide,
-  resolveDockedRelease,
   restoreDockedBounds
 } from '../shared/note-dock';
 import { DEFAULT_APP_COPY, getAppCopy, type AppCopy } from '../shared/app-copy';
@@ -109,6 +110,9 @@ let restoreNotesWhenReady = false;
 const AUTO_LAUNCH_DEFAULT_MARKER = '.auto-launch-default-applied';
 let diagnosticLogger: DiagnosticLogger | undefined;
 let disposeUpdateRequestDiagnostics: (() => void) | undefined;
+// 每个便签窗口一份拖动会话：renderer 指针拖动期间暂存窗口移动，松手 IPC
+// 到达时按当前矩形判定贴边/拖出/弹回，并用 epoch 使过期 accept 失效。
+const noteWindowDragSessions = new Map<number, NoteWindowDragSession>();
 
 // dev 与正式版共用安装身份,默认会读写同一份 userData(同一 notes.json)。
 // 开发模式提前切到独立目录,调试/删除永远碰不到正式数据;必须在
@@ -301,99 +305,23 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
     );
   }
 
-  // 窗口拖动走 -webkit-app-region: drag，renderer 收不到 drag-bar 的 mouseup；
-  // 贴边/拖出判定只能在主进程做。will-move 只在用户手动拖动时触发（程序化
-  // setBounds 不触发），所以它是「拖动手势进行中」的可靠信号。
-  let dockDragInProgress = false;
-  const decideDockRelease = (): void => {
-    if (noteWindow.isDestroyed()) {
-      return;
+  // 收起横条与贴边缝的拖动不走 -webkit-app-region: drag：macOS 的 moved 是
+  // move 的别名，整个平台没有任何「拖动结束」窗口事件，基于 moved 静默期的
+  // 近似会把拖动中的停顿误判成松手。改为 renderer 指针拖动（图片预览窗同款
+  // 模式），pointerup/pointercancel 发来的 finish IPC 才是唯一判定点。
+  const dockDragSession = createNoteWindowDragSession({
+    getPresentation: collapseController.getPresentation,
+    getWorkAreas: () => screen.getAllDisplays().map((display) => display.workArea),
+    getDockSide: () => collapseController.getDockForPersistence()?.side,
+    getDockedBounds: collapseController.getDockedBounds,
+    getExpandedSize: () => {
+      const persistedBounds = collapseController.getBoundsForPersistence();
+      return { width: persistedBounds.width, height: persistedBounds.height };
     }
-
-    const presentation = collapseController.getPresentation();
-    const currentBounds = noteWindow.getBounds();
-
-    if (presentation === 'collapsed') {
-      const workArea = findNearestWorkArea(
-        currentBounds,
-        screen.getAllDisplays().map((display) => display.workArea)
-      );
-      const side = workArea ? resolveCollapsedDockSide(currentBounds, workArea) : undefined;
-
-      if (side && !noteWindow.webContents.isDestroyed()) {
-        noteWindow.webContents.send('sticky-notes:dock-offer', {
-          side,
-          y: currentBounds.y
-        });
-      }
-      return;
-    }
-
-    if (presentation !== 'docked') {
-      return;
-    }
-
-    const dock = collapseController.getDockForPersistence();
-    const dockOrigin = collapseController.getDockedBounds();
-
-    if (!dock || !dockOrigin) {
-      return;
-    }
-
-    if (
-      resolveDockedRelease({ side: dock.side, origin: dockOrigin, current: currentBounds }) ===
-      'snap-back'
-    ) {
-      void collapseController.setDocked({ kind: 'snap-back' }).catch(() => undefined);
-      return;
-    }
-
-    const workArea = findNearestWorkArea(
-      currentBounds,
-      screen.getAllDisplays().map((display) => display.workArea)
-    );
-
-    if (!workArea) {
-      return;
-    }
-
-    const expandedBounds = collapseController.getBoundsForPersistence();
-    const targetBounds = buildExpandBoundsFromDock({
-      side: dock.side,
-      sliver: currentBounds,
-      expandedSize: { width: expandedBounds.width, height: expandedBounds.height },
-      workArea
-    });
-
-    if (!noteWindow.webContents.isDestroyed()) {
-      noteWindow.webContents.send('sticky-notes:undock-offer', { bounds: targetBounds });
-    }
-  };
-  const finishDockDrag = (): void => {
-    dockDragInProgress = false;
-    decideDockRelease();
-  };
-  // Windows 的 moved 在松手时触发一次；macOS 的 moved 是 move 的别名（拖动中
-  // 连续触发），用静默期近似松手：最后一条 moved 之后 250ms 没有新事件就
-  // 当作本次拖动结束。中途停顿超过 250ms 会提前按当前位置落定，继续拖动仍
-  // 会收敛（贴边/展开/弹回都按新位置重新判定）。
-  const scheduleDockDragFinish = createDebouncedValueAction<void>(finishDockDrag, 250);
-  noteWindow.on('will-move', () => {
-    dockDragInProgress = true;
   });
-  noteWindow.on('moved', () => {
-    if (!dockDragInProgress) {
-      return;
-    }
-    if (process.platform === 'win32') {
-      scheduleDockDragFinish.cancel();
-      finishDockDrag();
-      return;
-    }
-    scheduleDockDragFinish.schedule(undefined);
-  });
+  noteWindowDragSessions.set(noteWebContentsId, dockDragSession);
   noteWindow.on('closed', () => {
-    scheduleDockDragFinish.cancel();
+    noteWindowDragSessions.delete(noteWebContentsId);
   });
   const flushPendingChanges = async (): Promise<void> => {
     await Promise.all([saveBounds.flush(), flushRendererPendingContent(noteWindow)]);
@@ -785,16 +713,92 @@ function registerIpcHandlers(): void {
     }
   });
 
-  ipcMain.handle('sticky-notes:accept-dock', async (event, payload: unknown) => {
-    const dockPayload = normalizeDockAcceptPayload(payload);
-
-    if (!dockPayload) {
+  // renderer 指针拖动（收起横条/贴边缝专用）：增量移动窗口。第一次增量
+  // 到达即视为拖动开始，任何待确认的 dock offer 即刻作废。
+  ipcMain.handle('sticky-notes:drag-note-window', (event, dx: unknown, dy: unknown) => {
+    if (!isFiniteNumber(dx) || !isFiniteNumber(dy)) {
       return false;
     }
 
+    const noteWindow = BrowserWindow.fromWebContents(event.sender);
+    const session = noteWindowDragSessions.get(event.sender.id);
+
+    if (!noteWindow || noteWindow.isDestroyed() || !session) {
+      return false;
+    }
+
+    noteWindow.setBounds(session.applyDragDelta(noteWindow.getBounds(), dx, dy), false);
+    return true;
+  });
+
+  // 松手（pointerup/pointercancel）：应用最后一段增量后才判定贴边/拖出/
+  // 弹回。这是唯一的判定点——拖动中的任何停顿都不会触发判定。
+  ipcMain.handle('sticky-notes:finish-note-window-drag', (event, dx: unknown, dy: unknown) => {
+    if (!isFiniteNumber(dx) || !isFiniteNumber(dy)) {
+      return false;
+    }
+
+    const noteWindow = BrowserWindow.fromWebContents(event.sender);
+    const session = noteWindowDragSessions.get(event.sender.id);
+
+    if (!noteWindow || noteWindow.isDestroyed() || !session) {
+      return false;
+    }
+
+    noteWindow.setBounds(session.applyDragDelta(noteWindow.getBounds(), dx, dy), false);
+    const decision = session.endDrag(noteWindow.getBounds());
+
+    if (decision.kind === 'dock-offer') {
+      if (!event.sender.isDestroyed()) {
+        event.sender.send('sticky-notes:dock-offer', {
+          side: decision.side,
+          y: decision.y,
+          epoch: decision.epoch
+        });
+      }
+      return true;
+    }
+
+    if (decision.kind === 'undock-offer') {
+      if (!event.sender.isDestroyed()) {
+        event.sender.send('sticky-notes:undock-offer', {
+          bounds: decision.bounds,
+          epoch: decision.epoch
+        });
+      }
+      return true;
+    }
+
+    if (decision.kind === 'snap-back') {
+      void getNotesManager()
+        .snapBackDockForWebContents(event.sender.id)
+        .catch((error) => {
+          diagnosticLogger?.record('note_dock_snap_back_failed', {
+            webContentsId: event.sender.id,
+            error
+          });
+        });
+    }
+
+    return true;
+  });
+
+  ipcMain.handle('sticky-notes:accept-dock', async (event, epoch: unknown) => {
+    if (!isFiniteNumber(epoch)) {
+      return false;
+    }
+
+    const session = noteWindowDragSessions.get(event.sender.id);
     const senderWindow = BrowserWindow.fromWebContents(event.sender);
 
-    if (!senderWindow || senderWindow.isDestroyed()) {
+    if (!session || !senderWindow || senderWindow.isDestroyed()) {
+      return false;
+    }
+
+    // epoch 只认最后一次 offer；手还在拖或已重新拖动时旧 offer 已作废。
+    const offer = session.acceptDockOffer(epoch);
+
+    if (!offer) {
       return false;
     }
 
@@ -802,14 +806,14 @@ function registerIpcHandlers(): void {
     const workArea = screen.getDisplayMatching(currentBounds).workArea;
 
     // renderer 播收缩视觉期间用户可能又把横条拖离边缘；滞后的 accept 不得贴边。
-    if (resolveCollapsedDockSide(currentBounds, workArea) !== dockPayload.side) {
+    if (resolveCollapsedDockSide(currentBounds, workArea) !== offer.side) {
       return false;
     }
 
     try {
       return await getNotesManager().dockNoteForWebContents(event.sender.id, {
-        side: dockPayload.side,
-        y: dockPayload.y,
+        side: offer.side,
+        y: offer.y,
         workArea
       });
     } catch (error) {
@@ -821,20 +825,32 @@ function registerIpcHandlers(): void {
     }
   });
 
-  ipcMain.handle('sticky-notes:accept-undock', async (event, payload: unknown) => {
-    const bounds = normalizeRequiredNoteBounds(payload);
+  ipcMain.handle('sticky-notes:accept-undock', async (event, epoch: unknown) => {
+    if (!isFiniteNumber(epoch)) {
+      return false;
+    }
 
-    if (!bounds) {
+    const session = noteWindowDragSessions.get(event.sender.id);
+
+    if (!session) {
+      return false;
+    }
+
+    // 展开矩形由主进程在松手判定时算好并存在会话里；renderer 传任何值都
+    // 不参与，松手位移不足 48px 时根本不会有 undock offer。
+    const offer = session.acceptUndockOffer(epoch);
+
+    if (!offer) {
       return false;
     }
 
     const workAreas = screen.getAllDisplays().map((display) => display.workArea);
-    const clampedBounds = clampNoteBoundsToWorkAreas(bounds, workAreas);
+    const clampedBounds = clampNoteBoundsToWorkAreas(offer.bounds, workAreas);
 
     try {
       return await getNotesManager().undockNoteForWebContents(event.sender.id, {
-        x: clampedBounds.x ?? bounds.x,
-        y: clampedBounds.y ?? bounds.y,
+        x: clampedBounds.x ?? offer.bounds.x,
+        y: clampedBounds.y ?? offer.bounds.y,
         width: clampedBounds.width,
         height: clampedBounds.height
       });
@@ -1199,48 +1215,6 @@ async function flushRendererPendingContent(noteWindow: BrowserWindow): Promise<v
     .catch(() => undefined);
 }
 
-function normalizeDockAcceptPayload(
-  value: unknown
-): { side: 'left' | 'right'; y: number } | undefined {
-  if (!value || typeof value !== 'object') {
-    return undefined;
-  }
-
-  const candidate = value as { side?: unknown; y?: unknown };
-
-  if (candidate.side !== 'left' && candidate.side !== 'right') {
-    return undefined;
-  }
-
-  if (typeof candidate.y !== 'number' || !Number.isFinite(candidate.y)) {
-    return undefined;
-  }
-
-  return { side: candidate.side, y: candidate.y };
-}
-
-function normalizeRequiredNoteBounds(value: unknown): Required<NoteBounds> | undefined {
-  if (!value || typeof value !== 'object') {
-    return undefined;
-  }
-
-  const candidate = value as Partial<Record<keyof Required<NoteBounds>, unknown>>;
-  const { x, y, width, height } = candidate;
-
-  if (
-    typeof x !== 'number' ||
-    !Number.isFinite(x) ||
-    typeof y !== 'number' ||
-    !Number.isFinite(y) ||
-    typeof width !== 'number' ||
-    !Number.isFinite(width) ||
-    width <= 0 ||
-    typeof height !== 'number' ||
-    !Number.isFinite(height) ||
-    height <= 0
-  ) {
-    return undefined;
-  }
-
-  return { x, y, width, height };
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
 }

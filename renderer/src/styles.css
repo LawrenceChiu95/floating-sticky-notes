@@ -94,7 +94,9 @@ textarea {
 }
 
 .note-shell--docked {
-  -webkit-app-region: drag;
+  /* 缝由 renderer 指针拖动；app-region 会与指针拖动重复触发（原生拖窗 +
+     IPC 移窗）。展开态横条仍是原生拖动。 */
+  -webkit-app-region: no-drag;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24),
     inset -1px 0 0 rgba(43, 42, 39, 0.1);
 }
@@ -123,6 +125,8 @@ textarea {
 }
 
 .note-shell--collapsed .drag-bar {
+  /* 收起横条由 renderer 指针拖动（松手才判定贴边），关闭原生 app-region。 */
+  -webkit-app-region: no-drag;
   height: calc(var(--note-collapsed-height) - 2px);
   min-height: 0;
   padding: 4px 5px 4px 10px;

@@ -8,6 +8,7 @@ const IMAGE_PREVIEW_OPEN_CHANNEL = 'sticky-notes:image-preview:open';
 type DockOfferPayload = {
   side: 'left' | 'right';
   y: number;
+  epoch: number;
 };
 
 type UndockOfferPayload = {
@@ -17,6 +18,7 @@ type UndockOfferPayload = {
     width: number;
     height: number;
   };
+  epoch: number;
 };
 
 contextBridge.exposeInMainWorld('stickyNotes', {
@@ -49,10 +51,13 @@ contextBridge.exposeInMainWorld('stickyNotes', {
       ipcRenderer.removeListener('sticky-notes:undock-offer', subscription);
     };
   },
-  acceptDock: (payload: DockOfferPayload) =>
-    ipcRenderer.invoke('sticky-notes:accept-dock', payload),
-  acceptUndock: (payload: UndockOfferPayload) =>
-    ipcRenderer.invoke('sticky-notes:accept-undock', payload),
+  // 收起横条/贴边缝的窗口拖动：renderer 指针事件 + 增量 IPC，松手才判定。
+  dragNoteWindow: (dx: number, dy: number) =>
+    ipcRenderer.invoke('sticky-notes:drag-note-window', dx, dy),
+  finishNoteWindowDrag: (dx: number, dy: number) =>
+    ipcRenderer.invoke('sticky-notes:finish-note-window-drag', dx, dy),
+  acceptDock: (epoch: number) => ipcRenderer.invoke('sticky-notes:accept-dock', epoch),
+  acceptUndock: (epoch: number) => ipcRenderer.invoke('sticky-notes:accept-undock', epoch),
   getAutoLaunchStatus: () => ipcRenderer.invoke('sticky-notes:get-auto-launch-status'),
   setAutoLaunchEnabled: (enabled: boolean) =>
     ipcRenderer.invoke('sticky-notes:set-auto-launch-enabled', enabled),
