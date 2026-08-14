@@ -16,6 +16,7 @@
 - 涉及项目事项时，开工前检查相关 GitHub Issue 与 `HANDOFF.md`；收尾前检查状态、证据、版本归属和下一步是否已同步。
 - 默认静默维护，完成后只给一行回执。只有产品取舍、信息无法可靠推断、公开敏感内容、发布或不可逆操作需要询问用户。
 - 实现、自动验证、产物验证、目标环境验证、发布和监测必须分开记录，不得互相推导；细则以 `docs/project-management.md` 为准。
+- 引用 Issue 或 PR 时一律给可点击超链接（`https://github.com/LawrenceChiu95/floating-sticky-notes/issues/<编号>`），回执、评论、PR 描述、`HANDOFF.md` 等任何场景都不准只写编号。
 
 ## GitHub 身份
 
