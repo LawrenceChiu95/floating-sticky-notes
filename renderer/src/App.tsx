@@ -29,6 +29,7 @@ import type { NoteChecklistItemRecord } from '../../main/note-state';
 import { DEFAULT_APP_COPY } from '../../shared/app-copy';
 import { DEFAULT_NOTE_COLOR, DEFAULT_NOTE_OPACITY, NOTE_COLORS } from '../../shared/note-appearance';
 import { NOTE_COLLAPSED_HEIGHT } from '../../shared/note-window';
+import { NOTE_DOCK_HEIGHT, NOTE_DOCK_WIDTH } from '../../shared/note-dock';
 import { createDebouncedValueAction, type DebouncedValueAction } from '../../shared/debounced-action';
 import { limitNoteNameLength } from '../../shared/note-name';
 import {
@@ -88,6 +89,13 @@ function App(): JSX.Element {
     setOpenPopover(open ? 'note-delete' : null);
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isCollapseTransitioning, setIsCollapseTransitioning] = useState(false);
+  // 贴边第三态：dock 非空时整个壳体只渲染一条着色缝。isDockShrinking /
+  // isUndockGrowing 是进出贴边的视觉过渡，窗口矩形由主进程在两端各 setBounds
+  // 一次（先视觉后缩窗、先放大窗再视觉），这里只管壳体动画。
+  const [dock, setDock] = useState<{ side: 'left' | 'right' } | null>(null);
+  const [isDockShrinking, setIsDockShrinking] = useState(false);
+  const [isUndockGrowing, setIsUndockGrowing] = useState(false);
+  const [isDockTransitioning, setIsDockTransitioning] = useState(false);
   const [transitionStatusLabelWidth, setTransitionStatusLabelWidth] = useState(0);
   const [shouldRenderContent, setShouldRenderContent] = useState(true);
   const [isImageDragActive, setIsImageDragActive] = useState(false);
@@ -111,6 +119,13 @@ function App(): JSX.Element {
   const cancelNoteDeleteButtonRef = useRef<HTMLButtonElement | null>(null);
   const isNameEditingRef = useRef(false);
   const isNameSavingRef = useRef(false);
+  const dockRef = useRef<{ side: 'left' | 'right' } | null>(null);
+  const isCollapsedRef = useRef(false);
+  const isCollapseTransitioningRef = useRef(false);
+  const isDockTransitioningRef = useRef(false);
+  dockRef.current = dock;
+  isCollapsedRef.current = isCollapsed;
+  isCollapseTransitioningRef.current = isCollapseTransitioning;
   const noteInputRef = useRef<HTMLTextAreaElement | null>(null);
   const noteContentRef = useRef<HTMLDivElement | null>(null);
   const collapsedScrollTopRef = useRef<number>();
@@ -154,6 +169,8 @@ function App(): JSX.Element {
         setImages(note?.images ?? []);
         setColor(note?.color ?? DEFAULT_NOTE_COLOR);
         setOpacity(note?.opacity ?? DEFAULT_NOTE_OPACITY);
+        // 主进程已按 dock 把窗口建成 8×56 的缝；首帧就是贴边态，不会先闪完整便签。
+        setDock(note?.dock ? { side: note.dock.side } : null);
       })
       .catch(() => {
         if (isMounted) {
@@ -170,8 +187,17 @@ function App(): JSX.Element {
       })
       .catch(() => undefined);
 
+    const unsubscribeDockOffer = window.stickyNotes.onDockOffer((payload) => {
+      void handleDockOffer(payload);
+    });
+    const unsubscribeUndockOffer = window.stickyNotes.onUndockOffer((payload) => {
+      void handleUndockOffer(payload);
+    });
+
     return () => {
       isMounted = false;
+      unsubscribeDockOffer();
+      unsubscribeUndockOffer();
       window.removeEventListener('beforeunload', flushPendingContent);
       if (window.__stickyNotesFlushPendingContent === flushPendingContent) {
         delete window.__stickyNotesFlushPendingContent;
@@ -740,7 +766,7 @@ function App(): JSX.Element {
   };
 
   const handleCollapsedChange = (collapsed: boolean): void => {
-    if (collapsed === isCollapsed || isCollapseTransitioning) {
+    if (collapsed === isCollapsed || isCollapseTransitioning || dock !== null) {
       return;
     }
 
@@ -811,16 +837,104 @@ function App(): JSX.Element {
     })();
   };
 
+  // 横条松手时已贴近工作区边缘：先把壳体视觉收到 8×56，再由主进程把窗口
+  // setBounds 成缝（先视觉后缩窗，否则 280px 横条会被立刻裁掉）。
+  const handleDockOffer = async (payload: { side: 'left' | 'right'; y: number }): Promise<void> => {
+    if (
+      !isCollapsedRef.current ||
+      isCollapseTransitioningRef.current ||
+      dockRef.current ||
+      isDockTransitioningRef.current
+    ) {
+      return;
+    }
+
+    isDockTransitioningRef.current = true;
+    setIsDockTransitioning(true);
+
+    try {
+      await waitForNextPaint();
+      const dockVisualTransition = waitForDockTransition(noteShellRef.current);
+      setIsDockShrinking(true);
+      await dockVisualTransition;
+
+      const didDock = await window.stickyNotes.acceptDock({
+        side: payload.side,
+        y: payload.y
+      });
+
+      if (!didDock) {
+        throw new Error('Dock was not accepted');
+      }
+
+      setDock({ side: payload.side });
+      setIsCollapsed(false);
+      setStatusMessage('');
+    } catch {
+      const rollbackTransition = waitForDockTransition(noteShellRef.current);
+      setIsDockShrinking(false);
+      await rollbackTransition;
+      setStatusMessage('贴边失败');
+    } finally {
+      setIsDockShrinking(false);
+      setIsDockTransitioning(false);
+      isDockTransitioningRef.current = false;
+    }
+  };
+
+  // 缝拖过阈值松手：主进程先把窗口 setBounds 成展开矩形（透明窗外的区域
+  // 不可见），壳体再从缝的视觉尺寸长到满窗。顺序反了展开动画会被 8px 窗裁掉。
+  const handleUndockOffer = async (payload: {
+    bounds: { x: number; y: number; width: number; height: number };
+  }): Promise<void> => {
+    if (!dockRef.current || isDockTransitioningRef.current) {
+      return;
+    }
+
+    isDockTransitioningRef.current = true;
+    setIsDockTransitioning(true);
+
+    try {
+      const didUndock = await window.stickyNotes.acceptUndock({ bounds: payload.bounds });
+
+      if (!didUndock) {
+        throw new Error('Undock was not accepted');
+      }
+
+      await waitForResizedViewport(payload.bounds);
+
+      setIsUndockGrowing(true);
+      setIsCollapsed(false);
+      setShouldRenderContent(true);
+      await waitForNextPaint();
+      const dockVisualTransition = waitForDockTransition(noteShellRef.current);
+      setIsUndockGrowing(false);
+      await dockVisualTransition;
+      setDock(null);
+      setStatusMessage('');
+    } catch {
+      // 保持贴边；主进程已把窗口回滚到缝。
+    } finally {
+      setIsUndockGrowing(false);
+      setIsDockTransitioning(false);
+      isDockTransitioningRef.current = false;
+    }
+  };
+
   const shellStyle = {
     backgroundColor: hexToRgba(color, opacity),
     '--note-menu-surface': noteColorToMenuSurface(color),
     '--note-collapsed-height': `${NOTE_COLLAPSED_HEIGHT}px`,
+    '--note-dock-width': `${NOTE_DOCK_WIDTH}px`,
+    '--note-dock-height': `${NOTE_DOCK_HEIGHT}px`,
     '--note-transition-title-width': `${transitionStatusLabelWidth}px`,
     '--collapsed-name-edit-start-width': `${collapsedNameEditStartWidth}px`
   } satisfies CSSProperties &
     Record<
       | '--note-menu-surface'
       | '--note-collapsed-height'
+      | '--note-dock-width'
+      | '--note-dock-height'
       | '--note-transition-title-width'
       | '--collapsed-name-edit-start-width',
       string
@@ -890,6 +1004,22 @@ function App(): JSX.Element {
     </>
   );
 
+  // 贴边态只渲染一条着色缝：没有名称、按钮和正文，整条可拖（app-region）。
+  // 拖出展开的生长动画由完整 DOM + undock-grow 尺寸钉住来演，这里让位。
+  if (dock && !isUndockGrowing) {
+    return (
+      <main
+        ref={noteShellRef}
+        className={`note-shell note-shell--docked${
+          dock.side === 'right' ? ' note-shell--dock-right' : ''
+        }${isDockTransitioning ? ' note-shell--dock-transitioning' : ''}`}
+        data-preload-status={preloadStatus}
+        style={shellStyle}
+        aria-label="已贴边的便签，向右或向左拖动可展开"
+      />
+    );
+  }
+
   return (
     <main
       ref={noteShellRef}
@@ -897,6 +1027,10 @@ function App(): JSX.Element {
         isCollapsed ? ' note-shell--collapsed' : ''
       }${isCollapseTransitioning ? ' note-shell--collapse-transitioning' : ''}${
         noteNaming.isEditing ? ' note-shell--naming' : ''
+      }${isDockTransitioning ? ' note-shell--dock-transitioning' : ''}${
+        isDockShrinking ? ' note-shell--dock-shrinking' : ''
+      }${isUndockGrowing ? ' note-shell--undock-grow' : ''}${
+        dock?.side === 'right' ? ' note-shell--dock-right' : ''
       }`}
       data-preload-status={preloadStatus}
       style={shellStyle}
@@ -1389,6 +1523,69 @@ function waitForExpandedViewport(): Promise<void> {
     window.addEventListener('resize', handleResize);
     fallbackTimer = setTimeout(finish, NOTE_VIEWPORT_RESIZE_FALLBACK_MS);
     handleResize();
+  });
+}
+
+function waitForResizedViewport(bounds: { width: number; height: number }): Promise<void> {
+  return new Promise((resolve) => {
+    let didFinish = false;
+    let fallbackTimer: ReturnType<typeof setTimeout> | undefined;
+    const finish = (): void => {
+      if (didFinish) {
+        return;
+      }
+
+      didFinish = true;
+      window.removeEventListener('resize', handleResize);
+      if (fallbackTimer) {
+        clearTimeout(fallbackTimer);
+      }
+      requestAnimationFrame(() => resolve());
+    };
+    const handleResize = (): void => {
+      if (
+        Math.abs(window.innerWidth - bounds.width) <= 2 &&
+        Math.abs(window.innerHeight - bounds.height) <= 2
+      ) {
+        finish();
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    fallbackTimer = setTimeout(finish, NOTE_VIEWPORT_RESIZE_FALLBACK_MS);
+    handleResize();
+  });
+}
+
+function waitForDockTransition(element: HTMLElement | null): Promise<void> {
+  if (!element) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    let didFinish = false;
+    let fallbackTimer: ReturnType<typeof setTimeout>;
+    const finish = (): void => {
+      if (didFinish) {
+        return;
+      }
+
+      didFinish = true;
+      element.removeEventListener('transitionend', handleTransitionEnd);
+      clearTimeout(fallbackTimer);
+      resolve();
+    };
+    const handleTransitionEnd = (event: TransitionEvent): void => {
+      if (
+        event.target === element &&
+        (event.propertyName === 'width' || event.propertyName === 'height')
+      ) {
+        finish();
+      }
+    };
+
+    element.addEventListener('transitionend', handleTransitionEnd);
+    fallbackTimer = setTimeout(finish, NOTE_SHELL_TRANSITION_FALLBACK_MS);
   });
 }
 

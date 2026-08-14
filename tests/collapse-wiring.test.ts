@@ -147,6 +147,48 @@ describe('sticky note collapse wiring', () => {
     expect(mainSource).toContain('applyRestoredDock');
   });
 
+  it('renders the docked state as a draggable colored sliver without note chrome', () => {
+    expect(appSource).toContain('note-shell--docked');
+    expect(styles).toMatch(/\.note-shell--docked\s*{[^}]*-webkit-app-region:\s*drag;/s);
+    expect(styles).toMatch(
+      /\.note-shell--docked,\s*\.note-shell--dock-shrinking,\s*\.note-shell--undock-grow\s*{[^}]*width:\s*var\(--note-dock-width\);[^}]*height:\s*var\(--note-dock-height\);/s
+    );
+    expect(appSource).toContain("'--note-dock-width': `${NOTE_DOCK_WIDTH}px`");
+    expect(appSource).toContain("'--note-dock-height': `${NOTE_DOCK_HEIGHT}px`");
+  });
+
+  it('scopes dock size transitions to the dock transitioning state', () => {
+    expect(styles).toMatch(
+      /\.note-shell--dock-transitioning\s*{[^}]*transition:\s*width 240ms cubic-bezier\(0\.33, 0\.75, 0\.35, 1\),\s*height 240ms cubic-bezier\(0\.33, 0\.75, 0\.35, 1\)/s
+    );
+    // 基础态禁止挂 width/height 过渡（与收起同一红线）。
+    expect(styles).not.toMatch(/\.note-shell\s*{[^}]*transition:[^;}]*width/s);
+    expect(styles).not.toMatch(/\.note-shell\s*{[^}]*transition:[^;}]*height/s);
+  });
+
+  it('shrinks the bar visually before confirming native dock bounds', () => {
+    const shrinkIndex = appSource.indexOf('setIsDockShrinking(true);');
+    const shrinkWaitIndex = appSource.indexOf('await dockVisualTransition;');
+    const acceptDockIndex = appSource.indexOf('window.stickyNotes.acceptDock(');
+
+    expect(shrinkIndex).toBeGreaterThan(-1);
+    expect(acceptDockIndex).toBeGreaterThan(shrinkIndex);
+    expect(shrinkWaitIndex).toBeGreaterThan(shrinkIndex);
+    expect(acceptDockIndex).toBeGreaterThan(shrinkWaitIndex);
+  });
+
+  it('grows native bounds before revealing the undock expand animation', () => {
+    const acceptUndockIndex = appSource.indexOf('window.stickyNotes.acceptUndock(');
+    const viewportWaitIndex = appSource.indexOf('await waitForResizedViewport(payload.bounds);');
+    const growStartIndex = appSource.indexOf('setIsUndockGrowing(true);');
+    const growReleaseIndex = appSource.indexOf('setIsUndockGrowing(false);');
+
+    expect(acceptUndockIndex).toBeGreaterThan(-1);
+    expect(viewportWaitIndex).toBeGreaterThan(acceptUndockIndex);
+    expect(growStartIndex).toBeGreaterThan(viewportWaitIndex);
+    expect(growReleaseIndex).toBeGreaterThan(growStartIndex);
+  });
+
   it('folds toolbar buttons into the toggle with a right-to-left cascade on collapse', () => {
     // Buttons anchor at the fixed right edge so the fold yields space without sliding.
     expect(styles).toMatch(/\.toolbar\s*{[^}]*justify-content:\s*flex-end;/s);

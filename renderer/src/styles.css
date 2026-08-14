@@ -66,6 +66,50 @@ textarea {
   will-change: height;
 }
 
+/* 贴边缝与进出贴边的尺寸钉住。与收起同理:width/height 过渡只属于
+   dock-transitioning 过渡态,基础态壳体逐帧贴住窗口,不能挂尺寸过渡。 */
+.note-shell--docked,
+.note-shell--dock-shrinking,
+.note-shell--undock-grow {
+  width: var(--note-dock-width);
+  height: var(--note-dock-height);
+}
+
+/* 缝靠屏幕内侧的两角用与纸面一致的小圆角;右侧贴边反过来。 */
+.note-shell--docked,
+.note-shell--dock-shrinking {
+  border-radius: 0 8px 8px 0;
+}
+
+.note-shell--dock-right.note-shell--docked,
+.note-shell--dock-right.note-shell--dock-shrinking {
+  border-radius: 8px 0 0 8px;
+}
+
+/* 右贴边时壳体锚住窗口右缘:收缩往右靠,生长往左长。 */
+.note-shell--dock-right.note-shell--docked,
+.note-shell--dock-right.note-shell--dock-shrinking,
+.note-shell--dock-right.note-shell--undock-grow {
+  margin-left: auto;
+}
+
+.note-shell--docked {
+  -webkit-app-region: drag;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset -1px 0 0 rgba(43, 42, 39, 0.1);
+}
+
+.note-shell--dock-right.note-shell--docked {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24),
+    inset 1px 0 0 rgba(43, 42, 39, 0.1);
+}
+
+.note-shell--dock-transitioning {
+  transition: width 240ms cubic-bezier(0.33, 0.75, 0.35, 1),
+    height 240ms cubic-bezier(0.33, 0.75, 0.35, 1), border-radius 200ms ease;
+  will-change: width, height;
+}
+
 .drag-bar {
   -webkit-app-region: drag;
   display: flex;
