@@ -2,7 +2,7 @@
 
 <img src="assets/icons/app-icon.png" alt="悬浮便签图标" width="128">
 
-悬浮便签是一款小巧的 Electron 桌面应用，用于把本地便签持续显示在普通窗口上方。当前界面使用中文，并以 Windows 为主要支持平台。
+悬浮便签是一款小巧的 Electron 桌面应用，用于把本地便签持续显示在普通窗口上方。当前界面使用中文，同时支持 Windows 与 macOS。
 
 ## 功能
 
