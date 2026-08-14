@@ -20,7 +20,7 @@ import {
   type DragEvent,
   type KeyboardEvent,
   type MouseEvent,
-  type PointerEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode
 } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -887,7 +887,7 @@ function App(): JSX.Element {
     void window.stickyNotes.dragNoteWindow(dx, dy);
   };
 
-  const handleNoteWindowDragPointerDown = (event: PointerEvent<HTMLElement>): void => {
+  const handleNoteWindowDragPointerDown = (event: ReactPointerEvent<HTMLElement>): void => {
     if (event.button !== 0 || !isManualWindowDragEnabled()) {
       return;
     }
@@ -922,7 +922,7 @@ function App(): JSX.Element {
     };
   };
 
-  const handleNoteWindowDragPointerMove = (event: PointerEvent<HTMLElement>): void => {
+  const handleNoteWindowDragPointerMove = (event: ReactPointerEvent<HTMLElement>): void => {
     const drag = noteWindowDragRef.current;
 
     if (!drag || drag.pointerId !== event.pointerId) {
@@ -945,7 +945,7 @@ function App(): JSX.Element {
     }
   };
 
-  const handleNoteWindowDragPointerUp = (event: PointerEvent<HTMLElement>): void => {
+  const handleNoteWindowDragPointerUp = (event: ReactPointerEvent<HTMLElement>): void => {
     const drag = noteWindowDragRef.current;
 
     if (!drag || drag.pointerId !== event.pointerId) {
