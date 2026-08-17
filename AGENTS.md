@@ -17,6 +17,7 @@
 - 默认静默维护，完成后只给一行回执。只有产品取舍、信息无法可靠推断、公开敏感内容、发布或不可逆操作需要询问用户。
 - 实现、自动验证、产物验证、目标环境验证、发布和监测必须分开记录，不得互相推导；细则以 `docs/project-management.md` 为准。
 - 引用 Issue 或 PR 时一律给可点击超链接（`https://github.com/LawrenceChiu95/floating-sticky-notes/issues/<编号>`），回执、评论、PR 描述、`HANDOFF.md` 等任何场景都不准只写编号。
+- 便签窗口拖动必须走原生 `-webkit-app-region: drag`。不要用 renderer 指针 + IPC 移窗，也不要用主进程轮询光标跟手；这两种在 Mac 真机上都已被否。
 
 ## GitHub 身份
 
