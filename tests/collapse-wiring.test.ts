@@ -238,9 +238,11 @@ describe('sticky note collapse wiring', () => {
       revealClipIndex
     );
     // 大透明窗长开的一帧要分配 backing store + 重算阴影（掉帧感来源）：展开前
-    // 关阴影、揭示动画结束后恢复。
+    // 关阴影、揭示动画结束后恢复。恢复必须绑 epoch——380ms 内重新贴边时吸附
+    // 滑行会再次关阴影，迟到的旧定时器若在滑行中途开阴影 = 打回逐帧重算。
     expect(mainSource).toContain('noteWindow.setHasShadow(false);');
     expect(mainSource).toContain('noteWindow.setHasShadow(true);');
+    expect(mainSource).toContain('shadowRestoreEpoch === transitionEpoch');
     // 吸附滑行同款：横条比 peek 的 96×32 大得多，逐帧平移 + 逐帧阴影重算仍会
     // 爬（peek 不爬、吸附爬的差价）——滑行前关阴影，commit/熔断/回滚统一在
     // finally 恢复默认态。钉回 tuck（dock_tuck_glide）是 96×32 小窗，不许跟风。

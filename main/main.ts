@@ -1202,10 +1202,14 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
     // 透明，可见的运动轨迹由 DOM 层演）。
     // 长开期间先关阴影：96×32 → 完整纸面的一帧里 WindowServer 要为大透明窗
     // 一次分配 backing store 并重算阴影，这帧卡顿正是「掉帧感」来源；揭示
-    // 动画（340ms）结束后恢复。期间被重新贴边也无妨——恢复的是默认态。
+    // 动画（340ms）结束后恢复。恢复必须绑 epoch：380ms 内用户已重新贴边时，
+    // 吸附滑行会再次关阴影，迟到的旧定时器若在滑行中途把阴影打开，正好打回
+    // 「横条滑行逐帧重算阴影」（Grok review 指出的串台）；新会话的 finally
+    // 会负责恢复，旧定时器跳过不丢恢复。
     noteWindow.setHasShadow(false);
+    const shadowRestoreEpoch = epoch;
     setTimeout(() => {
-      if (!noteWindow.isDestroyed()) {
+      if (!noteWindow.isDestroyed() && shadowRestoreEpoch === transitionEpoch) {
         noteWindow.setHasShadow(true);
       }
     }, 380);
