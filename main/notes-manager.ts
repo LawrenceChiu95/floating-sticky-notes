@@ -350,6 +350,27 @@ export class NotesManager {
     return true;
   }
 
+  // 松手吸附的滑行目标预算：多张书签头叠在同一侧时 y 要错开，错开逻辑只在
+  // 这里（occupied 是 manager 私有），主进程先拿错开后的 y 算滑行终点，
+  // 滑完再走 dockNoteForWebContents 正式落位（同输入重算结果一致）。
+  resolveDockYForWebContents(
+    webContentsId: number,
+    input: { side: 'left' | 'right'; y: number; workArea: DisplayWorkArea }
+  ): number | undefined {
+    const note = this.getMutableNoteForWebContents(webContentsId);
+
+    if (!note) {
+      return undefined;
+    }
+
+    return offsetDockYToAvoidOverlap({
+      y: input.y,
+      side: input.side,
+      workArea: input.workArea,
+      occupied: this.getDockedSliversExcept(note.id)
+    });
+  }
+
   async dockNoteForWebContents(
     webContentsId: number,
     input: { side: 'left' | 'right'; y: number; workArea: DisplayWorkArea }
@@ -527,7 +548,7 @@ export class NotesManager {
   private async updateBoundsForWebContents(
     webContentsId: number,
     bounds: NoteBounds,
-    dock?: { side: 'left' | 'right'; y: number }
+    dock?: NoteDock
   ): Promise<void> {
     const note = this.getMutableNoteForWebContents(webContentsId);
 

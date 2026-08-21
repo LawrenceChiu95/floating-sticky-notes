@@ -7,6 +7,17 @@ const IMAGE_PREVIEW_OPEN_CHANNEL = 'sticky-notes:image-preview:open';
 
 type DockAppliedPayload = {
   dock: { side: 'left' | 'right' } | null;
+  // 拖出展开时携带：书签头在新窗口坐标系内的矩形，renderer 用它做 clip-path
+  // 揭示动画的起点（从书签头位置展开成完整纸面）；其它切 DOM 路径缺省。
+  expandFrom?: { x: number; y: number; width: number; height: number };
+  // 吸附滑入时携带：目标书签头尺寸（多屏共边是 48 宽全露而非 96 半藏，不能
+  // 写死）。renderer 把书签头 DOM 按此尺寸钉在横条窗口的保留角上演交叉淡变，
+  // 窗口纯平移滑行到位后由主进程一次性裁剪（视觉隐形）。
+  morphFromStrip?: { width: number; height: number };
+};
+
+type DockPreviewPayload = {
+  side: 'left' | 'right' | null;
 };
 
 contextBridge.exposeInMainWorld('stickyNotes', {
@@ -37,6 +48,22 @@ contextBridge.exposeInMainWorld('stickyNotes', {
     return () => {
       ipcRenderer.removeListener('sticky-notes:dock-applied', subscription);
     };
+  },
+  // 拖动中预览：横条进入吸附区时主进程只发状态（不写窗），renderer 显示
+  // 「松手贴边」承诺提示；离开吸附区 side 为 null。
+  onDockPreview: (listener: (payload: DockPreviewPayload) => void) => {
+    const subscription = (_event: IpcRendererEvent, payload: DockPreviewPayload): void => {
+      listener(payload);
+    };
+    ipcRenderer.on('sticky-notes:dock-preview', subscription);
+    return () => {
+      ipcRenderer.removeListener('sticky-notes:dock-preview', subscription);
+    };
+  },
+  // 悬停探头：mouseenter/leave 只是扳机，主进程一次性查光标判定真实悬停
+  // 后滑行窗口，renderer 不参与几何。payload 仅表达意图方向。
+  dockPeekHover: (hovered: boolean): void => {
+    ipcRenderer.send('sticky-notes:dock-peek', hovered);
   },
   getAutoLaunchStatus: () => ipcRenderer.invoke('sticky-notes:get-auto-launch-status'),
   setAutoLaunchEnabled: (enabled: boolean) =>

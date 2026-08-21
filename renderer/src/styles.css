@@ -66,43 +66,94 @@ textarea {
   will-change: height;
 }
 
-/* 贴边书签头的尺寸钉住。磁吸直接改窗口几何，进出贴边没有壳体尺寸过渡。 */
+/* 贴边书签头 = 环 + 芯：壳永久 no-drag，承载全部视觉（便签色实心、边框、
+   圆角、阴影），同时是悬停传感区——实测 drag 区在应用非激活时收不到 OS 的
+   enter/leave，而 no-drag 面哪怕只露出 5px 一圈也双向照收（leave 实验 6/6）；
+   内嵌 5px 的透明 .dock-tab-pill 是永久 drag 的拖动面，休息/探出都可直接
+   抓取拖出或沿边滑动。半藏与露出纯靠窗口几何（96 宽、一半探出屏外；多屏
+   共边退回 48 宽全露），DOM 永远铺满窗口，进出贴边没有壳体尺寸过渡。 */
 .note-shell--docked {
-  width: var(--note-dock-width);
-  height: var(--note-dock-height);
-}
-
-/* 书签头靠屏幕内侧的两角用与纸面一致的小圆角;右侧贴边反过来。 */
-.note-shell--docked {
-  border-radius: 0 10px 10px 0;
-}
-
-.note-shell--dock-right.note-shell--docked {
-  border-radius: 10px 0 0 10px;
-}
-
-/* 右贴边时壳体锚住窗口右缘。 */
-.note-shell--dock-right.note-shell--docked {
-  margin-left: auto;
-}
-
-.note-shell--docked {
-  /* 书签头与展开/收起态一样走原生 app-region 拖窗；磁吸贴边/展开由主进程
-     在 move 事件上直接改窗口几何，renderer 不参与拖动。 */
-  -webkit-app-region: drag;
+  -webkit-app-region: no-drag;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 10px;
+  width: 100%;
+  height: 100%;
+  padding: 0 8px;
   box-sizing: border-box;
   cursor: grab;
+  border: 1px solid rgba(43, 42, 39, 0.14);
+  /* 书签头靠屏幕内侧的两角用与纸面一致的小圆角;右侧贴边反过来。
+     半藏时外侧两角在屏外，看不见。 */
+  border-radius: 0 10px 10px 0;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24),
     inset -1px 0 0 rgba(43, 42, 39, 0.1);
 }
 
 .note-shell--dock-right.note-shell--docked {
+  border-radius: 10px 0 0 10px;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24),
     inset 1px 0 0 rgba(43, 42, 39, 0.1);
+}
+
+/* 吸附 morph：窗口纯平移滑向书签头矩形时，横条壳淡出、书签头叠加层淡入，
+   与主进程 320ms 滑行（NOTE_DOCK_IN_GLIDE_DURATION_MS）同拍——改动要两边
+   一起改。叠加层是 main 的兄弟节点（放壳里会跟着壳一起透明）。回滚/熔断
+   移除 morphing class 即撤掉动画，壳体透明度自然回来。 */
+.note-shell--dock-morphing {
+  animation: note-shell-dock-morph-out 320ms cubic-bezier(0.33, 0.75, 0.35, 1) forwards;
+}
+
+@keyframes note-shell-dock-morph-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.dock-morph-bookmark {
+  position: fixed;
+  /* 尺寸与钉角由内联样式给（目标书签头尺寸随贴边环境变：多屏共边 48 宽、
+     单屏 96 半藏），这里只管层叠与淡入。 */
+  z-index: 10;
+  pointer-events: none;
+  opacity: 0;
+  animation: dock-morph-bookmark-in 320ms cubic-bezier(0.33, 0.75, 0.35, 1) forwards;
+}
+
+@keyframes dock-morph-bookmark-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 拖出揭示的隐身占位：dock 切 null 后原生窗口长开有 1~2 帧空档，这期间主壳
+   保持 opacity 0（仍可命中、-webkit-app-region 拖动不受影响），视觉由
+   .dock-expand-bookmark 占位书签头顶住。clip 就位后与恢复可见同一 commit，
+   首帧即是书签头矩形——不能用 visibility:hidden（不可命中会杀掉拖动）。 */
+.note-shell--expand-hold {
+  opacity: 0;
+}
+
+.dock-expand-bookmark {
+  position: fixed;
+  /* 位置与尺寸由内联样式给（expandFrom 是新窗口坐标系里的书签头矩形）。 */
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* 透明拖动面：内嵌 5px 让外壳四周露出一圈 no-drag 传感环——光标进出窗口
+   必先跨环，应用非激活时 enter/leave 也能送达。 */
+.dock-tab-pill {
+  -webkit-app-region: drag;
+  position: absolute;
+  inset: 5px;
 }
 
 /* 书签头上的名字：横排、只露一小段，认得出是哪张即可；没名字就是纯色头。 */
@@ -120,8 +171,48 @@ textarea {
   user-select: none;
 }
 
+/* 松手贴边承诺：横条拖进吸附区时显示的提示 chip。绝对定位不参与布局
+   （拖动中标题不跳），pointer-events 关闭避免在 drag 区上挖洞。 */
+.dock-preview-chip {
+  position: absolute;
+  top: 50%;
+  left: 8px;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 11px;
+  background: rgba(43, 42, 39, 0.08);
+  color: rgba(43, 42, 39, 0.66);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+  animation: dock-preview-chip-in 150ms ease-out;
+}
+
+.dock-preview-chip--right {
+  left: auto;
+  right: 8px;
+}
+
+@keyframes dock-preview-chip-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 .drag-bar {
   -webkit-app-region: drag;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;

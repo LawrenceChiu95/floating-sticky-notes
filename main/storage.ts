@@ -166,7 +166,7 @@ function normalizeNoteDock(value: unknown): NoteDock | undefined {
     return undefined;
   }
 
-  const candidate = value as { side?: unknown; y?: unknown };
+  const candidate = value as { side?: unknown; y?: unknown; x?: unknown };
 
   if (candidate.side !== 'left' && candidate.side !== 'right') {
     return undefined;
@@ -176,7 +176,11 @@ function normalizeNoteDock(value: unknown): NoteDock | undefined {
     return undefined;
   }
 
-  return { side: candidate.side, y: candidate.y };
+  // x 是多屏认屏证据（旧记录没有）：不是有限数字就当缺省，不拖垮整条记录。
+  const x =
+    typeof candidate.x === 'number' && Number.isFinite(candidate.x) ? candidate.x : undefined;
+
+  return { side: candidate.side, y: candidate.y, ...(x === undefined ? {} : { x }) };
 }
 
 function normalizeNoteChecklist(value: unknown): NoteChecklistItemRecord[] {

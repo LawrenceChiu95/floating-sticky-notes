@@ -1,4 +1,6 @@
 import {
+  ArrowLeftToLine,
+  ArrowRightToLine,
   CheckSquare,
   ChevronDown,
   ChevronUp,
@@ -20,7 +22,9 @@ import {
   type DragEvent,
   type KeyboardEvent,
   type MouseEvent,
-  type ReactNode
+  type ReactElement,
+  type ReactNode,
+  type RefObject
 } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { NoteImageView } from '../../main/notes-manager';
@@ -29,7 +33,6 @@ import type { NoteChecklistItemRecord } from '../../main/note-state';
 import { DEFAULT_APP_COPY } from '../../shared/app-copy';
 import { DEFAULT_NOTE_COLOR, DEFAULT_NOTE_OPACITY, NOTE_COLORS } from '../../shared/note-appearance';
 import { NOTE_COLLAPSED_HEIGHT } from '../../shared/note-window';
-import { NOTE_DOCK_HEIGHT, NOTE_DOCK_WIDTH } from '../../shared/note-dock';
 import { createDebouncedValueAction, type DebouncedValueAction } from '../../shared/debounced-action';
 import { limitNoteNameLength } from '../../shared/note-name';
 import {
@@ -67,8 +70,59 @@ import './styles.css';
 
 const STATUS_MESSAGE_DURATION_MS = 2000;
 const NOTE_SHELL_TRANSITION_FALLBACK_MS = 320;
+// 吸附 morph 与主进程 NOTE_DOCK_IN_GLIDE_DURATION_MS 同拍，改动要两边一起改。
+const NOTE_DOCK_MORPH_MS = 320;
 const NOTE_VIEWPORT_RESIZE_FALLBACK_MS = 500;
 const PERSISTENT_STATUS_MESSAGES = new Set(['读取失败']);
+
+type NoteShellStyle = CSSProperties &
+  Record<
+    | '--note-menu-surface'
+    | '--note-collapsed-height'
+    | '--note-transition-title-width'
+    | '--collapsed-name-edit-start-width',
+    string
+  >;
+
+// 贴边书签头：壳永久 no-drag，承载视觉并充当悬停传感环——实测 drag 区在应用
+// 非激活时收不到 OS 的 enter/leave，而 no-drag 面双向照收，所以 enter/leave
+// 扳机挂壳上；内嵌 5px 的透明 pill 是永久 drag 的拖动面，休息半藏时也能直接
+// 抓取拖出展开/沿边滑动。藏与露纯靠主进程滑行窗口几何，DOM 永远铺满窗口。
+function DockedNoteShell({
+  dock,
+  namePresentation,
+  noteShellRef,
+  preloadStatus,
+  shellStyle
+}: {
+  dock: { side: 'left' | 'right' };
+  namePresentation: ReturnType<typeof getNoteNamePresentation>;
+  // morph 叠加层复用时不传：同一时刻主壳与叠加层都挂着，ref 只归真正的壳。
+  noteShellRef?: RefObject<HTMLElement>;
+  preloadStatus: string;
+  shellStyle: NoteShellStyle;
+}): ReactElement {
+  return (
+    <main
+      ref={noteShellRef}
+      className={`note-shell note-shell--docked${
+        dock.side === 'right' ? ' note-shell--dock-right' : ''
+      }`}
+      data-preload-status={preloadStatus}
+      style={shellStyle}
+      aria-label="已贴边的便签，向右或向左拖动可展开"
+      onMouseEnter={() => window.stickyNotes.dockPeekHover(true)}
+      onMouseLeave={() => window.stickyNotes.dockPeekHover(false)}
+    >
+      {namePresentation.kind === 'name' ? (
+        <span className="dock-tab-name" aria-hidden="true">
+          {namePresentation.text}
+        </span>
+      ) : null}
+      <div className="dock-tab-pill" aria-hidden="true" />
+    </main>
+  );
+}
 
 function App(): JSX.Element {
   const preloadStatus = getPreloadStatus(window);
@@ -98,6 +152,34 @@ function App(): JSX.Element {
     const initialDockSide = window.stickyNotes.getInitialDockSide();
     return initialDockSide ? { side: initialDockSide } : null;
   });
+  const dockRef = useRef(dock);
+  dockRef.current = dock;
+  // 吸附滑入的交叉淡变：窗口纯平移滑行时，横条壳淡出、书签头 DOM 按目标
+  // 尺寸钉在窗口保留角（右侧贴边钉右上、左侧钉左上）的叠加层里淡入——
+  // 窗口尺寸全程不变，DOM 零重排；到位后主进程一次性裁剪（视觉隐形）。
+  const [dockMorph, setDockMorph] = useState<{
+    side: 'left' | 'right';
+    width: number;
+    height: number;
+  } | null>(null);
+  // 拖出揭示的「占位书签头」：dock 切 null 的同一 commit 起，主壳隐身（opacity 0，
+  // 仍可命中、app-region 拖动不受影响），这枚 overlay 钉在 expandFrom 位置冒充
+  // 书签头——原生窗口长开的 1~2 帧里用户看到的是连续的书签头，而不是闪一整面
+  // 纸。clip 就位后与「壳体恢复可见」同一 commit 卸掉，首帧即是书签头矩形。
+  const [dockExpandHold, setDockExpandHold] = useState<{
+    side: 'left' | 'right';
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  // 拖出展开揭示动画的代际令牌：动画途中窗口被重新贴边（dock-applied 翻回
+  // 非空）时作废旧动画，不让它把新壳体的 clip 清掉。吸附 morph 复用同一令牌
+  // （两组动画互斥，后到的作废先到的）。
+  const dockRevealGenerationRef = useRef(0);
+  // 拖动中预览：横条被拖进吸附区时主进程发来 side，横条上显示「松手贴边」
+  // 承诺提示（Windows Snap 式：拖动中给承诺、松手才执行）；离开吸附区为 null。
+  const [dockPreview, setDockPreview] = useState<{ side: 'left' | 'right' } | null>(null);
   const [transitionStatusLabelWidth, setTransitionStatusLabelWidth] = useState(0);
   const [shouldRenderContent, setShouldRenderContent] = useState(true);
   const [isImageDragActive, setIsImageDragActive] = useState(false);
@@ -145,6 +227,80 @@ function App(): JSX.Element {
     }, 350);
   }
 
+  // 拖出展开的揭示动画：dock=null 的同一 commit 先把主壳隐身、书签头 overlay 钉
+  // 到 expandFrom（dockExpandHold，等待原生窗口长开期间视觉连续）；视口长开后把
+  // 壳体 clip 到书签头矩形（expandFrom 是新窗口坐标系，直接量视口会拿到 96×32 的
+  // 旧几何），clip 与「恢复可见」同一 commit——首帧就是书签头矩形，不会闪一整窗
+  // 再收回来；随后 WAAPI 把 clip 滑到全窗，340ms、缓动与收起/展开同一族。中途
+  // 重新贴边由代际令牌作废旧动画。
+  const startDockExpandReveal = (from: {
+    side: 'left' | 'right';
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }): void => {
+    const generation = ++dockRevealGenerationRef.current;
+    setDockExpandHold(from);
+    void (async () => {
+      await waitForExpandedViewport();
+      if (generation !== dockRevealGenerationRef.current) {
+        return;
+      }
+      const shell = noteShellRef.current;
+      if (!shell) {
+        setDockExpandHold(null);
+        return;
+      }
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const top = Math.max(0, Math.min(from.y, viewportHeight));
+      const left = Math.max(0, Math.min(from.x, viewportWidth));
+      const right = Math.max(0, viewportWidth - (left + from.width));
+      const bottom = Math.max(0, viewportHeight - (top + from.height));
+      const fromClip = `inset(${top}px ${right}px ${bottom}px ${left}px round 8px)`;
+      // clip 先写进 style，再同一 commit 撤隐身 + 卸 overlay：恢复可见的第一帧
+      // 已是书签头矩形。will-change 提示 compositor，圆角 clip 走 paint 线程时
+      // 少一次中途层升级。
+      shell.style.clipPath = fromClip;
+      shell.style.willChange = 'clip-path';
+      setDockExpandHold(null);
+      const animation = shell.animate(
+        [{ clipPath: fromClip }, { clipPath: 'inset(0px 0px 0px 0px round 8px)' }],
+        // 340ms：clip 走主线程 paint，大窗每帧重绘超预算就丢帧——拉长后每帧
+        // 位移变小，丢帧观感被稀释；缓动与收起/展开同一族。
+        { duration: 340, easing: 'cubic-bezier(0.33, 0.75, 0.35, 1)' }
+      );
+      try {
+        await animation.finished;
+      } catch {
+        // 动画被取消（壳体卸载/新动画接管）：清不清 clip 由在世的代际决定。
+      }
+      if (generation === dockRevealGenerationRef.current) {
+        shell.style.clipPath = '';
+        shell.style.willChange = '';
+      }
+    })();
+  };
+
+  // 吸附滑入的交叉淡变：横条壳加淡出 class、书签头在叠加层淡入，淡变结束
+  // （与窗口滑行同拍）再切纯书签头 DOM。回滚/熔断路径发来的 dock:null 会
+  // 清掉 morph 状态，壳体淡出 class 随渲染移除、透明度自然回来。
+  const startDockMorphToBookmark = (
+    side: 'left' | 'right',
+    size: { width: number; height: number }
+  ): void => {
+    const generation = ++dockRevealGenerationRef.current;
+    setDockMorph({ side, ...size });
+    window.setTimeout(() => {
+      if (generation !== dockRevealGenerationRef.current) {
+        return;
+      }
+      setDock({ side });
+      setDockMorph(null);
+    }, NOTE_DOCK_MORPH_MS + 40);
+  };
+
   useEffect(() => {
     let isMounted = true;
 
@@ -188,17 +344,47 @@ function App(): JSX.Element {
       .catch(() => undefined);
 
     const unsubscribeDockApplied = window.stickyNotes.onDockApplied((payload) => {
-      // 磁吸已直接改好窗口几何，这里只切 DOM，不演过渡。
-      setDock(payload.dock);
+      // 磁吸已直接改好窗口几何，这里只切 DOM。两个例外要演过渡：拖出展开
+      // （expandFrom，纸面从书签头矩形 clip 揭示）与吸附滑入（morphFromStrip，
+      // 横条 → 书签头交叉淡变，与窗口四分量滑行同拍）——原生窗口透明，可见
+      // 运动全在 DOM 层，一帧跳变太紧促。
+      const previousDock = dockRef.current;
+      dockRef.current = payload.dock;
+      setDockPreview(null);
+      setStatusMessage('');
       if (payload.dock) {
+        dockRevealGenerationRef.current += 1;
+        setDockExpandHold(null);
         setIsCollapsed(false);
-        setStatusMessage('');
+        if (!previousDock && payload.morphFromStrip) {
+          startDockMorphToBookmark(payload.dock.side, payload.morphFromStrip);
+          return;
+        }
+        setDockMorph(null);
+        setDock(payload.dock);
+        return;
       }
+      setDockMorph(null);
+      setDock(null);
+      // 贴边 → 拖出展开：贴边前若是收起横条，正文挂载标记停在 false，
+      // 不恢复的话窗口已长开、正文却永远不渲染，只剩工具栏的空白便签。
+      // 不动 isCollapsed：吸附失败回滚时窗口还是横条，要保持横条 DOM。
+      setShouldRenderContent(true);
+      if (previousDock && payload.expandFrom) {
+        startDockExpandReveal({ side: previousDock.side, ...payload.expandFrom });
+      } else {
+        setDockExpandHold(null);
+      }
+    });
+
+    const unsubscribeDockPreview = window.stickyNotes.onDockPreview((payload) => {
+      setDockPreview(payload.side ? { side: payload.side } : null);
     });
 
     return () => {
       isMounted = false;
       unsubscribeDockApplied();
+      unsubscribeDockPreview();
       window.removeEventListener('beforeunload', flushPendingContent);
       if (window.__stickyNotesFlushPendingContent === flushPendingContent) {
         delete window.__stickyNotesFlushPendingContent;
@@ -838,24 +1024,13 @@ function App(): JSX.Element {
     })();
   };
 
-  const shellStyle = {
+  const shellStyle: NoteShellStyle = {
     backgroundColor: hexToRgba(color, opacity),
     '--note-menu-surface': noteColorToMenuSurface(color),
     '--note-collapsed-height': `${NOTE_COLLAPSED_HEIGHT}px`,
-    '--note-dock-width': `${NOTE_DOCK_WIDTH}px`,
-    '--note-dock-height': `${NOTE_DOCK_HEIGHT}px`,
     '--note-transition-title-width': `${transitionStatusLabelWidth}px`,
     '--collapsed-name-edit-start-width': `${collapsedNameEditStartWidth}px`
-  } satisfies CSSProperties &
-    Record<
-      | '--note-menu-surface'
-      | '--note-collapsed-height'
-      | '--note-dock-width'
-      | '--note-dock-height'
-      | '--note-transition-title-width'
-      | '--collapsed-name-edit-start-width',
-      string
-    >;
+  };
   const checklistAddLabel = getChecklistAddLabel(
     checklist.length,
     appCopy.checklistItemPlaceholder
@@ -921,37 +1096,31 @@ function App(): JSX.Element {
     </>
   );
 
-  // 贴边态只渲染一枚横着的书签头：便签色实心底，有名字就横排显示一小段
-  // （认得出是哪张），没有按钮和正文。整枚走原生 app-region 拖窗，磁吸
-  // （沿边滑动 / 立即展开）由主进程在 move 上直接改窗口几何。
+  // 贴边态只渲染一枚横书签头（结构见 DockedNoteShell）：便签色实心底、有名字
+  // 横排露一小段，没有按钮和正文。磁吸/探头全由主进程改窗口几何，这里只发扳机。
   if (dock) {
     return (
-      <main
-        ref={noteShellRef}
-        className={`note-shell note-shell--docked${
-          dock.side === 'right' ? ' note-shell--dock-right' : ''
-        }`}
-        data-preload-status={preloadStatus}
-        style={shellStyle}
-        aria-label="已贴边的便签，向右或向左拖动可展开"
-      >
-        {namePresentation.kind === 'name' ? (
-          <span className="dock-tab-name" aria-hidden="true">
-            {namePresentation.text}
-          </span>
-        ) : null}
-      </main>
+      <DockedNoteShell
+        dock={dock}
+        namePresentation={namePresentation}
+        noteShellRef={noteShellRef}
+        preloadStatus={preloadStatus}
+        shellStyle={shellStyle}
+      />
     );
   }
 
   return (
-    <main
-      ref={noteShellRef}
-      className={`note-shell${isImageDragActive ? ' note-shell--dragging-image' : ''}${
-        isCollapsed ? ' note-shell--collapsed' : ''
-      }${isCollapseTransitioning ? ' note-shell--collapse-transitioning' : ''}${
-        noteNaming.isEditing ? ' note-shell--naming' : ''
-      }`}
+    <>
+      <main
+        ref={noteShellRef}
+        className={`note-shell${isImageDragActive ? ' note-shell--dragging-image' : ''}${
+          isCollapsed ? ' note-shell--collapsed' : ''
+        }${isCollapseTransitioning ? ' note-shell--collapse-transitioning' : ''}${
+          noteNaming.isEditing ? ' note-shell--naming' : ''
+        }${dockMorph ? ' note-shell--dock-morphing' : ''}${
+          dockExpandHold ? ' note-shell--expand-hold' : ''
+        }`}
       data-preload-status={preloadStatus}
       style={shellStyle}
       onPaste={handlePaste}
@@ -987,6 +1156,20 @@ function App(): JSX.Element {
             </span>
           ) : null}
         </div>
+        {isCollapsed && !isCollapseTransitioning && dockPreview ? (
+          // 松手贴边承诺：绝对定位不参与布局（拖动中标题不跳），pointer-events
+          // 关闭避免在 drag 区上挖洞。图标指向将要吸附的那一侧。
+          <span
+            className={`dock-preview-chip${
+              dockPreview.side === 'right' ? ' dock-preview-chip--right' : ''
+            }`}
+            aria-hidden="true"
+          >
+            {dockPreview.side === 'left' ? <ArrowLeftToLine size={13} strokeWidth={2} /> : null}
+            松手贴边
+            {dockPreview.side === 'right' ? <ArrowRightToLine size={13} strokeWidth={2} /> : null}
+          </span>
+        ) : null}
         <div className="drag-bar-actions">
           {!isCollapsed || isCollapseTransitioning ? (
             <div
@@ -1295,6 +1478,53 @@ function App(): JSX.Element {
         </div>
       ) : null}
     </main>
+      {dockMorph ? (
+        // 吸附 morph 的书签头叠加层：按目标尺寸钉在窗口保留角（右侧贴边钉
+        // 右上、左侧钉左上），主壳淡出时它淡入。窗口全程保持横条尺寸纯平移，
+        // 滑行到位后主进程一次性裁剪到这里钉的位置——裁剪区已透明，零跳变。
+        // 必须是 main 的兄弟节点——放进壳里会跟着壳的淡出一起透明。
+        <div
+          className="dock-morph-bookmark"
+          aria-hidden="true"
+          style={{
+            top: 0,
+            [dockMorph.side === 'right' ? 'right' : 'left']: 0,
+            width: dockMorph.width,
+            height: dockMorph.height
+          }}
+        >
+          <DockedNoteShell
+            dock={{ side: dockMorph.side }}
+            namePresentation={namePresentation}
+            preloadStatus={preloadStatus}
+            shellStyle={shellStyle}
+          />
+        </div>
+      ) : null}
+      {dockExpandHold ? (
+        // 拖出揭示的占位书签头：钉在 expandFrom（新窗口坐标系），主壳隐身等原生
+        // 窗口长开期间冒充书签头。clip 就位、壳体恢复可见的同一 commit 卸掉。
+        // 右侧贴边时 expandFrom.x 大于旧窗宽，长开前这 1 帧它在屏外——窗口透明，
+        // 用户看到的是「书签头不动」，而非纸面闪现。pointer-events:none 不挡拖动。
+        <div
+          className="dock-expand-bookmark"
+          aria-hidden="true"
+          style={{
+            top: dockExpandHold.y,
+            left: dockExpandHold.x,
+            width: dockExpandHold.width,
+            height: dockExpandHold.height
+          }}
+        >
+          <DockedNoteShell
+            dock={{ side: dockExpandHold.side }}
+            namePresentation={namePresentation}
+            preloadStatus={preloadStatus}
+            shellStyle={shellStyle}
+          />
+        </div>
+      ) : null}
+    </>
   );
 }
 

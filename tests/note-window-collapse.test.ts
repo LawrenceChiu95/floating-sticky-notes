@@ -134,7 +134,7 @@ describe('note window dock controller', () => {
     await controller.setDocked({ kind: 'dock', side: 'left', y: 80 });
 
     expect(harness.getNativeState()).toEqual({
-      bounds: { x: 0, y: 80, width: 96, height: 32 },
+      bounds: { x: -48, y: 80, width: 96, height: 32 },
       minimumSize: [96, 32],
       resizable: false
     });
@@ -145,8 +145,8 @@ describe('note window dock controller', () => {
       width: 320,
       height: 260
     });
-    expect(controller.getDockForPersistence()).toEqual({ side: 'left', y: 80 });
-    expect(controller.getDockedBounds()).toEqual({ x: 0, y: 80, width: 96, height: 32 });
+    expect(controller.getDockForPersistence()).toEqual({ side: 'left', x: -48, y: 80 });
+    expect(controller.getDockedBounds()).toEqual({ x: -48, y: 80, width: 96, height: 32 });
   });
 
   it('pins a right dock to the right work-area edge with the y clamped vertically', async () => {
@@ -157,12 +157,12 @@ describe('note window dock controller', () => {
     await controller.setDocked({ kind: 'dock', side: 'right', y: 5000 });
 
     expect(harness.getNativeState().bounds).toEqual({
-      x: 1440 - 96,
+      x: 1440 - 96 + 48,
       y: 900 - 32,
       width: 96,
       height: 32
     });
-    expect(controller.getDockForPersistence()).toEqual({ side: 'right', y: 900 - 32 });
+    expect(controller.getDockForPersistence()).toEqual({ side: 'right', x: 1392, y: 900 - 32 });
   });
 
   it('expands a docked sliver into the offered bounds and clears the dock', async () => {
@@ -203,13 +203,13 @@ describe('note window dock controller', () => {
     await controller.setDocked({ kind: 'slide', y: 132 });
 
     expect(harness.getNativeState()).toEqual({
-      bounds: { x: 0, y: 132, width: 96, height: 32 },
+      bounds: { x: -48, y: 132, width: 96, height: 32 },
       minimumSize: [96, 32],
       resizable: false
     });
     expect(controller.getPresentation()).toBe('docked');
-    expect(controller.getDockedBounds()).toEqual({ x: 0, y: 132, width: 96, height: 32 });
-    expect(controller.getDockForPersistence()).toEqual({ side: 'left', y: 132 });
+    expect(controller.getDockedBounds()).toEqual({ x: -48, y: 132, width: 96, height: 32 });
+    expect(controller.getDockForPersistence()).toEqual({ side: 'left', x: -48, y: 132 });
   });
 
   it('clamps the slide y into the work area', async () => {
@@ -221,12 +221,47 @@ describe('note window dock controller', () => {
     await controller.setDocked({ kind: 'slide', y: 5000 });
 
     expect(harness.getNativeState().bounds).toEqual({
-      x: 1440 - 96,
+      x: 1440 - 96 + 48,
       y: 900 - 32,
       width: 96,
       height: 32
     });
   });
+
+  it('moves the docked rest pose between half-hidden and revealed on hover peek', async () => {
+    const harness = createWindowHarness({ x: 120, y: 80, width: 320, height: 260 });
+    const controller = createController(harness);
+    await controller.setCollapsed(true);
+    await controller.setDocked({ kind: 'dock', side: 'left', y: 80 });
+    expect(controller.getDockedBounds()).toEqual({ x: -48, y: 80, width: 96, height: 32 });
+
+    // 悬停探头：主进程已把窗口滑行到全露位，peek 只换静止位基准并钉一次。
+    await controller.setDocked({
+      kind: 'peek',
+      bounds: { x: 0, y: 80, width: 96, height: 32 }
+    });
+
+    expect(harness.getNativeState()).toEqual({
+      bounds: { x: 0, y: 80, width: 96, height: 32 },
+      minimumSize: [96, 32],
+      resizable: false
+    });
+    expect(controller.getPresentation()).toBe('docked');
+    expect(controller.getDockedBounds()).toEqual({ x: 0, y: 80, width: 96, height: 32 });
+
+    // 探头后的沿边滑动钉在新的静止位（x=0），展开阈值也从这里起算。
+    harness.moveTo(30, 200);
+    await controller.setDocked({ kind: 'slide', y: 200 });
+    expect(harness.getNativeState().bounds).toEqual({ x: 0, y: 200, width: 96, height: 32 });
+
+    // 光标移开：peek 回半藏位。
+    await controller.setDocked({
+      kind: 'peek',
+      bounds: { x: -48, y: 200, width: 96, height: 32 }
+    });
+    expect(controller.getDockedBounds()).toEqual({ x: -48, y: 200, width: 96, height: 32 });
+  });
+
 
   it('rolls back a failed dock entry and allows the same transition to be retried', async () => {
     const harness = createWindowHarness({ x: 120, y: 80, width: 320, height: 260 });
@@ -249,7 +284,7 @@ describe('note window dock controller', () => {
       controller.setDocked({ kind: 'dock', side: 'left', y: 80 })
     ).resolves.toBeUndefined();
     expect(controller.getPresentation()).toBe('docked');
-    expect(harness.getNativeState().bounds).toEqual({ x: 0, y: 80, width: 96, height: 32 });
+    expect(harness.getNativeState().bounds).toEqual({ x: -48, y: 80, width: 96, height: 32 });
   });
 
   it('rolls back a failed dock expansion and allows the same transition to be retried', async () => {
@@ -266,7 +301,7 @@ describe('note window dock controller', () => {
       })
     ).rejects.toThrow('Failed setBounds');
     expect(harness.getNativeState()).toEqual({
-      bounds: { x: 0, y: 80, width: 96, height: 32 },
+      bounds: { x: -48, y: 80, width: 96, height: 32 },
       minimumSize: [96, 32],
       resizable: false
     });
@@ -298,7 +333,7 @@ describe('note window dock controller', () => {
     await controller.setDocked({ kind: 'slide', y: 80 });
 
     expect(controller.getPresentation()).toBe('docked');
-    expect(harness.getNativeState().bounds).toEqual({ x: 0, y: 80, width: 96, height: 32 });
+    expect(harness.getNativeState().bounds).toEqual({ x: -48, y: 80, width: 96, height: 32 });
   });
 
   it('ignores collapse commands while docked', async () => {
@@ -312,11 +347,11 @@ describe('note window dock controller', () => {
 
     expect(controller.getPresentation()).toBe('docked');
     expect(harness.getNativeState()).toEqual({
-      bounds: { x: 0, y: 80, width: 96, height: 32 },
+      bounds: { x: -48, y: 80, width: 96, height: 32 },
       minimumSize: [96, 32],
       resizable: false
     });
-    expect(controller.getDockForPersistence()).toEqual({ side: 'left', y: 80 });
+    expect(controller.getDockForPersistence()).toEqual({ side: 'left', x: -48, y: 80 });
   });
 
   it('rejects docking from the expanded state', async () => {
@@ -349,7 +384,7 @@ describe('note window dock controller', () => {
       width: 320,
       height: 260
     });
-    expect(controller.getDockForPersistence()).toEqual({ side: 'left', y: 120 });
+    expect(controller.getDockForPersistence()).toEqual({ side: 'left', x: 0, y: 120 });
     expect(harness.getNativeState().bounds).toEqual({ x: 0, y: 120, width: 96, height: 32 });
   });
 });

@@ -3,7 +3,6 @@ import {
   buildDockedBounds,
   findNearestWorkArea,
   NOTE_DOCK_HEIGHT,
-  NOTE_DOCK_WIDTH,
   type DockSide
 } from '../shared/note-dock';
 import {
@@ -29,6 +28,7 @@ export type NoteWindowPresentation = 'expanded' | 'collapsed' | 'docked';
 export type NoteWindowDockTransition =
   | { kind: 'dock'; side: DockSide; y: number }
   | { kind: 'expand'; bounds: NativeNoteWindowBounds }
+  | { kind: 'peek'; bounds: NativeNoteWindowBounds }
   | { kind: 'slide'; y: number };
 
 type NoteWindowCollapseControllerOptions = {
@@ -69,7 +69,7 @@ export function createNoteWindowCollapseController(
   };
 
   const rollbackToDocked = (bounds: NativeNoteWindowBounds): void => {
-    bestEffort(() => noteWindow.setMinimumSize(NOTE_DOCK_WIDTH, NOTE_DOCK_HEIGHT));
+    bestEffort(() => noteWindow.setMinimumSize(bounds.width, NOTE_DOCK_HEIGHT));
     bestEffort(() => noteWindow.setBounds(bounds, false));
     bestEffort(() => noteWindow.setResizable(false));
   };
@@ -155,16 +155,22 @@ export function createNoteWindowCollapseController(
       }
 
       const collapsedBounds = noteWindow.getBounds();
-      const workArea = findNearestWorkArea(collapsedBounds, options.getWorkAreas());
+      const workAreas = options.getWorkAreas();
+      const workArea = findNearestWorkArea(collapsedBounds, workAreas);
 
       if (!workArea) {
         return;
       }
 
-      const targetBounds = buildDockedBounds({ side: next.side, y: next.y, workArea });
+      const targetBounds = buildDockedBounds({
+        side: next.side,
+        y: next.y,
+        workArea,
+        neighborWorkAreas: workAreas.filter((area) => area !== workArea)
+      });
 
       try {
-        noteWindow.setMinimumSize(NOTE_DOCK_WIDTH, NOTE_DOCK_HEIGHT);
+        noteWindow.setMinimumSize(targetBounds.width, NOTE_DOCK_HEIGHT);
         noteWindow.setBounds(targetBounds, false);
         if (!noteWindow.isDestroyed()) {
           noteWindow.setResizable(false);
@@ -194,9 +200,14 @@ export function createNoteWindowCollapseController(
       const sliverBounds = noteWindow.getBounds();
 
       try {
-        noteWindow.setResizable(true);
+        // 几何写入排在标志位之前：原生拖动进行中切 resizable 会动 styleMask，
+        // 紧随其后的 setBounds 有时被拖拽会话吞掉（窗口没长大、DOM 已展开 =
+        // 变形）。先把矩形写到位，再恢复尺寸约束。
         noteWindow.setBounds(next.bounds, false);
         noteWindow.setMinimumSize(NOTE_MIN_WIDTH, NOTE_MIN_HEIGHT);
+        if (!noteWindow.isDestroyed()) {
+          noteWindow.setResizable(true);
+        }
       } catch (error) {
         rollbackToDocked(sliverBounds);
         throw error;
@@ -209,9 +220,30 @@ export function createNoteWindowCollapseController(
       return;
     }
 
-    // 磁吸沿边滑动：书签头被原生拖动但未过展开阈值时，把 x 钉回贴边那一侧、
-    // y 跟随（夹进工作区）。没有「松手」事件可用，所以拖动中持续钉边，
-    // 松手停在边上就一定是贴边位置。
+    // 悬停探头：几何已由主进程滑行写到位，这里只换静止位基准（半藏 ↔ 整条
+    // 全露）并钉一次，后续展开阈值、沿边滑动都从新基准起算。
+    if (next.kind === 'peek') {
+      if (presentation !== 'docked' || !dockedBounds || !dockSide) {
+        return;
+      }
+
+      try {
+        noteWindow.setMinimumSize(next.bounds.width, NOTE_DOCK_HEIGHT);
+        noteWindow.setBounds(next.bounds, false);
+      } catch (error) {
+        rollbackToDocked(dockedBounds);
+        throw error;
+      }
+
+      dockedBounds = { ...next.bounds };
+      return;
+    }
+
+    // 磁吸沿边滑动：把 x 钉回当前贴边姿势（半藏/露出基准）、y 跟随并夹进
+    // 工作区。只在确认松手后的钉回（主进程 release watch）或无光标的非拖动
+    // move 上调用——原生拖拽会话进行中的 move 流上钉边会被吞或重置拖拽位移
+    // （抽搐/拖不出来），所以拖动中窗口跟手自由拖，钉边在松手后一次性收尾；
+    // 松手停在边上一定是贴边位置。
     if (presentation !== 'docked' || !dockedBounds || !dockSide) {
       return;
     }
@@ -225,7 +257,7 @@ export function createNoteWindowCollapseController(
     const targetBounds: NativeNoteWindowBounds = {
       x: dockedBounds.x,
       y: Math.min(Math.max(next.y, minY), Math.max(minY, maxY)),
-      width: NOTE_DOCK_WIDTH,
+      width: dockedBounds.width,
       height: NOTE_DOCK_HEIGHT
     };
 
@@ -265,7 +297,10 @@ export function createNoteWindowCollapseController(
         return undefined;
       }
 
-      return { side: dockSide, y: noteWindow.getBounds().y };
+      // 静止位 x 一并持久化：多屏时 side+y 分不清贴在哪块屏的同名边，
+      // 恢复靠 x 认屏（见 restoreDockedBounds）。
+      const currentBounds = noteWindow.getBounds();
+      return { side: dockSide, x: currentBounds.x, y: currentBounds.y };
     },
     getDockedBounds: () => (dockedBounds ? { ...dockedBounds } : undefined),
     setCollapsed,
