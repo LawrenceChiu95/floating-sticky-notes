@@ -21,7 +21,7 @@
    npm run dist:mac
    ```
 
-4. 检查打包后的 asar，确认 runtime 包名、版本、更新源和资源符合预期；四个 preload 应为 `preload.cjs`、`updateProgressPreload.cjs`、`releaseFeedbackPreload.cjs` 和 `imagePreviewPreload.cjs`，renderer 应包含 `release-feedback.html` 与 `image-preview.html`，主进程不得引用 preload `.mjs`。便签 preload 不启用 sandbox；更新进度、版本反馈和图片预览三个 sandbox preload 必须各自为单文件 CommonJS，`out/preload/` 下不得出现共享 chunks 目录。
+4. 检查打包后的 asar，确认 runtime 包名、版本、更新源和资源符合预期；四个 preload 应为 `preload.cjs`、`updateProgressPreload.cjs`、`releaseFeedbackPreload.cjs` 和 `imagePreviewPreload.cjs`，renderer 应包含 `release-feedback.html` 与 `image-preview.html`，主进程不得引用 preload `.mjs`。便签 preload 不启用 sandbox；更新进度、版本反馈和图片预览三个 sandbox preload 必须各自为单文件 CommonJS，`out/preload/` 下不得出现共享 chunks 目录。从 asar 拆文件检查时必须指定输出路径（如 `npx --yes asar extract-file app.asar package.json /tmp/pkg.json`）：不带输出路径会默认解压到当前目录，用 asar 内的精简 package.json 覆写仓库根 package.json（2026-08-21 实际发生过，丢失 scripts 与 dependencies）。
 5. 直接启动生成的打包应用，确认主进程可以加载、便签窗口和托盘可以出现，且没有模块导入或其他仅在打包环境发生的启动错误。从托盘打开当前版本说明，确认版本、分类、每项独立圆点、关闭入口和长内容滚动正常。只通过 TypeScript、单元测试和打包命令不算完成这项验证。
 6. 校验 Windows Setup、Mac app 的完整签名和 DMG。`npm run dist:mac` 会在打包后自动执行严格签名校验；在 macOS 上还要独立运行：
 

@@ -12,6 +12,8 @@ describe('createNoteWindowOptions', () => {
     expect(options.alwaysOnTop).toBe(true);
     expect(options.frame).toBe(false);
     expect(options.transparent).toBe(true);
+    expect(options.hasShadow).toBe(false);
+    expect(options.roundedCorners).toBe(false);
     expect(options.resizable).toBe(true);
     expect(options.width).toBe(280);
     expect(options.height).toBe(220);

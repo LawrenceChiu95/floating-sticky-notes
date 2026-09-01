@@ -13,11 +13,18 @@ export {};
 
 type DockAppliedPayload = {
   dock: { side: 'left' | 'right' } | null;
+  transitionId?: number;
+  committed?: boolean;
   // 拖出展开时携带：书签头在新窗口坐标系内的矩形（clip 揭示动画起点）。
   expandFrom?: { x: number; y: number; width: number; height: number };
-  // 吸附滑入时携带：目标书签头尺寸（多屏共边是 48 宽全露而非 96 半藏），
-  // 书签头 DOM 按此钉在横条窗口保留角演交叉淡变（240ms，与平移滑行同拍）。
-  morphFromStrip?: { width: number; height: number };
+  // 吸附逆揭示时携带：union 视口尺寸与 strip / bookmark 两个矩形（union 窗口
+  // 坐标系），renderer 用它们演「纸面收成书签头并滑到贴边点」的 DOM 动画。
+  shrinkFromStrip?: {
+    unionWidth: number;
+    unionHeight: number;
+    strip: { x: number; y: number; width: number; height: number };
+    bookmark: { x: number; y: number; width: number; height: number };
+  };
 };
 
 type DockPreviewPayload = {
@@ -40,6 +47,14 @@ declare global {
       onDockApplied: (listener: (payload: DockAppliedPayload) => void) => () => void;
       onDockPreview: (listener: (payload: DockPreviewPayload) => void) => () => void;
       dockPeekHover: (hovered: boolean) => void;
+      dockShrinkFinished: (transitionId: number) => void;
+      // 吸附逆揭示开演前的握手：stub 已提交并钉好后发送，主进程收到才扩窗。
+      dockShrinkReady: (transitionId: number) => void;
+      dockShrinkUnionSized: (transitionId: number) => void;
+      // 窗口交接的展开 prepare 回执：揭示首帧已 paint，主进程收到才上屏交接。
+      dockExpandReady: (transitionId: number) => void;
+      // 书签头窗（?view=tab）真实数据首帧 paint 完成的回执（窗口交接架构）。
+      dockTabReady: () => void;
       getAutoLaunchStatus: () => Promise<AutoLaunchStatus>;
       setAutoLaunchEnabled: (enabled: boolean) => Promise<AutoLaunchStatus>;
       pasteClipboardImage: () => Promise<AddImageResult | { ok: false; reason: 'empty-clipboard' }>;

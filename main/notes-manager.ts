@@ -11,6 +11,7 @@ import {
 } from './note-state';
 import type { NoteImageStorage, SaveImageInput } from './image-storage';
 import type {
+  NoteWindowDockCommit,
   NoteWindowDockTransition,
   NoteWindowPresentation
 } from './note-window-collapse';
@@ -29,6 +30,7 @@ export type ManagedNoteWindow = {
   setTitle: (title: string) => void;
   setCollapsed: (collapsed: boolean) => Promise<void>;
   setDocked: (next: NoteWindowDockTransition) => Promise<void>;
+  commitDocked: (next: NoteWindowDockCommit) => void;
   getPresentation: () => NoteWindowPresentation;
   getDockForPersistence: () => NoteDock | undefined;
   close: () => void;
@@ -350,9 +352,9 @@ export class NotesManager {
     return true;
   }
 
-  // 松手吸附的滑行目标预算：多张书签头叠在同一侧时 y 要错开，错开逻辑只在
-  // 这里（occupied 是 manager 私有），主进程先拿错开后的 y 算滑行终点，
-  // 滑完再走 dockNoteForWebContents 正式落位（同输入重算结果一致）。
+  // 松手吸附的目标预算：多张书签头叠在同一侧时 y 要错开，错开逻辑只在
+  // 这里（occupied 是 manager 私有）。主进程拿这份唯一结果计算 union、
+  // renderer 动画终点和最终 dock 几何，事务中不再二次重算。
   resolveDockYForWebContents(
     webContentsId: number,
     input: { side: 'left' | 'right'; y: number; workArea: DisplayWorkArea }
@@ -369,44 +371,6 @@ export class NotesManager {
       workArea: input.workArea,
       occupied: this.getDockedSliversExcept(note.id)
     });
-  }
-
-  async dockNoteForWebContents(
-    webContentsId: number,
-    input: { side: 'left' | 'right'; y: number; workArea: DisplayWorkArea }
-  ): Promise<boolean> {
-    const note = this.getMutableNoteForWebContents(webContentsId);
-
-    if (!note) {
-      return false;
-    }
-
-    const noteWindow = this.windowsByNoteId.get(note.id);
-
-    if (!noteWindow) {
-      return false;
-    }
-
-    const y = offsetDockYToAvoidOverlap({
-      y: input.y,
-      side: input.side,
-      workArea: input.workArea,
-      occupied: this.getDockedSliversExcept(note.id)
-    });
-
-    await noteWindow.setDocked({ kind: 'dock', side: input.side, y });
-
-    const persistedDock = noteWindow.getDockForPersistence();
-
-    if (!persistedDock) {
-      return false;
-    }
-
-    note.dock = persistedDock;
-    note.updatedAt = this.now();
-    await this.persist();
-
-    return true;
   }
 
   async undockNoteForWebContents(
@@ -461,6 +425,20 @@ export class NotesManager {
   getNoteForWebContents(webContentsId: number): NoteView | undefined {
     const note = this.getMutableNoteForWebContents(webContentsId);
     return note ? this.toNoteView(note) : undefined;
+  }
+
+  // 书签头窗（窗口交接架构）不是 ManagedNoteWindow，但它的 renderer 需要按
+  // 便签读数据（get-current-note）。登记只读映射；不写 bounds、不进
+  // windowsByNoteId，更新类通道对它是只读安全的（tab view 也不调用）。
+  attachAuxiliaryWebContents(noteId: string, webContentsId: number): void {
+    if (!this.notesById.has(noteId)) {
+      return;
+    }
+    this.noteIdByWebContentsId.set(webContentsId, noteId);
+  }
+
+  detachAuxiliaryWebContents(webContentsId: number): void {
+    this.noteIdByWebContentsId.delete(webContentsId);
   }
 
   getNoteById(noteId: string): NoteView | undefined {

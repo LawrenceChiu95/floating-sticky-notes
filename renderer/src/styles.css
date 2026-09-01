@@ -66,12 +66,15 @@ textarea {
   will-change: height;
 }
 
-/* 贴边书签头 = 环 + 芯：壳永久 no-drag，承载全部视觉（便签色实心、边框、
-   圆角、阴影），同时是悬停传感区——实测 drag 区在应用非激活时收不到 OS 的
-   enter/leave，而 no-drag 面哪怕只露出 5px 一圈也双向照收（leave 实验 6/6）；
-   内嵌 5px 的透明 .dock-tab-pill 是永久 drag 的拖动面，休息/探出都可直接
-   抓取拖出或沿边滑动。半藏与露出纯靠窗口几何（96 宽、一半探出屏外；多屏
-   共边退回 48 宽全露），DOM 永远铺满窗口，进出贴边没有壳体尺寸过渡。 */
+/* 贴边书签头 = 环 + 芯：壳永久 no-drag，承载全部视觉（便签色实心、
+   圆角；一条很轻的 CSS 内描边、无原生外阴影）；朝桌面那一侧留出 5px no-drag 传感条——实测 drag 区在应用
+   非激活时收不到 OS 的 enter/leave，而 no-drag 面双向照收（leave 实验 6/6），
+   光标从桌面横向进来必先跨这条环；从上下沿贴屏边滑入（落在 drag 面上）丢的
+   enter 由主进程 120ms 悬停复核轮询兜底。其余三边全部是可拖面：书签头只有
+   32px 高，四边各 5px 的环曾吃掉 10px 高度，环上挂着 grab 小手却拖不动
+   （光标撒谎）；现在壳体回到 default，grab 只出现在真能拖的 pill 上。
+   半藏与露出纯靠窗口几何（96 宽、一半探出屏外；多屏共边退回 48 宽全露），
+   DOM 永远铺满窗口，进出贴边没有壳体尺寸过渡。 */
 .note-shell--docked {
   -webkit-app-region: no-drag;
   position: relative;
@@ -82,55 +85,57 @@ textarea {
   height: 100%;
   padding: 0 8px;
   box-sizing: border-box;
-  cursor: grab;
-  border: 1px solid rgba(43, 42, 39, 0.14);
+  cursor: default;
+  /* 书签头保留一条不改变几何尺寸的 CSS 内描边；原生外阴影在窗口级关闭。 */
+  border: none;
   /* 书签头靠屏幕内侧的两角用与纸面一致的小圆角;右侧贴边反过来。
      半藏时外侧两角在屏外，看不见。 */
   border-radius: 0 10px 10px 0;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24),
-    inset -1px 0 0 rgba(43, 42, 39, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(43, 42, 39, 0.1);
 }
 
 .note-shell--dock-right.note-shell--docked {
   border-radius: 10px 0 0 10px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.24),
-    inset 1px 0 0 rgba(43, 42, 39, 0.1);
+  box-shadow: inset 0 0 0 1px rgba(43, 42, 39, 0.1);
 }
 
-/* 吸附 morph：窗口纯平移滑向书签头矩形时，横条壳淡出、书签头叠加层淡入，
-   与主进程 320ms 滑行（NOTE_DOCK_IN_GLIDE_DURATION_MS）同拍——改动要两边
-   一起改。叠加层是 main 的兄弟节点（放壳里会跟着壳一起透明）。回滚/熔断
-   移除 morphing class 即撤掉动画，壳体透明度自然回来。 */
-.note-shell--dock-morphing {
-  animation: note-shell-dock-morph-out 320ms cubic-bezier(0.33, 0.75, 0.35, 1) forwards;
+/* 吸附逆揭示：窗口已被主进程一刀并集（strip ∪ target），主壳同 commit 隐身；
+   同一枚 DockedNoteShell 纸面 overlay 演「clip 收成书签头 + 平移到贴边点」
+   （与拖出展开互为逆运动，可见运动全在 DOM）。动画期 overlay 不接收事件，
+   稳定/abort 期恢复 pointer events，稳定态直接承担书签头的原生拖动。 */
+.note-shell--shrink-hold {
+  opacity: 0;
 }
 
-@keyframes note-shell-dock-morph-out {
-  from {
-    opacity: 1;
-  }
-  to {
-    opacity: 0;
-  }
-}
-
-.dock-morph-bookmark {
+.dock-shrink-stub {
   position: fixed;
-  /* 尺寸与钉角由内联样式给（目标书签头尺寸随贴边环境变：多屏共边 48 宽、
-     单屏 96 半藏），这里只管层叠与淡入。 */
+  /* 几何由 JS 在 dock-shrink-ready 握手后钉成显式像素矩形，不依赖
+     .note-shell 的 100vw/100vh 默认值；WAAPI 的 clip-path + transform 只作用于
+     这枚非壳体 overlay。 */
+  left: 0;
+  top: 0;
   z-index: 10;
   pointer-events: none;
-  opacity: 0;
-  animation: dock-morph-bookmark-in 320ms cubic-bezier(0.33, 0.75, 0.35, 1) forwards;
+  border: none;
+  /* 动画进行期保持纯色 surface：clip 收缩途中挂 inset 描边会被裁出残影。
+     窗口交接架构（2026-09-01）下裁窗已废除，描边在 stable（动画落定）就
+     补回——出现的时机贴着运动尾巴，变化盲掩掉；且交接两窗的末帧/首帧
+     必须同像素，书签头窗首帧恒有描边，overlay 没有就会在交换瞬间跳一下。 */
+  box-shadow: none;
 }
 
-@keyframes dock-morph-bookmark-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+.dock-shrink-stub--interactive {
+  pointer-events: auto;
+}
+
+/* 落地替身：动画末帧的静态克隆，垫在 stub（z-index:10）之下，只做视觉兜底，
+   永不接收事件。 */
+.dock-shrink-stub--landing {
+  z-index: 9;
+}
+
+.dock-shrink-stub--stroked {
+  box-shadow: inset 0 0 0 1px rgba(43, 42, 39, 0.1);
 }
 
 /* 拖出揭示的隐身占位：dock 切 null 后原生窗口长开有 1~2 帧空档，这期间主壳
@@ -148,12 +153,20 @@ textarea {
   pointer-events: none;
 }
 
-/* 透明拖动面：内嵌 5px 让外壳四周露出一圈 no-drag 传感环——光标进出窗口
-   必先跨环，应用非激活时 enter/leave 也能送达。 */
+/* 透明拖动面：默认（左贴边）只让出朝桌面的右侧 5px no-drag 传感条，上下沿
+   与壳齐平——书签头 32px 高，上下沿必须能直接抓取拖出。光标从桌面横向进出
+   必先跨传感条；从上下沿贴屏边滑入丢的 enter 由主进程 120ms 悬停复核轮询
+   兜底。grab 只标在真能拖的这面上（壳的传感条是 default，不再光标撒谎）。 */
 .dock-tab-pill {
   -webkit-app-region: drag;
   position: absolute;
-  inset: 5px;
+  inset: 0 5px 0 0;
+  cursor: grab;
+}
+
+/* 右贴边：传感条换到朝桌面的左侧。 */
+.note-shell--dock-right .dock-tab-pill {
+  inset: 0 0 0 5px;
 }
 
 /* 书签头上的名字：横排、只露一小段，认得出是哪张即可；没名字就是纯色头。 */

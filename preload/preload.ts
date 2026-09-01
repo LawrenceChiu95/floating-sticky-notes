@@ -7,13 +7,23 @@ const IMAGE_PREVIEW_OPEN_CHANNEL = 'sticky-notes:image-preview:open';
 
 type DockAppliedPayload = {
   dock: { side: 'left' | 'right' } | null;
+  transitionId?: number;
+  // target 画面已 paint 且主进程已同步提交窗口逻辑态后的最终确认。磁盘保存走
+  // 现有串行 bounds 通道，不再延长这笔可交互的视觉事务。
+  committed?: boolean;
   // 拖出展开时携带：书签头在新窗口坐标系内的矩形，renderer 用它做 clip-path
   // 揭示动画的起点（从书签头位置展开成完整纸面）；其它切 DOM 路径缺省。
   expandFrom?: { x: number; y: number; width: number; height: number };
-  // 吸附滑入时携带：目标书签头尺寸（多屏共边是 48 宽全露而非 96 半藏，不能
-  // 写死）。renderer 把书签头 DOM 按此尺寸钉在横条窗口的保留角上演交叉淡变，
-  // 窗口纯平移滑行到位后由主进程一次性裁剪（视觉隐形）。
-  morphFromStrip?: { width: number; height: number };
+  // 吸附逆揭示时携带：union 视口尺寸与 strip / bookmark 两个矩形（union 窗口
+  // 坐标系）。renderer 把纸面 overlay 钉在 strip 位置，WAAPI 同拍演 clip 收缩
+  // + 平移到 bookmark——吸附是拖出展开的逆运动，可见运动全在 DOM；native
+  // 尺寸与原点各自在独立 paint 边界提交。
+  shrinkFromStrip?: {
+    unionWidth: number;
+    unionHeight: number;
+    strip: { x: number; y: number; width: number; height: number };
+    bookmark: { x: number; y: number; width: number; height: number };
+  };
 };
 
 type DockPreviewPayload = {
@@ -38,8 +48,9 @@ contextBridge.exposeInMainWorld('stickyNotes', {
     ipcRenderer.invoke('sticky-notes:update-appearance', appearance),
   setCollapsed: (collapsed: boolean) =>
     ipcRenderer.invoke('sticky-notes:set-collapsed', collapsed),
-  // 磁吸贴边/展开由主进程在原生拖动的 move 上直接改窗口几何，完成后用
-  // dock-applied 通知 renderer 切 DOM；不再有 offer/accept 与自定义拖窗 IPC。
+  // move 只做吸附预览与展开阈值判定；吸附在物理松手后由主进程发起两次几何
+  // 写入的视觉事务，展开只做一次几何写入。两者都用 dock-applied 协调 DOM，
+  // 不再有 offer/accept 与自定义拖窗 IPC。
   onDockApplied: (listener: (payload: DockAppliedPayload) => void) => {
     const subscription = (_event: IpcRendererEvent, payload: DockAppliedPayload): void => {
       listener(payload);
@@ -64,6 +75,33 @@ contextBridge.exposeInMainWorld('stickyNotes', {
   // 后滑行窗口，renderer 不参与几何。payload 仅表达意图方向。
   dockPeekHover: (hovered: boolean): void => {
     ipcRenderer.send('sticky-notes:dock-peek', hovered);
+  },
+  // 吸附逆揭示演完的回执：主进程收到后先移动 union-sized 窗口到 target
+  // 原点；renderer paint 后再允许最终裁剪（裁早了会把进行中的动画切掉）。
+  dockShrinkFinished: (transitionId: number): void => {
+    ipcRenderer.send('sticky-notes:dock-shrink-finished', transitionId);
+  },
+  // 吸附逆揭示开演前的握手：renderer 已把纸面 overlay 提交进 DOM 并重钉成
+  // 显式像素矩形后发送；主进程收到这份回执才一刀 setBounds(union)。没有
+  // 这个握手就先扩窗的话，靠 .note-shell 100vw/100vh 铺满旧视口的 stub 会被
+  // 新视口拉满整个 union（真机「变长又变短」抽搐的开场竞态根因）。
+  dockShrinkReady: (transitionId: number): void => {
+    ipcRenderer.send('sticky-notes:dock-shrink-ready', transitionId);
+  },
+  // The union backing store has resized at the unchanged source origin and the
+  // source paper has painted. Main may now move the already-sized window.
+  dockShrinkUnionSized: (transitionId: number): void => {
+    ipcRenderer.send('sticky-notes:dock-shrink-union-sized', transitionId);
+  },
+  // 窗口交接的展开 prepare 回执：揭示首帧（clip 钉书签头矩形）已在隐藏态
+  // paint，主进程收到才 showInactive 主窗、隐藏书签头窗并发 committed 播动画。
+  dockExpandReady: (transitionId: number): void => {
+    ipcRenderer.send('sticky-notes:dock-expand-ready', transitionId);
+  },
+  // 书签头窗（?view=tab）真实数据首帧 paint 完成的回执：窗口交接架构下，
+  // 主进程收到它才允许 showInactive 上屏（上屏画面必须与吸附动画末帧同像素）。
+  dockTabReady: (): void => {
+    ipcRenderer.send('sticky-notes:dock-tab-ready');
   },
   getAutoLaunchStatus: () => ipcRenderer.invoke('sticky-notes:get-auto-launch-status'),
   setAutoLaunchEnabled: (enabled: boolean) =>

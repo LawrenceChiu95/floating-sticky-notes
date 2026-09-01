@@ -30,6 +30,11 @@ import {
 import { IMAGE_PROTOCOL, LocalImageStorage } from './image-storage';
 import { readLocalProfile } from './local-profile';
 import { createNoteWindowCollapseController } from './note-window-collapse';
+import {
+  applyNoteTabWindowChrome,
+  createNoteTabWindowOptions,
+  loadNoteTabWindow
+} from './note-tab-window';
 import { createMouseButtonMonitor, type MouseButtonMonitor } from './mouse-button-monitor';
 import {
   createMacUpdateController,
@@ -87,13 +92,13 @@ import {
   findNearestWorkArea,
   NOTE_DOCK_HEIGHT,
   NOTE_DOCK_UNFOLD_HYSTERESIS_PX,
-  NOTE_DOCK_UNFOLD_THRESHOLD_PX,
   resolveCollapsedDockSide,
   resolveDockedEdgeOffset,
   restoreDockedBounds,
   type DockSide
 } from '../shared/note-dock';
 import { DEFAULT_APP_COPY, getAppCopy, type AppCopy } from '../shared/app-copy';
+import { DEFAULT_NOTE_OPACITY } from '../shared/note-appearance';
 import {
   isReleaseFeedbackRenderedPayload,
   RELEASE_FEEDBACK_CHANNELS,
@@ -253,21 +258,39 @@ function createElectronImagePreviewWindow(
   };
 }
 const NOTE_DOCK_GLIDE_DURATION_MS = 180;
-// 吸附滑入比悬停探头慢一档：纯平移滑行与 DOM 交叉淡变同拍进行，320ms 让
-// 形变有呼吸感（真机验收 240ms 偏紧）；探头只是几何露出，180ms 足够。
-const NOTE_DOCK_IN_GLIDE_DURATION_MS = 320;
-// 停歇判定（settle watch）的节奏：move 流停歇 100ms 后启动，每 60ms 查一次，
-// 连续 3 拍（~180ms）「bounds 没变 + 光标位移 <3px + 光标不在抓取点上」才
-// 收尾。live 信号是光标而不是 bounds：getBounds 在 move 事件被 macOS 合并的
-// 间隙里是冻住的（真机日志：快速甩动间隙 >220ms，「两拍 bounds 静止」在活
-// 拖拽中也成立）；而活拖拽中光标不可能连续静止。「光标在抓取点上且静止」=
-// 按住不动，绝不写窗——代价是松手后手停在抓取点上会推迟到下次动鼠标才收尾
+// 归位滑行（钉回）的距离下限：|dx|+|dy| ≤ 48px 直接落位——真机日志里大多数
+// 归位只挪 0~14px（甚至 0），为零距离也演滑行就是「黏腻」。吸附没有滑行
+// 了（逆揭示全程 DOM 动画），这个门槛只剩钉回在用。
+const NOTE_DOCK_GLIDE_MIN_PX = 48;
+// 钉回滑行的距离上限：合理钉回最多 ~72px（回差带外即展开），超出说明状态
+// 已脱臼（显示器变更等）或 y 大幅夹取——长距飞行比瞬移更吓人，直接落位。
+const NOTE_DOCK_TUCK_GLIDE_MAX_PX = 160;
+// 停歇判定（settle watch）的节奏：move 流停歇 100ms 后启动，每 60ms 查一次。
+// helper 活着时松手判定权威（isDown 护栏挡死「按住不收尾」），只需 1 拍
+// bounds 静止确认尾部 move 冲刷完；helper 缺席/死亡的启发式路径要连续 3 拍
+// （~180ms）「bounds 没变 + 光标位移 <3px + 光标不在抓取点上」才收尾。
+// live 信号是光标而不是 bounds：getBounds 在 move 事件被 macOS 合并的间隙里
+// 是冻住的（真机日志：快速甩动间隙 >220ms，「两拍 bounds 静止」在活拖拽中
+// 也成立）；而活拖拽中光标不可能连续静止。「光标在抓取点上且静止」= 按住
+// 不动，绝不写窗——代价是松手后手停在抓取点上会推迟到下次动鼠标才收尾
 // （软失败，晚几百 ms），换来拖拽途中零写窗（抽搐/拖不出来清零）。
 const NOTE_DOCK_DRAG_QUIET_MS = 100;
 const NOTE_DOCK_SETTLE_POLL_MS = 60;
 const NOTE_DOCK_SETTLE_TICKS = 3;
+// helper 活着时的停稳拍数：松手已由按键监视器权威判定，3 拍启发式保险没有
+// 意义——1 拍（60ms）只为确认拖拽尾部 move 已把 getBounds 冲刷到最终位置
+// （迟到 move 仍会取消比对、经 quiet 重排）。松手到吸附事务启动的体感延迟因此
+// 从 ~180ms 降到 ~60ms。
+const NOTE_DOCK_SETTLE_TICKS_AFTER_RELEASE = 1;
 const NOTE_DOCK_SETTLE_CURSOR_STILL_PX = 3;
 const NOTE_DOCK_SETTLE_GRAB_PX = 24;
+// The shrink ACK covers a 500ms geometry wait, a 300ms DOM animation and two
+// paint barriers.  It needs its own budget; the 600ms control-stage default
+// would abort a valid transition under ordinary renderer scheduling.
+const NOTE_DOCK_SHRINK_ACK_TIMEOUT_MS = 1_200;
+// 交接双窗 alpha 对消交叉淡换：8 步 × 15ms = 120ms（窗口交接处注释）。
+const NOTE_DOCK_HANDOVER_FADE_STEPS = 8;
+const NOTE_DOCK_HANDOVER_FADE_STEP_MS = 15;
 
 function easeOutCubic(progress: number): number {
   return 1 - Math.pow(1 - progress, 3);
@@ -281,7 +304,8 @@ function glideNoteWindowTo(
   noteWindow: BrowserWindow,
   target: { x: number; y: number; width: number; height: number },
   shouldAbort?: () => boolean,
-  durationMs: number = NOTE_DOCK_GLIDE_DURATION_MS
+  durationMs: number = NOTE_DOCK_GLIDE_DURATION_MS,
+  ease: (progress: number) => number = easeOutCubic
 ): Promise<void> {
   const from = noteWindow.getBounds();
   // setBounds 会被最小尺寸钳住：横条 min 是 200×40，不把 min 先降到目标值，
@@ -300,7 +324,7 @@ function glideNoteWindowTo(
         return;
       }
       const progress = Math.min(1, (Date.now() - startedAt) / durationMs);
-      const eased = easeOutCubic(progress);
+      const eased = ease(progress);
       noteWindow.setBounds({
         x: Math.round(from.x + (target.x - from.x) * eased),
         y: Math.round(from.y + (target.y - from.y) * eased),
@@ -322,16 +346,20 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
   const restoredDockBounds = note.dock
     ? restoreDockedBounds({ dock: note.dock, workAreas })
     : undefined;
+  // 窗口交接架构（2026-09-01）：贴边态的可见窗口是独立的恒尺寸书签头窗，
+  // 便签主窗在贴边态整体隐藏保活。docked 期间的一切几何读写（peek 滑行、
+  // 钉回、settle 比对、持久化取位置）都落在书签头窗上。
+  let dockTabWindow: BrowserWindow | null = null;
+  let dockTabReadyResolve: ((ready: boolean) => void) | null = null;
+  // ready ACK 可能快于 waiter 武装（快 renderer 在 waitForDockTabReady 挂上
+  // resolver 之前就 paint 完）：事件侧永远先落旗标，waiter 先查旗标再等。
+  let dockTabReadyReceived = false;
+  const getDockTabWindow = (): BrowserWindow | null =>
+    dockTabWindow && !dockTabWindow.isDestroyed() ? dockTabWindow : null;
   const noteWindow = new BrowserWindow(createNoteWindowOptions(note.bounds, workAreas));
-  if (restoredDockBounds) {
-    // 贴边恢复不能出生即贴边：出生就是 48×32 + 不可缩放 + 整页拖窗区的窗口在
-    // macOS 上收不到任何 OS 鼠标事件（实测 enter/click 全丢），先按普通窗口
-    // 创建再改成贴边几何的窗口事件正常（与运行中新贴边的窗口同生命周期）。
-    // 趁 show:false 尚未显示时改好矩形与约束，用户看不到中间态。
-    noteWindow.setMinimumSize(restoredDockBounds.width, NOTE_DOCK_HEIGHT);
-    noteWindow.setBounds(restoredDockBounds, false);
-    noteWindow.setResizable(false);
-  }
+  // 贴边恢复时便签主窗保持隐藏（可见的是书签头窗），不再把主窗改成贴边几何——
+  // 隐藏态 resize 不可见无所谓，但主窗停留展开矩形让「拖出展开」无需任何窗口
+  // 尺寸变化的预热。
   observeWindowDiagnostics(noteWindow, 'note');
   const noteWebContentsId = noteWindow.webContents.id;
 
@@ -349,6 +377,10 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
   });
 
   noteWindow.once('ready-to-show', () => {
+    // 贴边恢复的主窗不示出：可见表面是书签头窗。
+    if (restoredDockBounds) {
+      return;
+    }
     noteWindow.show();
   });
 
@@ -369,14 +401,94 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
   const listenerBag: {
     boundsChanged?: () => void | Promise<void>;
   } = {};
+  // Native geometry is transient while a dock transaction is being painted.
+  // Do not let move/resize events persist union or rollback frames; the
+  // transaction commit (or the post-abort settle) is the only durable write.
+  let suppressBoundsPersistence = false;
   const saveBounds = createDebouncedValueAction<void>(() => {
+    if (suppressBoundsPersistence) {
+      return;
+    }
     return listenerBag.boundsChanged?.();
   }, 300);
+  // 书签头窗：每便签一枚，首次吸附事务或启动恢复时创建。出生为普通横条
+  // 尺寸（出生即 96×32 整页拖窗区的窗口在 macOS 收不到 OS 鼠标事件——主窗
+  // 实测教训），调用方在 ready ACK（真实数据首帧 paint）后于隐藏态定型到
+  // 书签头矩形再示出。示出后永不 resize（窗口交接不变量）。
+  const createDockTabWindow = (side: DockSide): BrowserWindow => {
+    const tab = new BrowserWindow(createNoteTabWindowOptions());
+    const tabWebContentsId = tab.webContents.id;
+    dockTabWindow = tab;
+    dockTabReadyReceived = false;
+    applyNoteTabWindowChrome(tab);
+    observeWindowDiagnostics(tab, 'note');
+    getNotesManager().attachAuxiliaryWebContents(note.id, tabWebContentsId);
+    tab.on('closed', () => {
+      getNotesManager().detachAuxiliaryWebContents(tabWebContentsId);
+      if (dockTabWindow === tab) {
+        dockTabWindow = null;
+      }
+    });
+    tab.on('move', () => {
+      handleDockWindowMove();
+      saveBounds.schedule(undefined);
+    });
+    tab.webContents.on('ipc-message', (_event, channel) => {
+      if (channel === 'sticky-notes:dock-tab-ready') {
+        dockTabReadyReceived = true;
+        dockTabReadyResolve?.(true);
+        dockTabReadyResolve = null;
+      }
+      if (channel === 'sticky-notes:dock-peek') {
+        requestDockPeekReconcile();
+      }
+    });
+    loadNoteTabWindow(tab, { noteId: note.id, side });
+    return tab;
+  };
+
+  // 等待书签头窗「真实数据首帧已 paint」的回执。超时/销毁返回 false，
+  // 调用方必须 fail-closed（绝不在未 paint 的窗口上交接）。预算含建窗 +
+  // loadFile + React 挂载，首次吸附可能撞上冷加载，用 shrink 同档预算。
+  const waitForDockTabReady = (tab: BrowserWindow): Promise<boolean> =>
+    new Promise((resolve) => {
+      if (dockTabReadyReceived) {
+        // ACK 快于 waiter 武装（事件侧已落旗标）：立即成功。
+        resolve(true);
+        return;
+      }
+      const timeout = setTimeout(() => {
+        dockTabReadyResolve = null;
+        resolve(false);
+      }, NOTE_DOCK_SHRINK_ACK_TIMEOUT_MS);
+      dockTabReadyResolve = (ready) => {
+        clearTimeout(timeout);
+        resolve(ready);
+      };
+      tab.once('closed', () => {
+        clearTimeout(timeout);
+        dockTabReadyResolve = null;
+        resolve(false);
+      });
+    });
+
   const collapseController = createNoteWindowCollapseController({
     window: noteWindow,
-    getWorkAreas: () => screen.getAllDisplays().map((display) => display.workArea)
+    getWorkAreas: () => screen.getAllDisplays().map((display) => display.workArea),
+    // docked 态的几何读写落在书签头窗上（不存在时回退主窗，兼容旧路径）。
+    getDockedWindow: () => getDockTabWindow() ?? undefined
   });
   if (restoredDockBounds && note.dock) {
+    // 启动恢复贴边：书签头窗隐藏态定型到恢复矩形后示出；便签主窗保持隐藏
+    // （ready-to-show 处已跳过 show）。「出生即贴边收不到事件」的规避由
+    // createDockTabWindow 的出生尺寸承担。
+    const tab = createDockTabWindow(note.dock.side);
+    tab.setBounds(restoredDockBounds, false);
+    void waitForDockTabReady(tab).then((ready) => {
+      if (ready && !tab.isDestroyed()) {
+        tab.showInactive();
+      }
+    });
     collapseController.applyRestoredDock(
       { side: note.dock.side, y: restoredDockBounds.y },
       {
@@ -401,6 +513,10 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
   // 丢弃——否则旧 finally 会把新会话的 peekGlide/inFlight 清掉（共享布尔竞态，
   // 双 reviewer 实锤）。
   let transitionEpoch = 0;
+  // Monotonic identity for renderer/native visual transactions.  Epochs guard
+  // local async work; this ID crosses IPC so a late ack cannot satisfy a newer
+  // transition by accident.
+  let dockTransitionSequence = 0;
   // 悬停探头的 enter/leave 是一次性事件：触发若撞上吸附/展开/探头滑行
   // （inFlight）会被丢掉，滑行结束光标还停在书签头上就卡在不露的状态。
   // 记下「期间来过触发」，滑行收尾时补一次 reconcile——真实悬停由光标
@@ -418,11 +534,14 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
     toY: number;
     aborted: boolean;
   } | null = null;
-  // leave 丢失的兜底：OS 在应用非激活时投递的 mouseleave 不是 100% 可靠（实测
-  // 快速甩出、贴屏边滑走会丢），丢了书签头就永远卡在露出。露出期间每 120ms
-  // 做一次一次性光标查询复核「光标还在不在窗内」，不在就走与 leave 相同的
-  // 收缩路径（reconcile 内部仍以光标真相为准）。只读光标位置、不逐帧驱动窗口，
-  // 与红线「轮询跟光标拖窗」无关；缩回半藏、展开、拖出、关窗即停。
+  // 悬停复核轮询（enter/leave 双兜底）：OS 投递的 enter/leave 都不是 100%
+  // 可靠——leave 实测快速甩出、贴屏边滑走会丢（丢了卡死在露出）；enter 在
+  // 应用非激活时只对 no-drag 面送达，书签头的 no-drag 传感条只留在朝桌面那
+  // 一侧（上下沿已是可拖面），从上下沿贴屏边滑入会丢 enter。贴边态全程每
+  // 120ms 用一次性光标查询比对「光标在窗内 ↔ 窗口已露出」，不一致就走与
+  // enter/leave 相同的 reconcile（光标真相裁决，姿势本就一致时它是 no-op）。
+  // 只读光标位置、不逐帧驱动窗口，与被否的轮询拖窗无关；离开贴边态、展开、
+  // 关窗即停。
   let peekLingerTimer: NodeJS.Timeout | null = null;
   const stopPeekLinger = (): void => {
     if (peekLingerTimer !== null) {
@@ -448,14 +567,34 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
       if (dragQuietTimer !== null || settleWatchTimer !== null) {
         return;
       }
-      const current = noteWindow.getBounds();
+      const side = collapseController.getDockForPersistence()?.side;
+      if (!side) {
+        return;
+      }
+      // docked 态的可见窗口是书签头窗（窗口交接），光标比对以活动窗为准。
+      const current = getDockActiveWindow().getBounds();
       const point = screen.getCursorScreenPoint();
       const inside =
         point.x >= current.x &&
         point.x < current.x + current.width &&
         point.y >= current.y &&
         point.y < current.y + current.height;
-      if (!inside) {
+      // 当前姿势是露出还是半藏：与同一 y 的静止位矩形比对（多屏共边的 48
+      // 全露回退在 buildDockedBounds 里，口径与 reconcile 一致）。
+      const lingerWorkAreas = screen.getAllDisplays().map((display) => display.workArea);
+      const lingerWorkArea =
+        findNearestWorkArea(current, lingerWorkAreas) ??
+        screen.getDisplayMatching(current).workArea;
+      const rest = buildDockedBounds({
+        side,
+        y: current.y,
+        workArea: lingerWorkArea,
+        neighborWorkAreas: lingerWorkAreas.filter((area) => area !== lingerWorkArea)
+      });
+      const revealed = current.x !== rest.x || current.width !== rest.width;
+      // 「光标在窗内」与「窗口已露出」不一致 = enter 或 leave 丢了一发，
+      // 交给 reconcile 用光标真相裁决。
+      if (inside !== revealed) {
         void reconcileDockPeekHover();
       }
     }, 120);
@@ -473,10 +612,14 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
   let dragQuietTimer: NodeJS.Timeout | null = null;
   let grabOffset: { x: number; y: number } | null = null;
   let settleWatchTimer: NodeJS.Timeout | null = null;
-  // 吸附滑行被抢拖熔断后，窗口已是书签头尺寸+书签头 DOM 但 presentation 仍是
-  // collapsed：记下熔断前的横条矩形，等这次拖拽真结束（settle 确认）且没停进
-  // 吸附区时恢复成横条。恢复必须等拖拽结束——拖拽途中写窗 = 抽搐/拖不出来。
-  let pendingStripRestore: { x: number; y: number; width: number; height: number } | null = null;
+  // 吸附事务被抢拖熔断后，窗口可能仍是 union 尺寸。记下 source 横条和它在
+  // union 中的偏移，等这次拖拽真结束再以当前 native 原点恢复，保证可见纸面
+  // 跟着用户拖动而不被裁窗瞬移。恢复必须等拖拽结束——拖拽途中写窗会抽搐。
+  type PendingStripRestore = {
+    sourceBounds: { x: number; y: number; width: number; height: number };
+    stripOffset: { x: number; y: number };
+  };
+  let pendingStripRestore: PendingStripRestore | null = null;
   // 拖动中预览（松手贴边的承诺）：横条进入吸附区时只发 IPC 状态给 renderer
   // 显示提示，不写窗；离开吸附区或吸附落定时清除。
   let dockPreviewSide: DockSide | null = null;
@@ -539,7 +682,7 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
     options?: { ignoreCursor?: boolean }
   ): void => {
     cancelSettleWatch();
-    let lastBounds = noteWindow.getBounds();
+    let lastBounds = getDockActiveWindow().getBounds();
     let lastCursor = screen.getCursorScreenPoint();
     let stillTicks = 0;
     settleWatchTimer = setInterval(() => {
@@ -555,7 +698,7 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
         stillTicks = 0;
         return;
       }
-      const bounds = noteWindow.getBounds();
+      const bounds = getDockActiveWindow().getBounds();
       const boundsMoved =
         bounds.x !== lastBounds.x ||
         bounds.y !== lastBounds.y ||
@@ -563,12 +706,27 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
         bounds.height !== lastBounds.height;
       lastBounds = bounds;
       if (boundsMoved) {
-        // 窗口在动 = 拖拽会话还活着（或系统在动窗）：整个比对作废（下一次
-        // quiet 会重新武装），活拖拽不该有任何收尾待定。
+        // 窗口在动。松手路径（按键监视器确认已抬起）绝不能按旧逻辑取消等
+        // 「下一次 quiet 重新武装」——原生拖拽会话已结束，之后没有任何 move
+        // 事件会再来武装：快速甩边时窗口位置滞后光标，松手后还在追赶滑行，
+        // 第一拍看到 boundsMoved 就撤表 = 吸附永不触发（真机实锤 2026-09-01：
+        // 连甩三次只有慢的那次吸上）。按住的活拖拽被上面的 isDown 护栏挡住
+        // 到不了这里，所以走到这就是「已松手、窗还在追光标」：只重置累积，
+        // 表继续 poll，等窗口停稳照常收尾。
+        if (mouseButtonMonitor?.isActive() === true) {
+          stillTicks = 0;
+          return;
+        }
+        // helper 缺席/死亡的平台无法区分活拖拽与追光标，保持旧的取消语义
+        // （move 流 quiet 会重新武装），不变脆。
         cancelSettleWatch();
         return;
       }
-      if (!options?.ignoreCursor) {
+      if (!options?.ignoreCursor && mouseButtonMonitor?.isActive() !== true) {
+        // 光标判据只在按键监视器缺席/死亡时启用：监视器活着时 isDown 护栏
+        // 就是权威的「拖拽会话活着」，松手后光标继续动（跟随动作）不该把
+        // 收尾无限推迟——真机「有时候松手要等一会儿才吸」的另一根因：迟到
+        // move 把比对重排成启发式路径后，光标判据会一直被跟随动作重置。
         const cursor = screen.getCursorScreenPoint();
         const cursorMoved =
           Math.abs(cursor.x - lastCursor.x) > NOTE_DOCK_SETTLE_CURSOR_STILL_PX ||
@@ -579,7 +737,7 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
           stillTicks = 0;
           return;
         }
-        if (mouseButtonMonitor?.isActive() !== true && isCursorOnGrab(bounds, cursor)) {
+        if (isCursorOnGrab(bounds, cursor)) {
           // 按住不动：绝不写窗。这道排除只在按键监视器缺席/死亡时启用——
           // 监视器活着时 isDown 护栏是权威，「松手后手停在抓取点上」必须照常
           // 收尾（release-still），不能被这里无界挡住。
@@ -588,7 +746,15 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
         }
       }
       stillTicks += 1;
-      if (stillTicks < NOTE_DOCK_SETTLE_TICKS) {
+      // helper 活着 = 松手判定权威：3 拍启发式保险没有意义，1 拍只为等尾部
+      // move 冲刷 getBounds（迟到 move 仍取消重排）。helper 缺席/死亡
+      // （Windows 回退）保持 3 拍 + 上面的光标判据，不能变脆。每拍重查
+      // isActive：helper 中途死亡自动回到保险档。
+      const requiredTicks =
+        options?.ignoreCursor || mouseButtonMonitor?.isActive() === true
+          ? NOTE_DOCK_SETTLE_TICKS_AFTER_RELEASE
+          : NOTE_DOCK_SETTLE_TICKS;
+      if (stillTicks < requiredTicks) {
         return;
       }
       cancelSettleWatch();
@@ -607,7 +773,8 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
   // 会撞上本窗 500ms 内的程序性 move（show 回拉等）造成误吸附/误钉回。
   let pressOnWindow = false;
   const isCursorOverWindow = (paddingPx: number): boolean => {
-    const bounds = noteWindow.getBounds();
+    // docked 态的抓取发生在书签头窗上（窗口交接），按下归属以活动窗为准。
+    const bounds = getDockActiveWindow().getBounds();
     const cursor = screen.getCursorScreenPoint();
     return (
       cursor.x >= bounds.x - paddingPx &&
@@ -622,8 +789,9 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
       : [
           mouseButtonMonitor.onRelease(() => {
             // 物理松手是确定性的：不猜固定延迟等尾部 move，直接按当前姿势武装
-            // settle watch——bounds 静止比对天然等冲刷到位，迟到 move 会取消
-            // 重排；光标检查跳过（ignoreCursor），松手后继续动鼠标不拖慢收尾。
+            // settle watch——bounds 静止比对天然等冲刷到位；快速甩边后窗口还在
+            // 追光标的拍数只重置累积不撤表（松手后不会再有 move 来重新武装）；
+            // 光标检查跳过（ignoreCursor），松手后继续动鼠标不拖慢收尾。
             // release-still（松手后手停在抓取点上）因此照常吸附/钉回。
             if (!pressOnWindow) {
               return;
@@ -638,6 +806,18 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
             if (noteWindow.isDestroyed() || isMagneticTransitionInFlight) {
               return;
             }
+            // TODO(诊断 2026-09-01)：快速甩边吸附失败二轮——记录松手瞬间窗口
+            // 位置/光标，并在 +400ms 采样窗口是否仍在移动（验证「窗口滞后未
+            // 进吸附区」假说）。验完拆。
+            setTimeout(() => {
+              if (!noteWindow.isDestroyed()) {
+                diagnosticLogger?.record('dock_post_release_position', {
+                  webContentsId: noteWebContentsId,
+                  bounds: getDockActiveWindow().getBounds(),
+                  cursor: screen.getCursorScreenPoint()
+                });
+              }
+            }, 400);
             onDragQuiet(true);
           }),
           mouseButtonMonitor.onPress(() => {
@@ -677,6 +857,17 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
         workArea,
         workAreas.filter((area) => area !== workArea)
       );
+      // TODO(诊断 2026-09-01)：松手落判快照——甩边失败时对照窗口位置与 side。
+      if (fromRelease) {
+        diagnosticLogger?.record('dock_release_decision', {
+          webContentsId: noteWebContentsId,
+          presentation,
+          bounds: current,
+          cursor: screen.getCursorScreenPoint(),
+          side: side ?? null,
+          armed: side !== null || pendingStripRestore !== null
+        });
+      }
       if (side || pendingStripRestore !== null) {
         armSettleWatch('dock', { ignoreCursor: fromRelease });
       }
@@ -689,26 +880,141 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
     if (!dockedBounds) {
       return;
     }
-    const current = noteWindow.getBounds();
+    const current = getDockActiveWindow().getBounds();
     const drifted =
       current.x !== dockedBounds.x ||
       current.y !== dockedBounds.y ||
       current.width !== dockedBounds.width ||
       current.height !== dockedBounds.height;
-    // 书签头被拖离静止位（未过展开阈值）→ 等光标停稳后惰性钉回；位置没偏但
-    // 有推迟的悬停扳机（拖动中被 quiet 守卫挡下的 peek 触发）→ 同样等停稳
-    // 再复核。钉回不许回到「松手检测 watch」或 move 流上：竖拖途中写 x 会把
-    // 水平位移吃掉（拖不出来）并撞活拖拽（抽搐）——真机日志实锤。
+    // 书签头被拖离静止位 → 等光标停稳后按落点裁决（钉回或松手展开）；位置
+    // 没偏但有推迟的悬停扳机（拖动中被 quiet 守卫挡下的 peek 触发）→ 同样
+    // 等停稳再复核。钉回/展开都不许回到「松手检测 watch」或 move 流上：
+    // 拖拽途中写 x 会把水平位移吃掉（拖不出来）并撞活拖拽（抽搐）——真机
+    // 日志实锤。
     if (drifted || dockPeekReconcilePending) {
       armSettleWatch('docked', { ignoreCursor: fromRelease });
     }
   };
-  // 横条松手吸附：已确认拖拽会话结束（会话死了，写窗安全）。窗口保持横条
-  // 尺寸纯平移滑到「书签头角与贴边矩形对齐」的位置（240ms，逐帧 resize 会
-  // 抽动——每帧重排 + 逐帧阴影重算），DOM 同步交叉淡变（morphFromStrip，
-  // 书签头钉在保留角），到位后由 setDocked 一次性裁掉透明区（视觉隐形）。
-  // 滑行途中抢拖：走廊/按键熔断后不提交 dock，恢复义务记在 pendingStripRestore，
-  // 拖拽结束若没停进吸附区恢复横条 DOM；拖回吸附区则重新走本流程。
+  type DockRendererAck = 'received' | 'timeout' | 'aborted';
+  const waitForDockRendererAck = (
+    channel:
+      | 'sticky-notes:dock-shrink-ready'
+      | 'sticky-notes:dock-shrink-union-sized'
+      | 'sticky-notes:dock-shrink-finished'
+      | 'sticky-notes:dock-expand-ready',
+    transitionId: number,
+    epoch: number,
+    timeoutMs = 600
+  ): Promise<DockRendererAck> =>
+    new Promise((resolve) => {
+      let settled = false;
+      let abortPoll: NodeJS.Timeout | undefined;
+      let fallback: NodeJS.Timeout | undefined;
+      const finish = (result: DockRendererAck): void => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        if (abortPoll) {
+          clearInterval(abortPoll);
+        }
+        if (fallback) {
+          clearTimeout(fallback);
+        }
+        noteWindow.webContents.off('ipc-message', onMessage);
+        resolve(result);
+      };
+      const onMessage = (_event: unknown, incomingChannel: string, incomingId: unknown): void => {
+        if (incomingChannel === channel && incomingId === transitionId) {
+          finish('received');
+        }
+      };
+      noteWindow.webContents.on('ipc-message', onMessage);
+      abortPoll = setInterval(() => {
+        if (noteWindow.isDestroyed() || epoch !== transitionEpoch) {
+          finish('aborted');
+        }
+      }, 50);
+      fallback = setTimeout(() => finish('timeout'), timeoutMs);
+    });
+  type DockTransitionContext = {
+    transitionId: number;
+    epoch: number;
+    side: DockSide;
+    sourceBounds: { x: number; y: number; width: number; height: number };
+    stripOffset: { x: number; y: number };
+    unionApplied: boolean;
+  };
+  const recordDockTransitionStage = (
+    context: DockTransitionContext,
+    stage: string,
+    result?: string,
+    error?: unknown
+  ): void => {
+    diagnosticLogger?.record('dock_transition_stage', {
+      webContentsId: noteWebContentsId,
+      transitionId: context.transitionId,
+      side: context.side,
+      stage,
+      ...(result ? { result } : {}),
+      ...(error === undefined ? {} : { error }),
+      bounds: noteWindow.isDestroyed() ? undefined : noteWindow.getBounds()
+    });
+  };
+  const abortDockTransition = ({
+    context,
+    stage,
+    result,
+    error
+  }: {
+    context: DockTransitionContext;
+    stage: string;
+    result: string;
+    error?: unknown;
+  }): void => {
+    if (noteWindow.isDestroyed()) {
+      return;
+    }
+    // 交接前创建的书签头窗若还没上屏就随事务一起销毁；已上屏的（committed
+    // 之后没有 abort 路径）不受影响。
+    const pendingTab = getDockTabWindow();
+    if (pendingTab && !pendingTab.isVisible()) {
+      dockTabWindow = null;
+      pendingTab.destroy();
+    }
+    const { sourceBounds } = context;
+    // 真实按下或 epoch 已被抢拖作废时，绝不争写原生拖拽窗口；只登记恢复义务，
+    // 等松手 settle 后以用户拖到的新 x/y 恢复横条尺寸。普通 timeout/error 没有
+    // 活拖拽证据，立即把 controller + native 一起恢复到原 source。
+    const restoreAfterDrag =
+      context.epoch !== transitionEpoch || mouseButtonMonitor?.isDown() === true;
+    if (restoreAfterDrag) {
+      if (context.unionApplied) {
+        pendingStripRestore ??= {
+          sourceBounds,
+          stripOffset: context.stripOffset
+        };
+      }
+    } else {
+      if (context.unionApplied) {
+        collapseController.restoreCollapsed(sourceBounds);
+      }
+    }
+    noteWindow.webContents.send('sticky-notes:dock-applied', {
+      dock: null,
+      transitionId: context.transitionId
+    });
+    recordDockTransitionStage(context, stage, result, error);
+  };
+  // 横条松手吸附：已确认拖拽会话结束（会话死了，写窗安全）。可见运动全在
+  // DOM（吸附 = 拖出展开的逆运动）：主进程只在四个阶段边界写 native 几何，
+  // 每次只改尺寸或只改原点——macOS 对同一次 resize+move 不保证视觉原子性。
+  // renderer 在每个边界把同一枚纸面重钉并 paint 后才允许下一步；中间 300ms
+  // 的 clip + 平移全由 DOM 完成，绝不逐帧 setBounds。native shadow 在建窗时
+  // 固定关闭，窗口原生圆角也关闭，最终形状只由 CSS 决定。
+  // 动画途中抢拖：物理按下熔断（epoch 轮询）后不提交 dock，DOM 回横条，恢复
+  // 义务记在 pendingStripRestore，拖拽结束若没停进吸附区恢复横条几何；拖回
+  // 吸附区则重新走本流程。
   const finalizeDockOnRelease = (): void => {
     if (noteWindow.isDestroyed() || isMagneticTransitionInFlight) {
       return;
@@ -716,7 +1022,27 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
     if (collapseController.getPresentation() !== 'collapsed') {
       return;
     }
-    const current = noteWindow.getBounds();
+    let current = noteWindow.getBounds();
+    let restoredPendingStrip = false;
+    if (pendingStripRestore !== null) {
+      // The aborted overlay stays in the union window while the user can grab
+      // it again.  Once the physical release is known, restore the strip at the
+      // current native origin plus its saved union offset; this preserves the
+      // paper's global position instead of snapping it to a stale source point.
+      const pending = pendingStripRestore;
+      pendingStripRestore = null;
+      const restoredBounds = {
+        x: current.x + pending.stripOffset.x,
+        y: current.y + pending.stripOffset.y,
+        width: pending.sourceBounds.width,
+        height: pending.sourceBounds.height
+      };
+      saveBounds.cancel();
+      suppressBoundsPersistence = true;
+      collapseController.restoreCollapsed(restoredBounds);
+      current = noteWindow.getBounds();
+      restoredPendingStrip = true;
+    }
     const workAreas = screen.getAllDisplays().map((display) => display.workArea);
     const workArea =
       findNearestWorkArea(current, workAreas) ?? screen.getDisplayMatching(current).workArea;
@@ -727,17 +1053,10 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
     );
     if (!side) {
       // 比对期间窗口被系统动过（如 macOS 拉回屏内）：不在吸附区就不吸。
-      if (pendingStripRestore !== null) {
-        // 上次吸附被抢拖熔断留下的书签头残骸：拖拽已确认结束且没停进吸附区，
-        // 恢复横条几何与 DOM（只写尺寸保留拖后位置）。
-        const restore = pendingStripRestore;
-        pendingStripRestore = null;
-        const now = noteWindow.getBounds();
-        noteWindow.setMinimumSize(NOTE_MIN_WIDTH, NOTE_COLLAPSED_HEIGHT);
-        noteWindow.setBounds(
-          { x: now.x, y: now.y, width: restore.width, height: restore.height },
-          false
-        );
+      if (restoredPendingStrip) {
+        suppressBoundsPersistence = false;
+        saveBounds.cancel();
+        saveBounds.schedule(undefined);
         noteWindow.webContents.send('sticky-notes:dock-applied', { dock: null });
         diagnosticLogger?.record('dock_abort_strip_restore', {
           webContentsId: noteWebContentsId
@@ -745,12 +1064,17 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
       }
       return;
     }
-    // 新一轮吸附接管窗口：上一轮的恢复义务作废（新滑行从当前书签头几何起步）。
+    // 新一轮吸附接管窗口：上一轮的恢复义务已在上面归一化；本事务的 union
+    // 与 target 几何都不能写入持久化。
     pendingStripRestore = null;
+    saveBounds.cancel();
+    suppressBoundsPersistence = true;
     const epoch = ++transitionEpoch;
     isMagneticTransitionInFlight = true;
     dockPreviewSide = null;
     void (async () => {
+      let dockTransitionContext: DockTransitionContext | null = null;
+      let shouldPersistCommittedDock = false;
       try {
         const stackedY = await getNotesManager().resolveDockYForWebContents(noteWebContentsId, {
           side,
@@ -768,88 +1092,295 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
         if (stackedY === undefined) {
           return;
         }
-        const target = buildDockedBounds({
+        const restTarget = buildDockedBounds({
           side,
           y: stackedY,
           workArea,
           neighborWorkAreas: workAreas.filter((area) => area !== workArea)
         });
-        // 只滑位置、不逐帧改尺寸：每帧 resize 会逼 renderer 逐帧重排壳体并让
-        // macOS 逐帧重算窗口阴影（吸附滑行抽动的根因；纯平移的悬停探头同款
-        // 机制就丝滑）。窗口全程保持横条尺寸，书签头 DOM 钉在将要保留的那
-        // 一角（右侧贴边钉右上、左侧钉左上），横条壳同步淡出；滑到「书签头
-        // 角与贴边矩形精确对齐」后由 setDocked 一次性裁掉透明/空置区——书签头
-        // 已占满保留区，这一刀视觉隐形。滑行中被反抓时窗口本来就是横条尺寸，
-        // 恢复路径只需切回 DOM。
-        const glideTarget = {
-          x: side === 'right' ? target.x + target.width - current.width : target.x,
-          y: target.y,
-          width: current.width,
-          height: current.height
+        const revealTarget = buildDockedBounds({
+          side,
+          y: stackedY,
+          workArea,
+          neighborWorkAreas: workAreas.filter((area) => area !== workArea),
+          reveal: true
+        });
+        // 落位姿势按光标真相一次算对：光标还在书签头矩形上（刚松手很常见）就
+        // 以露出姿势落位——旧版先落半藏、探头复核再反向探出 48px 的「两段动」
+        // 就是真机「吸进去抽一下」的来源（日志里 dock_in_glide 后紧跟
+        // dock_peek_glide reveal:true）。光标不在则落半藏：复核轮询以光标真相
+        // 维持姿势，不会误探出，旧 suppress 压制状态机因此整体拆除。
+        const landingCursor = screen.getCursorScreenPoint();
+        const landedHovered =
+          landingCursor.x >= revealTarget.x &&
+          landingCursor.x < revealTarget.x + revealTarget.width &&
+          landingCursor.y >= revealTarget.y &&
+          landingCursor.y < revealTarget.y + revealTarget.height;
+        const target = landedHovered ? revealTarget : restTarget;
+        // 吸附 = 拖出展开的逆运动（2026-08-27 方案 A，真机确认「窗口在爬」不
+        // 丝滑的根因是物种差异：可见运动全在 DOM，native 只在 paint 边界提交
+        // 几何；macOS 的 resize+move 不是视觉原子操作，source→union 拆成「只改
+        // 尺寸、paint、只改原点、paint」）。2026-09-01 窗口交接定案：落定不再
+        // 有 union→target 裁窗——可见时刻改透明窗尺寸必闪（Electron 结构性缺陷，
+        // 官方 issue 2017→2025 全 not_planned）——动画末帧钉在 target 全局点后，
+        // 由预渲染的独立恒尺寸书签头窗同像素上屏交接，主窗随后隐藏。
+        const transitionId = ++dockTransitionSequence;
+        dockTransitionContext = {
+          transitionId,
+          epoch,
+          side,
+          sourceBounds: current,
+          stripOffset: { x: 0, y: 0 },
+          unionApplied: false
         };
-        peekGlide = {
-          fromX: current.x,
-          toX: glideTarget.x,
-          fromY: current.y,
-          toY: glideTarget.y,
-          aborted: false
+        const union = {
+          x: Math.min(current.x, target.x),
+          y: Math.min(current.y, target.y),
+          width:
+            Math.max(current.x + current.width, target.x + target.width) -
+            Math.min(current.x, target.x),
+          height:
+            Math.max(current.y + current.height, target.y + target.height) -
+            Math.min(current.y, target.y)
         };
-        const glide = peekGlide;
+        const unionAtSource = {
+          x: current.x,
+          y: current.y,
+          width: union.width,
+          height: union.height
+        };
+        const shrinkFromStrip = {
+          unionWidth: union.width,
+          unionHeight: union.height,
+          strip: {
+            x: current.x - union.x,
+            y: current.y - union.y,
+            width: current.width,
+            height: current.height
+          },
+          bookmark: {
+            x: target.x - union.x,
+            y: target.y - union.y,
+            width: target.width,
+            height: target.height
+          }
+        };
+        // Register the waiter before notifying the renderer.  The transaction
+        // ID is part of both the notification and ack, so an old renderer
+        // callback cannot satisfy this transition.
+        const readyPromise = waitForDockRendererAck(
+          'sticky-notes:dock-shrink-ready',
+          transitionId,
+          epoch
+        );
         noteWindow.webContents.send('sticky-notes:dock-applied', {
           dock: { side },
-          morphFromStrip: { width: target.width, height: target.height }
+          transitionId,
+          shrinkFromStrip
         });
+        recordDockTransitionStage(dockTransitionContext, 'prepare-sent');
+        // ready 代表 source overlay 已真正 paint，不只是 React commit。timeout 不是
+        // 成功：几何尚未改变，直接 abort 回横条，绝不猜 renderer 已经准备好。
+        const readyResult = await readyPromise;
+        if (noteWindow.isDestroyed()) {
+          return;
+        }
+        recordDockTransitionStage(dockTransitionContext, 'prepare-ack', readyResult);
+        if (readyResult !== 'received') {
+          abortDockTransition({
+            context: dockTransitionContext,
+            stage: 'prepare-abort',
+            result: readyResult
+          });
+          return;
+        }
+        if (epoch !== transitionEpoch) {
+          abortDockTransition({
+            context: dockTransitionContext,
+            stage: 'prepare-abort',
+            result: 'aborted'
+          });
+          return;
+        }
+        // Grow the backing store without moving the source paper. A dedicated
+        // paint ACK is required before changing the origin; otherwise one
+        // combined setBounds reintroduces the WindowServer intermediate frame.
+        const unionSizePromise = waitForDockRendererAck(
+          'sticky-notes:dock-shrink-union-sized',
+          transitionId,
+          epoch
+        );
+        dockTransitionContext.unionApplied = true;
+        dockTransitionContext.stripOffset = { x: 0, y: 0 };
+        noteWindow.setBounds(unionAtSource, false);
+        const unionSizeResult = await unionSizePromise;
+        if (noteWindow.isDestroyed()) {
+          return;
+        }
+        recordDockTransitionStage(
+          dockTransitionContext,
+          'union-size-ack',
+          unionSizeResult
+        );
+        if (unionSizeResult !== 'received') {
+          abortDockTransition({
+            context: dockTransitionContext,
+            stage: 'union-size-abort',
+            result: unionSizeResult
+          });
+          return;
+        }
+        if (epoch !== transitionEpoch) {
+          abortDockTransition({
+            context: dockTransitionContext,
+            stage: 'union-size-abort',
+            result: 'aborted'
+          });
+          return;
+        }
+
+        // Move the already-sized window to the real union origin. Renderer
+        // waits for this origin and paint before starting the visible motion.
+        const shrinkPromise = waitForDockRendererAck(
+          'sticky-notes:dock-shrink-finished',
+          transitionId,
+          epoch,
+          NOTE_DOCK_SHRINK_ACK_TIMEOUT_MS
+        );
+        dockTransitionContext.stripOffset = {
+          x: shrinkFromStrip.strip.x,
+          y: shrinkFromStrip.strip.y
+        };
+        noteWindow.setBounds(union, false);
         diagnosticLogger?.record('dock_in_glide', {
           webContentsId: noteWebContentsId,
           side,
           from: { x: current.x, y: current.y },
-          to: { x: glideTarget.x, y: glideTarget.y }
+          to: { x: target.x, y: target.y }
         });
-        // 滑行期关阴影：横条比 peek 的 96×32 大得多，逐帧平移时 WindowServer
-        // 逐帧重算大窗阴影（peek 不爬、吸附爬的差价就在这）；commit / 熔断 /
-        // 回滚统一在 finally 恢复默认态。
-        noteWindow.setHasShadow(false);
-        await glideNoteWindowTo(
-          noteWindow,
-          glideTarget,
-          () => glide.aborted,
-          NOTE_DOCK_IN_GLIDE_DURATION_MS
+        const shrinkResult = await shrinkPromise;
+        if (noteWindow.isDestroyed()) {
+          return;
+        }
+        recordDockTransitionStage(dockTransitionContext, 'animation-ack', shrinkResult);
+        if (shrinkResult !== 'received') {
+          abortDockTransition({
+            context: dockTransitionContext,
+            stage: 'animation-abort',
+            result: shrinkResult
+          });
+          return;
+        }
+        if (epoch !== transitionEpoch) {
+          abortDockTransition({
+            context: dockTransitionContext,
+            stage: 'animation-abort',
+            result: 'aborted'
+          });
+          return;
+        }
+        // 窗口交接（2026-09-01 定案）：动画末帧的书签头画面已由同一枚 overlay
+        // 钉在 target 全局点；书签头窗是独立恒尺寸窗口，预渲染出同像素静态画面后
+        // showInactive 上屏，再隐藏便签主窗。顺序永远是「先 show 已 paint 的新窗、
+        // 后 hide 旧窗」——任何时刻至少一窗在屏，不存在两窗都空的帧；两窗半透明
+        // 同像素重叠会叠印变深，由下面的 alpha 对消交叉淡换压平（见注释）。
+        // 全程没有可见时刻的窗口 resize（落定闪烁根因就此拆除）。
+        const tab = createDockTabWindow(side);
+        const tabReady = await waitForDockTabReady(tab);
+        if (noteWindow.isDestroyed()) {
+          return;
+        }
+        recordDockTransitionStage(
+          dockTransitionContext,
+          'tab-ready-ack',
+          tabReady ? 'received' : 'timeout'
         );
-        if (noteWindow.isDestroyed()) {
+        if (!tabReady || tab.isDestroyed() || epoch !== transitionEpoch) {
+          abortDockTransition({
+            context: dockTransitionContext,
+            stage: 'tab-handover-abort',
+            result: epoch !== transitionEpoch ? 'aborted' : 'timeout'
+          });
           return;
         }
-        if (glide.aborted || epoch !== transitionEpoch) {
-          // 滑行被抢拖熔断：不提交 dock——dockNoteForWebContents 内部的
-          // setDocked 会 setBounds，在活拖拽中写窗 = 拖不出来/抽搐同款根因。
-          // 窗口仍是横条尺寸（滑行只动位置）、DOM 在过渡态/书签头、
-          // presentation 仍 collapsed：记下熔断前的横条矩形（保留最早的，
-          // 二次熔断不覆盖），拖拽结束后若没停进吸附区由 finalizeDockOnRelease
-          // 恢复横条 DOM（几何幂等重写）。
-          pendingStripRestore ??= current;
-          return;
+        // 隐藏态定型到目标矩形（隐藏 resize 不可见），上屏后永不 resize。
+        tab.setBounds(target, false);
+        // 撤主窗的 alpha 对消交叉淡换（2026-09-01 真机二轮）：两窗内容同像素但
+        // 各自半透明（便签默认 0.94），只要存在「双方都接近满透明度」的重叠帧，
+        // 合成值就从稳态 a 跳向 1-(1-a)²≈0.996；单向线性淡出也让中间拍偏离稳
+        // 态——人眼看到的就是落定一瞬的浅闪（首版单向淡出只压暗未根除，真机实
+        // 锤）。按合成恒等式配平：任意时刻 1-(1-a·o_tab)(1-a·o_main) ≡ a，
+        // 解出 o_tab = t/(1-a(1-t))、o_main = 1-t（t: 0→1）。书签头先 0 透明
+        // 度上屏（盖住 attach latency，不存在主窗先撤便签消失的帧），再两窗同
+        // 步对拉到 t=1，全程桌面合成值钉死在 a，WindowServer 级改透明度不触发
+        // 重绘。hide 后同一拍把主窗 alpha 恢复 1（隐藏态改 alpha 不可见）。
+        const contentAlpha =
+          getNotesManager().getNoteForWebContents(noteWebContentsId)?.opacity ??
+          DEFAULT_NOTE_OPACITY;
+        tab.setOpacity(0);
+        tab.showInactive();
+        for (let step = 1; step <= NOTE_DOCK_HANDOVER_FADE_STEPS; step += 1) {
+          await new Promise<void>((resolve) => {
+            setTimeout(resolve, NOTE_DOCK_HANDOVER_FADE_STEP_MS);
+          });
+          if (noteWindow.isDestroyed() || tab.isDestroyed()) {
+            return;
+          }
+          const t = step / NOTE_DOCK_HANDOVER_FADE_STEPS;
+          tab.setOpacity(t / (1 - contentAlpha * (1 - t)));
+          noteWindow.setOpacity(1 - t);
         }
-        const didDock = await getNotesManager().dockNoteForWebContents(noteWebContentsId, {
-          side,
-          y: stackedY,
-          workArea
+        noteWindow.hide();
+        noteWindow.setOpacity(1);
+        // TODO(诊断 2026-09-01)：验证隐藏态 setOpacity(1) 是否真生效——若展开
+        // 示出时窗口从半透明缓慢爬回（水洗态），这里读回的就不是 1。
+        diagnosticLogger?.record('dock_handover_opacity_restored', {
+          webContentsId: noteWebContentsId,
+          opacityAfterRestore: noteWindow.getOpacity()
         });
-        if (noteWindow.isDestroyed()) {
-          return;
-        }
-        if (!didDock) {
-          // 吸附失败回滚：窗口已被控制器拨回横条，DOM 切回横条。
-          noteWindow.webContents.send('sticky-notes:dock-applied', { dock: null });
-          return;
-        }
+        // The target is already painted and interactive.  Commit the controller
+        // in this same turn so a re-grab is handled as a docked interaction, not
+        // as a stale collapsed transaction waiting on disk I/O.  Persistence is
+        // intentionally delegated to the existing serialized bounds channel.
+        collapseController.commitDocked({ side, bounds: target, anchor: current });
+        recordDockTransitionStage(dockTransitionContext, 'committed', 'received');
+        // 这发不是旧版会和几何写窗抢跑的裸 {dock}：书签头窗已上屏、主窗已隐藏、
+        // controller 已同步提交。committed 只确认逻辑态，不触发新的几何或
+        // surface 交换（主窗隐藏中，overlay 冻结保留，展开时重置）。
+        const committedContext = dockTransitionContext;
+        dockTransitionContext = null;
+        noteWindow.webContents.send('sticky-notes:dock-applied', {
+          dock: { side },
+          transitionId: committedContext.transitionId,
+          committed: true
+        });
+        shouldPersistCommittedDock = true;
       } catch (error) {
         diagnosticLogger?.record('note_dock_failed', {
           webContentsId: noteWebContentsId,
           error
         });
+        if (dockTransitionContext && !noteWindow.isDestroyed()) {
+          abortDockTransition({
+            context: dockTransitionContext,
+            stage: 'exception-abort',
+            result: 'error',
+            error
+          });
+        }
       } finally {
-        // 滑行关掉的阴影统一恢复（commit / 熔断 / 回滚 / 提前退出都是默认态）。
-        if (!noteWindow.isDestroyed()) {
-          noteWindow.setHasShadow(true);
+        // A successful transaction and a non-drag abort may release the
+        // persistence gate here.  If the epoch was superseded by a real re-grab,
+        // keep it closed until the pending strip restore has completed.
+        if (
+          (epoch === transitionEpoch || !isMagneticTransitionInFlight) &&
+          pendingStripRestore === null
+        ) {
+          saveBounds.cancel();
+          suppressBoundsPersistence = false;
+          if (shouldPersistCommittedDock) {
+            saveBounds.schedule(undefined);
+          }
         }
         finishMagneticTransition(epoch);
       }
@@ -867,23 +1398,48 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
     if (collapseController.getPresentation() !== 'docked') {
       return;
     }
+    const side = collapseController.getDockForPersistence()?.side;
     const dockedBounds = collapseController.getDockedBounds();
-    if (!dockedBounds) {
+    if (!side || !dockedBounds) {
       return;
     }
-    const current = noteWindow.getBounds();
-    const workArea = findNearestWorkArea(
-      current,
-      screen.getAllDisplays().map((display) => display.workArea)
-    );
-    const minY = workArea ? workArea.y : Number.NEGATIVE_INFINITY;
-    const maxY = workArea
-      ? workArea.y + workArea.height - NOTE_DOCK_HEIGHT
-      : Number.POSITIVE_INFINITY;
+    const current = getDockActiveWindow().getBounds();
+    // 松手才展开：书签头最终停在回差带外（含甩上邻屏）= 明确拉离，在落点
+    // 就地展开；带内（竖拖抖出的横向偏移落在这里）走下面的惰性钉回。判定
+    // 只在拖拽已结束后做一次，纯位置、不看光标（getBounds 滞后一帧时任何
+    // 光标闸门都会误伤快拖）。
+    const releaseOffset = resolveDockedEdgeOffset({ side, current, dockedX: dockedBounds.x });
+    if (releaseOffset >= NOTE_DOCK_UNFOLD_HYSTERESIS_PX) {
+      expandDockedNote(side, current);
+      return;
+    }
+    const workAreas = screen.getAllDisplays().map((display) => display.workArea);
+    const workArea =
+      findNearestWorkArea(current, workAreas) ?? screen.getDisplayMatching(current).workArea;
+    const minY = workArea.y;
+    const maxY = workArea.y + workArea.height - NOTE_DOCK_HEIGHT;
+    const clampedY = Math.min(Math.max(current.y, minY), Math.max(minY, maxY));
+    // 钉回姿势按光标真相一次算对：光标还在窗上 → 露出位，不在 → 半藏静止位。
+    // 旧版钉回「提交姿势」（从 peek 露出态抓走的就是露出），光标已离开时收尾
+    // reconcile 还得再补一发 hide 滑行——钉回 + 缩回两段动（真机日志：跨屏
+    // tuck 落地后紧跟 dock_peek_glide reveal:false），是「抽搞」的放大器。
+    const tuckCursor = screen.getCursorScreenPoint();
+    const tuckHovered =
+      tuckCursor.x >= current.x &&
+      tuckCursor.x < current.x + current.width &&
+      tuckCursor.y >= current.y &&
+      tuckCursor.y < current.y + current.height;
+    const pose = buildDockedBounds({
+      side,
+      y: clampedY,
+      workArea,
+      neighborWorkAreas: workAreas.filter((area) => area !== workArea),
+      reveal: tuckHovered
+    });
     const target = {
-      x: dockedBounds.x,
-      y: Math.min(Math.max(current.y, minY), Math.max(minY, maxY)),
-      width: dockedBounds.width,
+      x: pose.x,
+      y: clampedY,
+      width: pose.width,
       height: NOTE_DOCK_HEIGHT
     };
     const drifted =
@@ -898,14 +1454,6 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
       return;
     }
     const epoch = ++transitionEpoch;
-    peekGlide = {
-      fromX: current.x,
-      toX: target.x,
-      fromY: current.y,
-      toY: target.y,
-      aborted: false
-    };
-    const glide = peekGlide;
     isMagneticTransitionInFlight = true;
     diagnosticLogger?.record('dock_tuck_glide', {
       webContentsId: noteWebContentsId,
@@ -914,12 +1462,31 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
     });
     void (async () => {
       try {
-        await glideNoteWindowTo(noteWindow, target, () => glide.aborted);
-        if (glide.aborted || noteWindow.isDestroyed()) {
-          // 用户抢拖：基线不动，几何交还 move 流程。
-          return;
+        // 短距离直接落位（几 px 也滑 180ms 只剩黏腻）；超上限说明状态已脱臼
+        // （显示器变更等）或 y 大幅夹取——长距飞行比瞬移更吓人，也直接落位。
+        const tuckDistance =
+          Math.abs(target.x - current.x) + Math.abs(target.y - current.y);
+        if (tuckDistance > NOTE_DOCK_GLIDE_MIN_PX && tuckDistance <= NOTE_DOCK_TUCK_GLIDE_MAX_PX) {
+          peekGlide = {
+            fromX: current.x,
+            toX: target.x,
+            fromY: current.y,
+            toY: target.y,
+            aborted: false
+          };
+          const glide = peekGlide;
+          await glideNoteWindowTo(getDockActiveWindow(), target, () => glide.aborted);
+          if (glide.aborted || getDockActiveWindow().isDestroyed()) {
+            // 用户抢拖：基线不动，几何交还 move 流程。
+            return;
+          }
+        } else {
+          getDockActiveWindow().setBounds(target, false);
+          if (getDockActiveWindow().isDestroyed()) {
+            return;
+          }
         }
-        await collapseController.setDocked({ kind: 'slide', y: target.y });
+        await collapseController.setDocked({ kind: 'peek', bounds: target });
       } catch (error) {
         diagnosticLogger?.record('note_dock_failed', {
           webContentsId: noteWebContentsId,
@@ -947,11 +1514,14 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
     // 光标折返」等断拍靠它自愈）。能走到这说明写窗路径已完结：吸附/钉回的
     // settle 已确认拖拽结束，探头滑行由悬停触发本就不在拖拽中——直调安全。
     // 先停掉 glide 自己的 move 帧排下的 quiet（否则 reconcile 入口的守卫会
-    // 把这次复核推迟一轮，吸附落到光标下的露出反馈慢 ~300ms）。若用户恰好
-    // 重新抓住且 move 流在走，守卫照样会推迟。
+    // 把这次复核推迟一轮）。吸附/钉回的落位姿势已按光标真相选好，这发复核
+    // 是确认不是二段动。若用户恰好重新抓住且 move 流在走，守卫照样会推迟。
     if (collapseController.getPresentation() === 'docked') {
       stopDragQuiet();
       dockPeekReconcilePending = false;
+      // 贴边态的悬停复核轮询常开：运行中新贴边/钉回/探头收尾都经过这里武装
+      // （启动恢复在创建末尾单独补武装）；离开贴边态时轮询自己停。
+      ensurePeekLinger();
       void reconcileDockPeekHover();
     } else {
       dockPeekReconcilePending = false;
@@ -975,8 +1545,8 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
     }
     const presentationNow = collapseController.getPresentation();
     if (presentationNow !== 'docked') {
-      // 吸附滑行/持久化进行中 presentation 仍是 collapsed：这次悬停不该丢，
-      // 记下触发，吸附收尾时补一发 reconcile。
+      // 吸附逆揭示尚未完成时 presentation 仍是 collapsed：这次悬停不该丢，
+      // 记下触发，视觉事务收尾时补一发 reconcile。
       if (presentationNow === 'collapsed') {
         dockPeekReconcilePending = true;
       }
@@ -996,8 +1566,8 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
       return;
     }
     // 物理按键已按住 = 用户正要拖，move 可能还没流第一帧（quiet 计时未武装、
-    // 上面的护栏全落空）：绝不发起探头滑行。吸附落位后 ~280ms morph 切 DOM
-    // 会补发一记 mouseenter，「刚吸附马上拖出来」的按下正好落进这个空档——
+    // 上面的护栏全落空）：绝不发起探头滑行。吸附 overlay 落位时 Chromium 可能
+    // 补发一记 mouseenter，「刚吸附马上拖出来」的按下正好落进这个空档——
     // 此时起滑行 = 多帧写窗撞原生拖拽会话 = 拖不出来。记下扳机，拖拽收尾
     // （settle watch / release quiet）会用光标真相补复核。
     if (mouseButtonMonitor?.isDown()) {
@@ -1005,7 +1575,7 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
       return;
     }
 
-    const bounds = noteWindow.getBounds();
+    const bounds = getDockActiveWindow().getBounds();
     const cursor = screen.getCursorScreenPoint();
     const hovered =
       cursor.x >= bounds.x &&
@@ -1024,12 +1594,9 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
     });
 
     if (target.x === dockedBounds.x && target.width === dockedBounds.width) {
-      // 姿势没变：露出且光标在窗内 → 保持兜底轮询；半藏 → 确保已停。
-      if (hovered) {
-        ensurePeekLinger();
-      } else {
-        stopPeekLinger();
-      }
+      // 姿势没变：复核轮询保持武装（enter/leave 双兜底覆盖半藏与露出两个
+      // 方向，不再随姿势停开）。
+      ensurePeekLinger();
       return;
     }
 
@@ -1048,21 +1615,17 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
       reveal: hovered
     });
     try {
-      await glideNoteWindowTo(noteWindow, target, () => glide.aborted);
+      await glideNoteWindowTo(getDockActiveWindow(), target, () => glide.aborted);
       if (glide.aborted) {
         // 用户抢拖：基线不动，几何交还 move 流程。
         return;
       }
-      if (noteWindow.isDestroyed()) {
+      if (getDockActiveWindow().isDestroyed()) {
         return;
       }
       await collapseController.setDocked({ kind: 'peek', bounds: target });
-      // 露出落地后才开始兜底轮询（leave 丢失只在露出时会卡死）；缩回半藏即停。
-      if (hovered) {
-        ensurePeekLinger();
-      } else {
-        stopPeekLinger();
-      }
+      // 复核轮询贴边态全程武装（见 ensurePeekLinger），露出/缩回都不断。
+      ensurePeekLinger();
     } catch (error) {
       diagnosticLogger?.record('note_dock_peek_failed', {
         webContentsId: noteWebContentsId,
@@ -1078,17 +1641,27 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
     }
   });
 
-  noteWindow.on('move', () => {
+  // 窗口交接：docked 态的可见/可交互窗口是书签头窗；几何读写一律走活动窗，
+  // 非 docked 态恒为便签主窗。
+  const getDockActiveWindow = (): BrowserWindow => {
+    const tab = getDockTabWindow();
+    if (collapseController.getPresentation() === 'docked' && tab) {
+      return tab;
+    }
+    return noteWindow;
+  };
+
+  const handleDockWindowMove = (): void => {
     if (noteWindow.isDestroyed()) {
       return;
     }
+    const activeWindow = getDockActiveWindow();
     if (isMagneticTransitionInFlight) {
-      // 探头/钉回/吸附滑行途中用户抓住窗口抢拖：窗口被拖出滑行走廊的第一帧就
-      // 熔断滑行并放行本次 move（交还几何）；走廊内的 move 都是滑行自己的帧。
-      // 吸附滑行时 presentation 仍是 collapsed（落位才翻转），所以走廊判定
-      // 不限 presentation。
+      // 探头/钉回滑行途中用户抓住窗口抢拖：窗口被拖出滑行走廊的第一帧就熔断
+      // 并放行本次 move（交还几何）；吸附逆揭示没有 peekGlide，它由物理按下
+      // 直接 bump epoch，旧事务的 ACK 与提交随后全部失效。
       if (peekGlide) {
-        const current = noteWindow.getBounds();
+        const current = activeWindow.getBounds();
         const corridorMinX = Math.min(peekGlide.fromX, peekGlide.toX) - 2;
         const corridorMaxX = Math.max(peekGlide.fromX, peekGlide.toX) + 2;
         const corridorMinY = Math.min(peekGlide.fromY, peekGlide.toY) - 2;
@@ -1121,6 +1694,7 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
       // 松手才吸附：拖动全程不写窗，横条跟手自由拖（拖过屏边也不动它）——
       // 吸附 teleport 在拖动途中触发（用例 1「突然跳过去」）就是在这里被否的。
       // 只记抓取点供松手判定；吸附由停歇后的 release watch 确认松手再触发。
+      // collapsed 态的活动窗恒为便签主窗。
       const current = noteWindow.getBounds();
       recordGrabPoint(current);
       // 拖动中预览（学 Windows Snap 的承诺）：横条进入吸附区就告诉 renderer
@@ -1145,48 +1719,30 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
       return;
     }
 
-    const side = collapseController.getDockForPersistence()?.side;
-    const dockedBounds = collapseController.getDockedBounds();
-
-    if (!side || !dockedBounds) {
-      return;
-    }
-
-    const current = noteWindow.getBounds();
-
-    const offset = resolveDockedEdgeOffset({ side, current, dockedX: dockedBounds.x });
-    if (offset < NOTE_DOCK_UNFOLD_THRESHOLD_PX) {
-      // 未过展开阈值：不写窗、不钉回——move 流上写窗会与原生拖拽会话争用
-      // （写中 = x 每帧被重置、位移永远攒不到 48px 阈值 = 拖不出来；吞一半 =
-      // 抽搐）。窗口跟手自由拖，钉回是惰性的：停歇后由 settle watch 确认光标
-      // 停稳再滑回。
-      recordGrabPoint(current);
-      return;
-    }
-
-    // 沿边上下拖的手抖回差：x 偏移 48~72px 一律视为竖拖带出的横向抖动——
-    // 不写窗（跟手拖着），松手后照常滑回钉边；明确向外拉超过 72px 才展开。
-    // 纯位置判定，不看光标：getBounds 滞后一帧时任何光标闸门都会误伤快拖。
-    if (offset < NOTE_DOCK_UNFOLD_HYSTERESIS_PX) {
-      recordGrabPoint(current);
-      return;
-    }
-
-    // 过回差带 = 明确的「向外拉离」，无条件展开。move 流上不再设「系统动窗
-    // 钉回」闸门：它依赖拖动早期 stay 帧记到抓取点，而 recordGrabPoint 会被
-    // getBounds 滞后坑掉；一旦误钉一次，窗口被写回贴边、用户还按着光标已在
-    // 几百像素外，此后每帧 offset 直接过阈值、永远记不到抓取点 = 每帧钉回
-    // 的死锁（真机日志实锤：拖出 200~400px 仍被反复钉回 = 完全拖不出来）。
-    // 唯一已知的系统动窗是 show 时 macOS 把半藏窗拉回屏内，恰好 48px，落在
-    // 回差带内不写窗，之后由 quiet → settle watch（无抓取记录时退化为「光标
-    // 在窗外才累积」）自愈滑回。
-    grabOffset = null;
-
-    const workArea = screen.getDisplayMatching(current).workArea;
+    // docked 态的拖动发生在书签头窗上（原生 app-region drag）。
+    const current = activeWindow.getBounds();
+    // 松手才展开（与松手才吸对称，2026-09-01 真机定案）：move 流上不做任何
+    // 阈值判定、不写窗，书签头全程跟手自由拖——竖拖的横向抖动与明确的向外
+    // 拉离一视同仁，全交给松手后的 settle 按最终落点裁决（钉回或展开）。
+    // 途中展开是窗口交接架构被真机否决的「已知代价」：展开要销毁书签头窗，
+    // 原生拖拽会话随之中断，用户拖到一半被迫停下再抓。只记抓取点供松手判定。
+    recordGrabPoint(current);
+  };
+  // 拖出展开（松手才展开的唯一执行者）：settle 确认拖拽结束、书签头最终
+  // 停在回差带外后调用（settleDockedIdle）。此时原生拖拽会话已随松手自然
+  // 结束，提交成功才销毁书签头窗，不再打断任何手势。主窗在**隐藏态**先
+  // setBounds 到展开矩形（隐藏 resize 不可见，不构成闪烁），renderer 备好
+  // 揭示首帧（clip 钉书签头矩形）并 ACK 后才 showInactive 上屏。两窗交接
+  // 期间同像素重叠不可见。
+  const expandDockedNote = (
+    side: DockSide,
+    sliverBounds: { x: number; y: number; width: number; height: number }
+  ): void => {
+    const workArea = screen.getDisplayMatching(sliverBounds).workArea;
     const persistedBounds = collapseController.getBoundsForPersistence();
     const bounds = buildExpandBoundsFromDock({
       side,
-      sliver: current,
+      sliver: sliverBounds,
       expandedSize: { width: persistedBounds.width, height: persistedBounds.height },
       workArea
     });
@@ -1195,63 +1751,87 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
     peekGlide = null;
     isMagneticTransitionInFlight = true;
     diagnosticLogger?.record('dock_expand', { webContentsId: noteWebContentsId });
-    // 展开同样先切 DOM：完整便签 DOM 先就位、窗口再长开，避免大窗口里只剩
-    // 一枚书签头的透明空白节拍；持久化在后台完成。expandFrom 把书签头在新
-    // 窗口坐标系内的矩形交给 renderer：纸面从书签头位置 clip 揭示展开
-    // （原生 setBounds 一帧到位改不了——活拖拽中多帧写窗是红线——但窗口
-    // 透明，可见的运动轨迹由 DOM 层演）。
-    // 长开期间先关阴影：96×32 → 完整纸面的一帧里 WindowServer 要为大透明窗
-    // 一次分配 backing store 并重算阴影，这帧卡顿正是「掉帧感」来源；揭示
-    // 动画（340ms）结束后恢复。恢复必须绑 epoch：380ms 内用户已重新贴边时，
-    // 吸附滑行会再次关阴影，迟到的旧定时器若在滑行中途把阴影打开，正好打回
-    // 「横条滑行逐帧重算阴影」（Grok review 指出的串台）；新会话的 finally
-    // 会负责恢复，旧定时器跳过不丢恢复。
-    noteWindow.setHasShadow(false);
-    const shadowRestoreEpoch = epoch;
-    setTimeout(() => {
-      if (!noteWindow.isDestroyed() && shadowRestoreEpoch === transitionEpoch) {
-        noteWindow.setHasShadow(true);
-      }
-    }, 380);
-    noteWindow.webContents.send('sticky-notes:dock-applied', {
-      dock: null,
-      expandFrom: {
-        x: current.x - bounds.x,
-        y: current.y - bounds.y,
-        width: current.width,
-        height: current.height
-      }
-    });
-    void getNotesManager()
-      .undockNoteForWebContents(noteWebContentsId, bounds)
-      .then((didUndock) => {
-        if (noteWindow.isDestroyed() || epoch !== transitionEpoch) {
-          // 窗口销毁，或 undock await 间隙被按键熔断/新会话接管：校验补写会
-          // 撞上用户正在进行的拖拽，跳过（回滚同理不许写）。
+    void (async () => {
+      const transitionId = ++dockTransitionSequence;
+      const tab = getDockTabWindow();
+      try {
+        noteWindow.setBounds(bounds, false);
+        noteWindow.setMinimumSize(NOTE_MIN_WIDTH, NOTE_MIN_HEIGHT);
+        noteWindow.setResizable(true);
+        const expandReadyPromise = waitForDockRendererAck(
+          'sticky-notes:dock-expand-ready',
+          transitionId,
+          epoch
+        );
+        noteWindow.webContents.send('sticky-notes:dock-applied', {
+          dock: null,
+          transitionId,
+          expandFrom: {
+            x: sliverBounds.x - bounds.x,
+            y: sliverBounds.y - bounds.y,
+            width: sliverBounds.width,
+            height: sliverBounds.height
+          }
+        });
+        const expandReady = await expandReadyPromise;
+        if (noteWindow.isDestroyed()) {
           return;
         }
-        if (!didUndock) {
-          // 展开失败回滚：窗口仍是贴边书签头，DOM 切回书签头。
+        if (expandReady !== 'received' || epoch !== transitionEpoch) {
+          // 展开 prepare 失败/被抢：主窗仍隐藏，书签头窗仍在屏，DOM 回书签头。
           noteWindow.webContents.send('sticky-notes:dock-applied', { dock: { side } });
           return;
         }
-        // 原生拖动进行中尺寸写入偶尔被拖拽会话吞掉（窗口没长大、DOM 已展开
-        // = 变形）。校验实际矩形，不符就补写一次。
-        const actual = noteWindow.getBounds();
-        if (actual.width !== bounds.width || actual.height !== bounds.height) {
-          noteWindow.setBounds(bounds, false);
+        noteWindow.showInactive();
+        // TODO(诊断 2026-09-01)：展开示出时主窗窗口级透明度采样——真机录屏实锤
+        // 纸面从 ~0.6 缓慢爬回 1（水洗残缺态），疑似吸附交叉淡换隐藏态恢复
+        // setOpacity(1) 未生效。验完拆。
+        for (const delayMs of [0, 150, 400, 800]) {
+          setTimeout(() => {
+            if (!noteWindow.isDestroyed()) {
+              diagnosticLogger?.record('dock_expand_opacity_probe', {
+                webContentsId: noteWebContentsId,
+                delayMs,
+                opacity: noteWindow.getOpacity()
+              });
+            }
+          }, delayMs);
         }
-      })
-      .catch((error) => {
+        const didUndock = await getNotesManager().undockNoteForWebContents(
+          noteWebContentsId,
+          bounds
+        );
+        if (noteWindow.isDestroyed() || epoch !== transitionEpoch) {
+          return;
+        }
+        if (!didUndock) {
+          // 展开提交失败回滚：主窗撤下藏回，书签头窗仍在屏，DOM 回书签头。
+          noteWindow.hide();
+          noteWindow.webContents.send('sticky-notes:dock-applied', { dock: { side } });
+          return;
+        }
+        // 提交成功才销毁书签头窗（销毁即结束它的拖拽会话），随后 committed
+        // 让 renderer 播放 340ms clip 揭示。
+        if (tab && !tab.isDestroyed()) {
+          dockTabWindow = null;
+          tab.destroy();
+        }
+        noteWindow.webContents.send('sticky-notes:dock-applied', {
+          dock: null,
+          transitionId,
+          committed: true
+        });
+      } catch (error) {
         diagnosticLogger?.record('note_undock_failed', {
           webContentsId: noteWebContentsId,
           error
         });
-      })
-      .finally(() => {
+      } finally {
         finishMagneticTransition(epoch);
-      });
-  });
+      }
+    })();
+  };
+  noteWindow.on('move', handleDockWindowMove);
   const flushPendingChanges = async (): Promise<void> => {
     await Promise.all([saveBounds.flush(), flushRendererPendingContent(noteWindow)]);
   };
@@ -1267,11 +1847,24 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
     stopPeekLinger();
     stopDragQuiet();
     cancelSettleWatch();
+    // 便签关闭时书签头窗一并销毁（贴边态下它是唯一的可见表面）。
+    const tab = getDockTabWindow();
+    if (tab) {
+      dockTabWindow = null;
+      tab.destroy();
+    }
     for (const unsubscribe of unsubscribeMouseButtons) {
       unsubscribe();
     }
     imagePreviewController?.handleSourceClosed(noteWebContentsId);
   });
+
+  // 启动恢复的贴边窗没有任何滑行会话经过 finishMagneticTransition：悬停复核
+  // 轮询在这里补武装一次（运行中新贴边由 finishMagneticTransition 的贴边
+  // 分支武装）。
+  if (restoredDockBounds && note.dock) {
+    ensurePeekLinger();
+  }
 
   return {
     webContentsId: noteWindow.webContents.id,
@@ -1289,12 +1882,25 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
     },
     flushPendingChanges,
     show: () => {
+      // 贴边态的可见表面是书签头窗；主窗保持隐藏（窗口交接）。
+      const tab =
+        collapseController.getPresentation() === 'docked' ? getDockTabWindow() : null;
+      if (tab) {
+        tab.showInactive();
+        return;
+      }
       if (noteWindow.isMinimized()) {
         noteWindow.restore();
       }
       noteWindow.show();
     },
     focus: () => {
+      const tab =
+        collapseController.getPresentation() === 'docked' ? getDockTabWindow() : null;
+      if (tab) {
+        tab.focus();
+        return;
+      }
       if (!noteWindow.isDestroyed()) {
         noteWindow.focus();
       }
@@ -1304,6 +1910,7 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
     },
     setCollapsed: collapseController.setCollapsed,
     setDocked: collapseController.setDocked,
+    commitDocked: collapseController.commitDocked,
     getPresentation: collapseController.getPresentation,
     getDockForPersistence: collapseController.getDockForPersistence,
     close: () => {

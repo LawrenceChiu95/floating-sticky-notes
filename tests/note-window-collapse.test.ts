@@ -368,6 +368,39 @@ describe('note window dock controller', () => {
     });
   });
 
+  it('restores the collapsed controller and native bounds after a visual dock commit aborts', async () => {
+    const harness = createWindowHarness({ x: 120, y: 80, width: 320, height: 260 });
+    const controller = createController(harness);
+    await controller.setCollapsed(true);
+    const sourceBounds = { x: 120, y: 80, width: 320, height: 40 };
+    const targetBounds = { x: -48, y: 80, width: 96, height: 32 };
+    harness.window.setBounds(targetBounds, false);
+
+    await controller.commitDocked({
+      side: 'left',
+      bounds: targetBounds,
+      anchor: sourceBounds
+    });
+    expect(controller.getPresentation()).toBe('docked');
+
+    controller.restoreCollapsed(sourceBounds);
+
+    expect(controller.getPresentation()).toBe('collapsed');
+    expect(controller.getDockForPersistence()).toBeUndefined();
+    expect(controller.getDockedBounds()).toBeUndefined();
+    expect(harness.getNativeState()).toEqual({
+      bounds: sourceBounds,
+      minimumSize: [200, 40],
+      resizable: false
+    });
+    expect(controller.getBoundsForPersistence()).toEqual({
+      x: 120,
+      y: 80,
+      width: 320,
+      height: 260
+    });
+  });
+
   it('restores a persisted dock without moving the window', async () => {
     const harness = createWindowHarness({ x: 0, y: 120, width: 96, height: 32 });
     const controller = createController(harness);

@@ -68,14 +68,16 @@ export function resolveCollapsedDockSide(
 // 磁吸判定：书签头被原生拖动时看它离「静止贴边位」的水平位移——≥48px 立即展开，
 // 不足则继续沿边滑动。从静止位起算而不是距屏幕边缘，因为半藏时静止位本身在屏外。
 // 只看当前位置，不依赖拖动起点，因为原生 app-region 拖动没有「拖动开始/结束」事件可用。
+// 位移取绝对值（2026-08-27）：旧版带方向（右贴边只算往左），往屏缘外侧拖——多屏时
+// 必然拖上邻屏——offset 恒负永不展开，窗口被原生拖拽自由带出一两千像素，松手后
+// 惰性钉回 180ms 横跨整个屏幕拽回来（真机日志 tuck 3539→1614 / 3814→1422），
+// 这就是「吸附抽搞」的主根因。往哪个方向拉离 72px 都是明确的「拖出来」。
 export function resolveDockedEdgeOffset(input: {
   side: DockSide;
   current: Rect;
   dockedX: number;
 }): number {
-  return input.side === 'left'
-    ? input.current.x - input.dockedX
-    : input.dockedX - input.current.x;
+  return Math.abs(input.current.x - input.dockedX);
 }
 
 export function resolveDockedEdgeRelease(input: {
@@ -84,6 +86,22 @@ export function resolveDockedEdgeRelease(input: {
   dockedX: number;
 }): 'expand' | 'stay' {
   return resolveDockedEdgeOffset(input) >= NOTE_DOCK_UNFOLD_THRESHOLD_PX ? 'expand' : 'stay';
+}
+
+// The strip is clipped from the side that remains visually attached to the
+// dock.  Right-side docks retain the strip's left edge; left-side docks retain
+// its right edge.  Keeping this calculation in the shared geometry module
+// prevents the renderer from silently using a different coordinate origin.
+export function resolveDockShrinkDelta(input: {
+  side: DockSide;
+  strip: Pick<Rect, 'x' | 'width'>;
+  bookmark: Pick<Rect, 'x' | 'width'>;
+}): number {
+  const retainedX =
+    input.side === 'right'
+      ? input.strip.x
+      : input.strip.x + input.strip.width - input.bookmark.width;
+  return input.bookmark.x - retainedX;
 }
 
 export function buildDockedBounds(input: {

@@ -13,12 +13,33 @@ import {
   buildDockedBounds,
   buildExpandBoundsFromDock,
   offsetDockYToAvoidOverlap,
-  restoreDockedBounds
+  restoreDockedBounds,
+  resolveDockShrinkDelta
 } from '../shared/note-dock';
 
 const workArea = { x: 0, y: 25, width: 1440, height: 875 };
 
 describe('note dock geometry', () => {
+  it('translates the retained edge correctly for both inverse-reveal directions', () => {
+    // Right docks retain the strip's left segment.
+    expect(
+      resolveDockShrinkDelta({
+        side: 'right',
+        strip: { x: 12, width: 320 },
+        bookmark: { x: 236, width: 96 }
+      })
+    ).toBe(224);
+
+    // Left docks retain the strip's right segment, not its left segment.
+    expect(
+      resolveDockShrinkDelta({
+        side: 'left',
+        strip: { x: 320, width: 320 },
+        bookmark: { x: 0, width: 96 }
+      })
+    ).toBe(-544);
+  });
+
   it('snaps a collapsed bar only once its edge is pushed off the screen', () => {
     // 探出屏外 ≥8px 才吸附：靠近（左缘距边 10px）不吸，探出 8px 吸。
     expect(
@@ -103,6 +124,42 @@ describe('note dock geometry', () => {
         side: 'right',
         current: { x: 1345, y: 80, width: 96, height: 32 },
         dockedX: 1440 - NOTE_DOCK_WIDTH + NOTE_DOCK_HIDDEN_PX
+      })
+    ).toBe('stay');
+  });
+
+  it('unfolds in either direction, including toward the screen edge', () => {
+    // 位移取绝对值（2026-08-27）：右贴边往右（屏缘外侧，多屏时必上邻屏）拖
+    // 48px 也展开——旧版带方向判定 offset 恒负永不展开，窗口被带出一两千
+    // 像素后松手跨屏钉回（真机「抽搞」主根因）。
+    const rightDockedX = 1440 - NOTE_DOCK_WIDTH + NOTE_DOCK_HIDDEN_PX; // 1392
+    expect(
+      resolveDockedEdgeRelease({
+        side: 'right',
+        current: { x: rightDockedX + NOTE_DOCK_HIDDEN_PX, y: 80, width: 96, height: 32 },
+        dockedX: rightDockedX
+      })
+    ).toBe('expand');
+    expect(
+      resolveDockedEdgeRelease({
+        side: 'right',
+        current: { x: rightDockedX + NOTE_DOCK_HIDDEN_PX - 1, y: 80, width: 96, height: 32 },
+        dockedX: rightDockedX
+      })
+    ).toBe('stay');
+    // 左贴边往左（更藏进屏外）48px 同样展开。
+    expect(
+      resolveDockedEdgeRelease({
+        side: 'left',
+        current: { x: -NOTE_DOCK_HIDDEN_PX * 2, y: 80, width: 96, height: 32 },
+        dockedX: -NOTE_DOCK_HIDDEN_PX
+      })
+    ).toBe('expand');
+    expect(
+      resolveDockedEdgeRelease({
+        side: 'left',
+        current: { x: -NOTE_DOCK_HIDDEN_PX * 2 + 1, y: 80, width: 96, height: 32 },
+        dockedX: -NOTE_DOCK_HIDDEN_PX
       })
     ).toBe('stay');
   });
