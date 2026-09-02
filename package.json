@@ -1,6 +1,6 @@
 {
   "name": "floating-sticky-notes",
-  "version": "0.1.18",
+  "version": "0.1.19-rc.1",
   "private": true,
   "description": "本地优先、始终置顶的桌面便签应用。",
   "license": "MIT",
@@ -24,6 +24,7 @@
     "dev": "electron-vite dev",
     "build:icons": "electron scripts/build-windows-icons.cjs",
     "build:mac-icons": "node scripts/build-mac-icons.cjs",
+    "build:mouse-state": "node scripts/build-mouse-state.cjs",
     "prebuild": "node scripts/build-release-notes.cjs",
     "build": "tsc --noEmit && electron-vite build",
     "dist:win": "node scripts/build-windows.cjs",
@@ -72,7 +73,13 @@
       ],
       "icon": "assets/icons/app-icon.icns",
       "category": "public.app-category.productivity",
-      "identity": "-"
+      "identity": "-",
+      "extraResources": [
+        {
+          "from": "bin/mouse-state-darwin-arm64",
+          "to": "mouse-state-darwin-arm64"
+        }
+      ]
     },
     "nsis": {
       "oneClick": false,

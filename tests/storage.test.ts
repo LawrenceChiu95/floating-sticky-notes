@@ -205,6 +205,55 @@ describe('JsonNotesStorage', () => {
     await expect(storage.load()).resolves.toEqual(loaded);
   });
 
+  it('persists a valid dock and drops an invalid one', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'floating-notes-storage-'));
+    const filePath = join(dir, 'notes.json');
+    const storage = new JsonNotesStorage(filePath);
+    const valid = createDefaultNote({ id: 'note-1', now: '2026-08-14T00:00:00.000Z' });
+    valid.dock = { side: 'left', y: 120 };
+    const validWithX = createDefaultNote({ id: 'note-1x', now: '2026-08-14T00:00:00.000Z' });
+    validWithX.dock = { side: 'right', x: 4222, y: 823 };
+    const invalidX = createDefaultNote({ id: 'note-1b', now: '2026-08-14T00:00:00.000Z' });
+    const invalid = createDefaultNote({ id: 'note-2', now: '2026-08-14T00:00:00.000Z' });
+    const invalidY = createDefaultNote({ id: 'note-3', now: '2026-08-14T00:00:00.000Z' });
+    await writeFile(
+      filePath,
+      `${JSON.stringify(
+        {
+          version: 1,
+          notes: [
+            valid,
+            validWithX,
+            { ...invalidX, dock: { side: 'right', x: 'wide', y: 60 } },
+            { ...invalid, dock: { side: 'top', y: 10 } },
+            { ...invalidY, dock: { side: 'right', y: 'high' } }
+          ]
+        },
+        null,
+        2
+      )}\n`,
+      'utf8'
+    );
+
+    const loaded = await storage.load();
+    expect(loaded.notes[0]?.dock).toEqual({ side: 'left', y: 120 });
+    // 多屏认屏的 x 要原样往返；非法 x 降级为缺省而不是拖垮整条 dock。
+    expect(loaded.notes[1]?.dock).toEqual({ side: 'right', x: 4222, y: 823 });
+    expect(loaded.notes[2]?.dock).toEqual({ side: 'right', y: 60 });
+    expect(loaded.notes[3]?.dock).toBeUndefined();
+    expect(loaded.notes[4]?.dock).toBeUndefined();
+
+    await storage.save(loaded);
+    const raw = await readFile(filePath, 'utf8');
+    const persisted = JSON.parse(raw) as {
+      notes: Array<{ id: string; dock?: unknown }>;
+    };
+    expect(persisted.notes[0]?.dock).toEqual({ side: 'left', y: 120 });
+    expect(persisted.notes[1]?.dock).toEqual({ side: 'right', x: 4222, y: 823 });
+    expect(persisted.notes[3]).not.toHaveProperty('dock');
+    expect(persisted.notes[4]).not.toHaveProperty('dock');
+  });
+
   it('normalizes malformed individual notes without discarding the whole document', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'floating-notes-storage-'));
     const filePath = join(dir, 'notes.json');

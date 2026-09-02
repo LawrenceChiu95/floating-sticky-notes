@@ -170,7 +170,10 @@ describe('release notes build extraction', () => {
     );
 
     const archive = extractReleaseNotesArchive?.(repositoryChangelog, packageJson.version);
-    expect(archive?.releases.at(-1)?.version).toBe(packageJson.version);
+    // RC/预发布版本（0.1.19-rc.1）对应的档案末章是其稳定基座（0.1.19）。
+    expect(archive?.releases.at(-1)?.version).toBe(
+      getStableReleaseVersion?.(packageJson.version)
+    );
     expect(archive?.releases.length).toBeGreaterThan(1);
 
     const release014 = archive?.releases.find((release) => release.version === '0.1.14');

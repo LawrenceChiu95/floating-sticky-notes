@@ -8,6 +8,7 @@ import {
   isNoteColor,
   type NoteBounds,
   type NoteChecklistItemRecord,
+  type NoteDock,
   type NoteImageRecord,
   type NoteRecord
 } from './note-state';
@@ -136,11 +137,14 @@ function normalizeNoteRecord(value: unknown): NoteRecord | undefined {
     return undefined;
   }
 
+  const dock = normalizeNoteDock(candidate.dock);
+
   return {
     id: candidate.id,
     name: typeof candidate.name === 'string' ? candidate.name : '',
     content: typeof candidate.content === 'string' ? candidate.content : '',
     bounds: normalizeNoteBounds(candidate.bounds),
+    ...(dock ? { dock } : {}),
     color:
       typeof candidate.color === 'string' && isNoteColor(candidate.color)
         ? candidate.color
@@ -155,6 +159,28 @@ function normalizeNoteRecord(value: unknown): NoteRecord | undefined {
     createdAt: typeof candidate.createdAt === 'string' ? candidate.createdAt : '',
     updatedAt: typeof candidate.updatedAt === 'string' ? candidate.updatedAt : ''
   };
+}
+
+function normalizeNoteDock(value: unknown): NoteDock | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+
+  const candidate = value as { side?: unknown; y?: unknown; x?: unknown };
+
+  if (candidate.side !== 'left' && candidate.side !== 'right') {
+    return undefined;
+  }
+
+  if (typeof candidate.y !== 'number' || !Number.isFinite(candidate.y)) {
+    return undefined;
+  }
+
+  // x 是多屏认屏证据（旧记录没有）：不是有限数字就当缺省，不拖垮整条记录。
+  const x =
+    typeof candidate.x === 'number' && Number.isFinite(candidate.x) ? candidate.x : undefined;
+
+  return { side: candidate.side, y: candidate.y, ...(x === undefined ? {} : { x }) };
 }
 
 function normalizeNoteChecklist(value: unknown): NoteChecklistItemRecord[] {

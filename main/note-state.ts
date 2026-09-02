@@ -25,6 +25,14 @@ export type NoteBounds = {
   height: number;
 };
 
+export type NoteDock = {
+  side: 'left' | 'right';
+  y: number;
+  // 静止位 x：多屏时 side+y 无法区分贴在哪个屏的同名边（右边缘每屏都有一条），
+  // 恢复时用它认屏；旧记录没有此字段，恢复退化为原来的 y 距离猜屏。
+  x?: number;
+};
+
 export type NoteImageRecord = {
   id: string;
   filename: string;
@@ -47,6 +55,7 @@ export type NoteRecord = {
   name: string;
   content: string;
   bounds: NoteBounds;
+  dock?: NoteDock;
   color: string;
   opacity: number;
   checklist: NoteChecklistItemRecord[];
