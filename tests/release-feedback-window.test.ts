@@ -76,9 +76,9 @@ describe('release feedback window geometry', () => {
       )
     ).toMatchObject({
       x: 480,
-      y: 360,
+      y: 384,
       width: 440,
-      height: 180,
+      height: 132,
       title: '本版更新',
       show: false,
       modal: false,
@@ -112,6 +112,13 @@ describe('release feedback window geometry', () => {
         28
       )
     ).toEqual({ x: -300, y: 10, width: 300, height: 140 });
+    expect(
+      calculateReleaseFeedbackWindowBounds(
+        { x: 100, y: 50, width: 1200, height: 800 },
+        148,
+        28
+      )
+    ).toEqual({ x: 480, y: 362, width: 440, height: 176 });
   });
 });
 

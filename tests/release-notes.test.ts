@@ -170,7 +170,7 @@ describe('release notes build extraction', () => {
     );
 
     const archive = extractReleaseNotesArchive?.(repositoryChangelog, packageJson.version);
-    // RC/预发布版本（0.1.19-rc.1）对应的档案末章是其稳定基座（0.1.19）。
+    // 当前正式版本对应的档案末章就是 0.1.19。
     expect(archive?.releases.at(-1)?.version).toBe(
       getStableReleaseVersion?.(packageJson.version)
     );

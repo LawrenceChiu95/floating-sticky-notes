@@ -9,7 +9,7 @@ import type { DisplayWorkArea } from './window-options';
 import type { ReleaseFeedbackPresenter } from './release-feedback';
 
 const RELEASE_FEEDBACK_WINDOW_WIDTH = 440;
-const RELEASE_FEEDBACK_MIN_CONTENT_HEIGHT = 180;
+const RELEASE_FEEDBACK_MIN_CONTENT_HEIGHT = 132;
 
 export type ReleaseFeedbackWindowBounds = DisplayWorkArea;
 

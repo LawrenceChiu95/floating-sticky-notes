@@ -117,23 +117,23 @@ function renderReleaseFeedback(
     }
   }
 
-  const currentRelease = elements.releases.querySelector<HTMLElement>(
-    '.release-feedback__release:first-child'
-  );
-  void reportWhenMeasured(elements.main, currentRelease, snapshot.initiatedBy);
+  const previewReleases = [
+    ...elements.releases.querySelectorAll<HTMLElement>('.release-feedback__release')
+  ].slice(0, 2);
+  void reportWhenMeasured(elements.main, previewReleases, snapshot.initiatedBy);
 }
 
 async function reportWhenMeasured(
   main: HTMLElement,
-  currentRelease: HTMLElement | null,
+  previewReleases: HTMLElement[],
   initiatedBy: ReleaseFeedbackSnapshot['initiatedBy']
 ): Promise<void> {
   await document.fonts.ready.catch(() => undefined);
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   const contentHeight = document.documentElement.scrollHeight;
   const currentReleaseHeight =
-    initiatedBy === 'manual' && currentRelease
-      ? measureCurrentReleaseWindowHeight(currentRelease)
+    initiatedBy === 'manual' && previewReleases.length > 0
+      ? measureCurrentReleaseWindowHeight(previewReleases)
       : undefined;
   main.classList.add('release-feedback--bounded');
   window.releaseFeedback.reportRendered({
@@ -148,8 +148,8 @@ function parseCssPixels(value: string): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function measureCurrentReleaseWindowHeight(currentRelease: HTMLElement): number {
-  const releases = currentRelease.parentElement;
+function measureCurrentReleaseWindowHeight(previewReleases: HTMLElement[]): number {
+  const releases = previewReleases[0]?.parentElement;
   if (!(releases instanceof HTMLElement)) {
     return document.documentElement.scrollHeight;
   }
@@ -157,11 +157,19 @@ function measureCurrentReleaseWindowHeight(currentRelease: HTMLElement): number 
   const releasesStyle = getComputedStyle(releases);
   const verticalPadding =
     parseCssPixels(releasesStyle.paddingTop) + parseCssPixels(releasesStyle.paddingBottom);
+  const stackedGap =
+    previewReleases.length > 1
+      ? Math.max(0, previewReleases[1].offsetTop - previewReleases[0].offsetTop - previewReleases[0].offsetHeight)
+      : 0;
+  const previewHeight = previewReleases.reduce(
+    (total, release, index) => total + release.scrollHeight + (index > 0 ? stackedGap : 0),
+    0
+  );
 
   return getCurrentReleaseWindowHeight(
     document.documentElement.scrollHeight,
     releases.scrollHeight,
-    currentRelease.scrollHeight,
+    previewHeight,
     verticalPadding
   );
 }
