@@ -95,6 +95,39 @@ describe('note dock geometry', () => {
     ).toBe('right');
   });
 
+  it('treats a cursor slammed into the screen edge as dock intent when the bar lags', () => {
+    // 快速甩边：松手瞬间横条还没探出 8px，光标已经顶在工作区边缘。
+    // 真机 10:36:02 / 10:36:16：bar.right 差几十 px，cursor.x 贴在 workArea 右缘。
+    const laggingBar = { x: 1096, y: 80, width: 280, height: 40 };
+    expect(resolveCollapsedDockSide(laggingBar, workArea)).toBeUndefined();
+    expect(
+      resolveCollapsedDockSide(laggingBar, workArea, [], { x: 1439, y: 100 })
+    ).toBe('right');
+    expect(
+      resolveCollapsedDockSide(laggingBar, workArea, [], { x: 1432, y: 100 })
+    ).toBe('right');
+    expect(
+      resolveCollapsedDockSide(laggingBar, workArea, [], { x: 1431, y: 100 })
+    ).toBeUndefined();
+    expect(
+      resolveCollapsedDockSide({ x: 200, y: 80, width: 280, height: 40 }, workArea, [], {
+        x: 1,
+        y: 100
+      })
+    ).toBe('left');
+  });
+
+  it('does not treat a cursor on a neighbor display as dock intent', () => {
+    const rightNeighbor = { x: 1440, y: 0, width: 1440, height: 900 };
+    const laggingBar = { x: 1096, y: 80, width: 280, height: 40 };
+    expect(
+      resolveCollapsedDockSide(laggingBar, workArea, [rightNeighbor], { x: 1440, y: 100 })
+    ).toBeUndefined();
+    expect(
+      resolveCollapsedDockSide(laggingBar, workArea, [rightNeighbor], { x: 1439, y: 100 })
+    ).toBe('right');
+  });
+
   it('unfolds a docked tab once it is dragged 48px away from its rest pose', () => {
     // 左贴边静止位 x=-48（半藏）：往桌面里拖 48px（x 到 0）即展开。
     expect(

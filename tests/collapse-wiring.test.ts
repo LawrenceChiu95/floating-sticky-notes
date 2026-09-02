@@ -171,6 +171,11 @@ describe('sticky note collapse wiring', () => {
     expect(mainSource).toContain('NOTE_DOCK_SETTLE_GRAB_PX = 24');
     expect(mainSource).toContain("armSettleWatch('dock', { ignoreCursor: fromRelease })");
     expect(mainSource).toContain("armSettleWatch('docked', { ignoreCursor: fromRelease })");
+    // 快速甩边：松手瞬间窗口可能还没进吸附区（真机 side=null、光标已贴边），
+    // 物理松手无条件武装；settle fire 用冲刷后的 bounds + 松手瞬间光标裁决。
+    expect(mainSource).toContain('if (fromRelease || side || pendingStripRestore !== null)');
+    expect(mainSource).toContain('dockReleaseIntentCursor');
+    expect(mainSource).toContain('postReleaseCoasting');
     // bounds 动了 = 拖拽活着，整个比对作废；光标判据只在 helper 缺席/死亡时
     // 启用（helper 活着时 isDown 是权威，松手后跟随动作不许推迟收尾）。
     expect(mainSource).toContain('if (boundsMoved) {');
@@ -248,21 +253,30 @@ describe('sticky note collapse wiring', () => {
     expect(appSource).toContain('startDockExpandReveal');
     expect(appSource).toContain('shell.animate(');
     expect(appSource).toContain('shell.style.clipPath');
-    // 揭示的时序红线：原生窗口长开的 1~2 帧里主壳必须隐身（opacity 0，仍可
-    // 命中拖动——visibility:hidden 不可命中会杀掉 app-region），视觉由钉在
-    // expandFrom 的占位书签头 overlay 顶住；clip 写进 style 后与恢复可见同一
-    // commit（不再 await 下一次 paint——等的那拍就是用户看到的纸面闪现）。
+    // 落点长成：prepare 阶段主壳隐身、替身钉在 expandFrom 顶住上屏首帧；
+    // clip 起播后替身再留 ~120ms 溶进标题栏。ACK 前不得卸替身——右贴边落点
+    // 在窗右上，没有替身就会先露出工具栏图标。
     expect(appSource).toContain('note-shell--expand-hold');
     expect(appSource).toContain('dock-expand-bookmark');
-    expect(appSource).toContain('setDockExpandHold(from);');
+    expect(appSource).toContain("phase: 'prepare'");
+    expect(appSource).toContain('beginExpandHoldReveal');
+    expect(appSource).toContain('NOTE_DOCK_EXPAND_HOLD_MS = 120');
     expect(appSource).toContain("shell.style.willChange = 'clip-path';");
     expect(styles).toContain('.note-shell--expand-hold');
     expect(styles).toContain('.dock-expand-bookmark');
-    const revealClipIndex = appSource.indexOf('shell.style.clipPath = fromClip;');
-    expect(revealClipIndex).toBeGreaterThan(-1);
-    expect(appSource.indexOf('setDockExpandHold(null);', revealClipIndex)).toBeGreaterThan(
-      revealClipIndex
+    expect(styles).toContain('.dock-expand-bookmark--dissolve');
+    expect(styles).toContain('.dock-expand-bookmark .note-shell');
+    expect(appSource).toContain("dockExpandHold?.phase === 'prepare' ? ' note-shell--expand-hold'");
+    const prepareHoldIndex = appSource.indexOf("phase: 'prepare'");
+    const dissolveIndex = appSource.indexOf("phase: 'dissolve'");
+    expect(prepareHoldIndex).toBeGreaterThan(-1);
+    expect(dissolveIndex).toBeGreaterThan(prepareHoldIndex);
+    expect(appSource.indexOf('setDockExpandHold(null);', dissolveIndex)).toBeGreaterThan(
+      dissolveIndex
     );
+    // 过回差带的物理松手直接展开，不再先等 60ms settle 拍。
+    expect(mainSource).toContain('if (releaseOffset >= NOTE_DOCK_UNFOLD_HYSTERESIS_PX) {');
+    expect(mainSource).toContain('expandDockedNote(side, current);');
     // transparent + frameless 的原生阴影在 macOS 几何切换时会重算成黑色轮廓。
     // 阴影配置必须在建窗时一次决定；运行中切换会重新引入闪烁和时序竞态。
     expect(mainSource).not.toContain('setHasShadow(');
@@ -401,9 +415,12 @@ describe('sticky note collapse wiring', () => {
 
   it('snaps only after the bar overhangs the screen edge', () => {
     // 触发语义：横条探出屏外 ≥8px（光标顶到屏幕边）才吸附；探出部分落在
-    // 相邻显示器上（跨屏拖动）不吸。路过、靠近不再误吸。
+    // 相邻显示器上（跨屏拖动）不吸。路过、靠近不再误吸。快速甩边时窗口
+    // 滞后，松手光标贴边视为同一意图，交给共享判定，不在 main 里另写一套。
     expect(mainSource).toContain('resolveCollapsedDockSide(\n        current,\n        workArea,');
     expect(mainSource).toContain('neighborWorkAreas');
+    expect(mainSource).toContain('dockReleaseIntentCursor');
+    expect(mainSource).toContain('screen.getCursorScreenPoint()');
   });
 
   it('reveals the full tab on hover and slides it back half-hidden, geometry only', () => {

@@ -77,6 +77,7 @@ const NOTE_SHELL_TRANSITION_FALLBACK_MS = 320;
 // 吸附逆揭示时长：与收起/展开/拖出揭示同一族缓动（cubic-bezier(0.33, 0.75,
 // 0.35, 1)）；主进程 600ms 回执超时是它的兜底，改动要两边一起看。
 const NOTE_DOCK_SHRINK_MS = 300;
+const NOTE_DOCK_EXPAND_HOLD_MS = 120;
 const NOTE_VIEWPORT_RESIZE_FALLBACK_MS = 500;
 const PERSISTENT_STATUS_MESSAGES = new Set(['读取失败']);
 
@@ -167,16 +168,16 @@ function App(): JSX.Element {
   // current visual state.
   const dockTransitionIdRef = useRef(0);
   const activeDockShrinkTransactionRef = useRef<ActiveDockShrinkTransaction | null>(null);
-  // 拖出揭示的「占位书签头」：dock 切 null 的同一 commit 起，主壳隐身（opacity 0，
-  // 仍可命中、app-region 拖动不受影响），这枚 overlay 钉在 expandFrom 位置冒充
-  // 书签头——原生窗口长开的 1~2 帧里用户看到的是连续的书签头，而不是闪一整面
-  // 纸。clip 就位后与「壳体恢复可见」同一 commit 卸掉，首帧即是书签头矩形。
+  // 落点长成替身：prepare 阶段主壳隐身，这枚 overlay 钉在 expandFrom 冒充书签头；
+  // 主窗上屏后纸面 clip 从其底下向外长，替身再留 ~120ms 溶进标题栏。ACK 前不得
+  // 卸替身——右贴边落点在窗右上，没有它就会先露出工具栏图标。
   const [dockExpandHold, setDockExpandHold] = useState<{
     side: 'left' | 'right';
     x: number;
     y: number;
     width: number;
     height: number;
+    phase: 'prepare' | 'reveal' | 'dissolve';
   } | null>(null);
   // 拖出展开揭示动画的代际令牌：动画途中窗口被重新贴边（dock-applied 翻回
   // 非空）时作废旧动画，不让它把新壳体的 clip 清掉。吸附逆揭示复用同一令牌
@@ -239,13 +240,10 @@ function App(): JSX.Element {
     generation: number;
   } | null>(null);
 
-  // 拖出展开的揭示动画：dock=null 的同一 commit 先把主壳隐身、书签头 overlay 钉
-  // 到 expandFrom（dockExpandHold，等待原生窗口长开期间视觉连续）；视口长开后把
-  // 壳体 clip 到书签头矩形（expandFrom 是新窗口坐标系，直接量视口会拿到 96×32 的
-  // 旧几何），clip 与「恢复可见」同一 commit——首帧就是书签头矩形，不会闪一整窗
-  // 再收回来；随后 WAAPI 把 clip 滑到全窗，340ms、缓动与收起/展开同一族。中途
-  // 重新贴边由代际令牌作废旧动画。窗口交接架构下本函数拆成 prepare/run 两段；
-  // 旧的一段式仅保留给无事务 ID 的兼容路径。
+  // 落点长成：prepare 阶段主壳隐身、书签头 overlay 钉在 expandFrom；主窗上屏后
+  // 纸面 clip 从其底下向外长，替身再留 ~120ms 后溶进标题栏。clip 坐标系是新窗
+  // 口的 expandFrom，直接量视口会拿到旧的 96×32。中途重新贴边由代际令牌作废。
+  // 窗口交接拆成 prepare/run；无事务 ID 的兼容路径仍走一段式。
   const startDockExpandReveal = (from: {
     side: 'left' | 'right';
     x: number;
@@ -254,7 +252,7 @@ function App(): JSX.Element {
     height: number;
   }): void => {
     const generation = ++dockRevealGenerationRef.current;
-    setDockExpandHold(from);
+    setDockExpandHold({ ...from, phase: 'prepare' });
     void (async () => {
       await waitForExpandedViewport();
       if (generation !== dockRevealGenerationRef.current) {
@@ -266,8 +264,7 @@ function App(): JSX.Element {
         return;
       }
       const fromClip = pinExpandClipToBookmark(shell, from);
-      setDockExpandHold(null);
-      await runExpandClipReveal(shell, fromClip, generation);
+      beginExpandHoldReveal(fromClip, generation);
     })();
   };
 
@@ -276,7 +273,7 @@ function App(): JSX.Element {
     from: { side: 'left' | 'right'; x: number; y: number; width: number; height: number }
   ): void => {
     const generation = dockRevealGenerationRef.current;
-    setDockExpandHold(from);
+    setDockExpandHold({ ...from, phase: 'prepare' });
     void (async () => {
       await waitForExpandedViewport();
       if (generation !== dockRevealGenerationRef.current) {
@@ -288,7 +285,6 @@ function App(): JSX.Element {
         return;
       }
       pinExpandClipToBookmark(shell, from);
-      setDockExpandHold(null);
       await waitForNextPaint();
       if (generation !== dockRevealGenerationRef.current) {
         return;
@@ -310,18 +306,47 @@ function App(): JSX.Element {
     }
     const shell = noteShellRef.current;
     if (!shell) {
+      setDockExpandHold(null);
       return;
     }
     const fromClip = shell.style.clipPath;
     if (!fromClip) {
+      setDockExpandHold(null);
       return;
     }
-    void runExpandClipReveal(shell, fromClip, pending.generation);
+    beginExpandHoldReveal(fromClip, pending.generation);
   };
 
-  // clip 先写进 style，再同一 commit 撤隐身 + 卸 overlay：恢复可见的第一帧
-  // 已是书签头矩形。will-change 提示 compositor，圆角 clip 走 paint 线程时
-  // 少一次中途层升级。
+  const beginExpandHoldReveal = (fromClip: string, generation: number): void => {
+    flushSync(() => {
+      setDockExpandHold((previous) =>
+        previous ? { ...previous, phase: 'reveal' } : previous
+      );
+    });
+    const shell = noteShellRef.current;
+    if (!shell) {
+      setDockExpandHold(null);
+      return;
+    }
+    void runExpandClipReveal(shell, fromClip, generation);
+    window.setTimeout(() => {
+      if (generation !== dockRevealGenerationRef.current) {
+        return;
+      }
+      setDockExpandHold((previous) =>
+        previous ? { ...previous, phase: 'dissolve' } : previous
+      );
+      window.setTimeout(() => {
+        if (generation !== dockRevealGenerationRef.current) {
+          return;
+        }
+        setDockExpandHold(null);
+      }, NOTE_DOCK_EXPAND_HOLD_MS);
+    }, NOTE_DOCK_EXPAND_HOLD_MS);
+  };
+
+  // clip 先写进 style；reveal 同一 commit 撤隐身，替身仍盖在落点上。will-change
+  // 提示 compositor，圆角 clip 走 paint 线程时少一次中途层升级。
   const pinExpandClipToBookmark = (
     shell: HTMLElement,
     from: { x: number; y: number; width: number; height: number }
@@ -1663,7 +1688,7 @@ function App(): JSX.Element {
         }${isCollapseTransitioning ? ' note-shell--collapse-transitioning' : ''}${
           noteNaming.isEditing ? ' note-shell--naming' : ''
         }${dockShrink ? ' note-shell--shrink-hold' : ''}${
-          dockExpandHold ? ' note-shell--expand-hold' : ''
+          dockExpandHold?.phase === 'prepare' ? ' note-shell--expand-hold' : ''
         }`}
       data-preload-status={preloadStatus}
       style={shellStyle}
@@ -2062,12 +2087,14 @@ function App(): JSX.Element {
         />
       ) : null}
       {dockExpandHold ? (
-        // 拖出揭示的占位书签头：钉在 expandFrom（新窗口坐标系），主壳隐身等原生
-        // 窗口长开期间冒充书签头。clip 就位、壳体恢复可见的同一 commit 卸掉。
-        // 右侧贴边时 expandFrom.x 大于旧窗宽，长开前这 1 帧它在屏外——窗口透明，
-        // 用户看到的是「书签头不动」，而非纸面闪现。pointer-events:none 不挡拖动。
+        // 落点长成：替身钉在 expandFrom，prepare 时顶住上屏首帧；reveal 起纸面
+        // 从其底下向外长，再留 ~120ms 溶进标题栏。右贴边落点在窗右上，没有替身
+        // 就会先露出工具栏图标。pointer-events:none 不挡拖动。
         <div
-          className="dock-expand-bookmark"
+          className={
+            'dock-expand-bookmark' +
+            (dockExpandHold.phase === 'dissolve' ? ' dock-expand-bookmark--dissolve' : '')
+          }
           aria-hidden="true"
           style={{
             top: dockExpandHold.y,

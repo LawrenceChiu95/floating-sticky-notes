@@ -612,6 +612,9 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
   let dragQuietTimer: NodeJS.Timeout | null = null;
   let grabOffset: { x: number; y: number } | null = null;
   let settleWatchTimer: NodeJS.Timeout | null = null;
+  // 物理松手瞬间的光标：快速甩边时窗口滞后，settle fire 时光标可能已离开
+  // 边缘。吸附意图以松手那一帧为准，不拿 fire 时的活光标冒充。
+  let dockReleaseIntentCursor: { x: number; y: number } | null = null;
   // 吸附事务被抢拖熔断后，窗口可能仍是 union 尺寸。记下 source 横条和它在
   // union 中的偏移，等这次拖拽真结束再以当前 native 原点恢复，保证可见纸面
   // 跟着用户拖动而不被裁窗瞬移。恢复必须等拖拽结束——拖拽途中写窗会抽搐。
@@ -677,6 +680,10 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
   // 光标停稳/抓取点检查——松手后继续动鼠标不该拖慢吸附；bounds 静止比对
   // 仍然保留，用来等尾部 move 把 getBounds 冲刷到最终位置（迟到 move 会
   // 取消并重排，不猜固定延迟）。
+  let expandDockedNote: (
+    side: DockSide,
+    sliverBounds: { x: number; y: number; width: number; height: number }
+  ) => void;
   const armSettleWatch = (
     kind: 'dock' | 'docked',
     options?: { ignoreCursor?: boolean }
@@ -806,18 +813,6 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
             if (noteWindow.isDestroyed() || isMagneticTransitionInFlight) {
               return;
             }
-            // TODO(诊断 2026-09-01)：快速甩边吸附失败二轮——记录松手瞬间窗口
-            // 位置/光标，并在 +400ms 采样窗口是否仍在移动（验证「窗口滞后未
-            // 进吸附区」假说）。验完拆。
-            setTimeout(() => {
-              if (!noteWindow.isDestroyed()) {
-                diagnosticLogger?.record('dock_post_release_position', {
-                  webContentsId: noteWebContentsId,
-                  bounds: getDockActiveWindow().getBounds(),
-                  cursor: screen.getCursorScreenPoint()
-                });
-              }
-            }, 400);
             onDragQuiet(true);
           }),
           mouseButtonMonitor.onPress(() => {
@@ -825,6 +820,7 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
               return;
             }
             pressOnWindow = true;
+            dockReleaseIntentCursor = null;
             if (!isMagneticTransitionInFlight) {
               return;
             }
@@ -852,23 +848,20 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
       const workAreas = screen.getAllDisplays().map((display) => display.workArea);
       const workArea =
         findNearestWorkArea(current, workAreas) ?? screen.getDisplayMatching(current).workArea;
+      const cursor = screen.getCursorScreenPoint();
+      if (fromRelease) {
+        dockReleaseIntentCursor = cursor;
+      }
       const side = resolveCollapsedDockSide(
         current,
         workArea,
-        workAreas.filter((area) => area !== workArea)
+        workAreas.filter((area) => area !== workArea),
+        cursor
       );
-      // TODO(诊断 2026-09-01)：松手落判快照——甩边失败时对照窗口位置与 side。
-      if (fromRelease) {
-        diagnosticLogger?.record('dock_release_decision', {
-          webContentsId: noteWebContentsId,
-          presentation,
-          bounds: current,
-          cursor: screen.getCursorScreenPoint(),
-          side: side ?? null,
-          armed: side !== null || pendingStripRestore !== null
-        });
-      }
-      if (side || pendingStripRestore !== null) {
+      // 物理松手无条件武装：快速甩边时松手瞬间窗口还没进吸附区，也还没被
+      // 光标贴边兜住；表继续 poll 等 bounds 冲刷后再由 finalize 用稳定几何
+      // + 光标意图裁决。迟到 move 不得撤表（见 handleDockWindowMove）。
+      if (fromRelease || side || pendingStripRestore !== null) {
         armSettleWatch('dock', { ignoreCursor: fromRelease });
       }
       return;
@@ -886,11 +879,23 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
       current.y !== dockedBounds.y ||
       current.width !== dockedBounds.width ||
       current.height !== dockedBounds.height;
-    // 书签头被拖离静止位 → 等光标停稳后按落点裁决（钉回或松手展开）；位置
-    // 没偏但有推迟的悬停扳机（拖动中被 quiet 守卫挡下的 peek 触发）→ 同样
-    // 等停稳再复核。钉回/展开都不许回到「松手检测 watch」或 move 流上：
-    // 拖拽途中写 x 会把水平位移吃掉（拖不出来）并撞活拖拽（抽搐）——真机
-    // 日志实锤。
+    // 落点长成：过回差带的物理松手直接展开，不再先等 60ms settle 拍。窗口
+    // 还在追光标、瞬时偏移不够 72px 时仍走 settle，冲刷后再由 settleDockedIdle
+    // 裁决（钉回或展开）。钉回/展开都不许回到 move 流上。
+    if (fromRelease) {
+      const side = collapseController.getDockForPersistence()?.side;
+      if (side) {
+        const releaseOffset = resolveDockedEdgeOffset({
+          side,
+          current,
+          dockedX: dockedBounds.x
+        });
+        if (releaseOffset >= NOTE_DOCK_UNFOLD_HYSTERESIS_PX) {
+          expandDockedNote(side, current);
+          return;
+        }
+      }
+    }
     if (drifted || dockPeekReconcilePending) {
       armSettleWatch('docked', { ignoreCursor: fromRelease });
     }
@@ -1046,10 +1051,13 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
     const workAreas = screen.getAllDisplays().map((display) => display.workArea);
     const workArea =
       findNearestWorkArea(current, workAreas) ?? screen.getDisplayMatching(current).workArea;
+    const releaseCursor = dockReleaseIntentCursor;
+    dockReleaseIntentCursor = null;
     const side = resolveCollapsedDockSide(
       current,
       workArea,
-      workAreas.filter((area) => area !== workArea)
+      workAreas.filter((area) => area !== workArea),
+      releaseCursor ?? undefined
     );
     if (!side) {
       // 比对期间窗口被系统动过（如 macOS 拉回屏内）：不在吸附区就不吸。
@@ -1332,12 +1340,6 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
         }
         noteWindow.hide();
         noteWindow.setOpacity(1);
-        // TODO(诊断 2026-09-01)：验证隐藏态 setOpacity(1) 是否真生效——若展开
-        // 示出时窗口从半透明缓慢爬回（水洗态），这里读回的就不是 1。
-        diagnosticLogger?.record('dock_handover_opacity_restored', {
-          webContentsId: noteWebContentsId,
-          opacityAfterRestore: noteWindow.getOpacity()
-        });
         // The target is already painted and interactive.  Commit the controller
         // in this same turn so a re-grab is handled as a docked interaction, not
         // as a stale collapsed transaction waiting on disk I/O.  Persistence is
@@ -1684,9 +1686,17 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
       }
     }
 
-    // 任何 move = 几何还在动（拖拽或系统写窗）：取消停稳比对、重排停歇计时。
-    cancelSettleWatch();
-    scheduleDragQuiet();
+    // 活拖拽 / helper 缺席：任何 move = 几何还在动，取消停稳比对、重排停歇。
+    // 物理松手之后的迟到 move 除外——那是窗口在追光标，不是新拖拽；撤表后
+    // 不会再有 release 来武装，快速甩边就会静默失败（真机 2026-09-01）。
+    const postReleaseCoasting =
+      settleWatchTimer !== null &&
+      mouseButtonMonitor?.isActive() === true &&
+      mouseButtonMonitor?.isDown() !== true;
+    if (!postReleaseCoasting) {
+      cancelSettleWatch();
+      scheduleDragQuiet();
+    }
 
     const presentation = collapseController.getPresentation();
 
@@ -1706,7 +1716,8 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
         resolveCollapsedDockSide(
           current,
           workArea,
-          workAreas.filter((area) => area !== workArea)
+          workAreas.filter((area) => area !== workArea),
+          screen.getCursorScreenPoint()
         ) ?? null;
       if (previewSide !== dockPreviewSide) {
         dockPreviewSide = previewSide;
@@ -1728,13 +1739,11 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
     // 原生拖拽会话随之中断，用户拖到一半被迫停下再抓。只记抓取点供松手判定。
     recordGrabPoint(current);
   };
-  // 拖出展开（松手才展开的唯一执行者）：settle 确认拖拽结束、书签头最终
-  // 停在回差带外后调用（settleDockedIdle）。此时原生拖拽会话已随松手自然
-  // 结束，提交成功才销毁书签头窗，不再打断任何手势。主窗在**隐藏态**先
-  // setBounds 到展开矩形（隐藏 resize 不可见，不构成闪烁），renderer 备好
-  // 揭示首帧（clip 钉书签头矩形）并 ACK 后才 showInactive 上屏。两窗交接
-  // 期间同像素重叠不可见。
-  const expandDockedNote = (
+  // 拖出展开（松手才展开的唯一执行者）：过回差带的物理松手直接调用；窗口
+  // 还在追光标、瞬时不够 72px 时由 settleDockedIdle 再判一次。此时原生拖拽
+  // 会话已随松手自然结束，提交成功才销毁书签头窗。主窗在隐藏态先 setBounds
+  // 到展开矩形，renderer 备好揭示首帧并 ACK 后才 showInactive。
+  expandDockedNote = (
     side: DockSide,
     sliverBounds: { x: number; y: number; width: number; height: number }
   ): void => {
@@ -1783,20 +1792,6 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
           return;
         }
         noteWindow.showInactive();
-        // TODO(诊断 2026-09-01)：展开示出时主窗窗口级透明度采样——真机录屏实锤
-        // 纸面从 ~0.6 缓慢爬回 1（水洗残缺态），疑似吸附交叉淡换隐藏态恢复
-        // setOpacity(1) 未生效。验完拆。
-        for (const delayMs of [0, 150, 400, 800]) {
-          setTimeout(() => {
-            if (!noteWindow.isDestroyed()) {
-              diagnosticLogger?.record('dock_expand_opacity_probe', {
-                webContentsId: noteWebContentsId,
-                delayMs,
-                opacity: noteWindow.getOpacity()
-              });
-            }
-          }, delayMs);
-        }
         const didUndock = await getNotesManager().undockNoteForWebContents(
           noteWebContentsId,
           bounds

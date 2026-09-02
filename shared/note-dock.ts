@@ -35,7 +35,8 @@ export type DisplayWorkArea = {
 export function resolveCollapsedDockSide(
   bar: Rect,
   workArea: DisplayWorkArea,
-  neighborWorkAreas: DisplayWorkArea[] = []
+  neighborWorkAreas: DisplayWorkArea[] = [],
+  cursor?: { x: number; y: number }
 ): DockSide | undefined {
   // 探出屏外才算推向边缘：横条左/右缘越过工作区边缘 ≥8px。
   const leftOverlap = workArea.x - bar.x;
@@ -46,23 +47,39 @@ export function resolveCollapsedDockSide(
       : rightOverlap >= NOTE_DOCK_SNAP_OVERLAP_PX
         ? 'right'
         : undefined;
-  if (!side) {
+  if (side) {
+    // 探出部分落在相邻显示器上 = 在跨屏拖动，不是推向真屏幕边缘，不吸附。
+    const overhang: Rect =
+      side === 'left'
+        ? { x: bar.x, y: bar.y, width: leftOverlap, height: bar.height }
+        : {
+            x: workArea.x + workArea.width,
+            y: bar.y,
+            width: rightOverlap,
+            height: bar.height
+          };
+    if (!neighborWorkAreas.some((area) => rectsIntersect(overhang, area))) {
+      return side;
+    }
+  }
+  // 快速甩边：原生拖动里 getBounds 滞后光标（真机 2026-09-01/02：松手瞬间
+  // 横条还差几十到几百 px 才探出，光标已经顶在工作区边缘）。光标贴边视为
+  // 同一吸附意图；落在邻屏则仍是跨屏拖动，不吸。
+  if (!cursor) {
     return undefined;
   }
-  // 探出部分落在相邻显示器上 = 在跨屏拖动，不是推向真屏幕边缘，不吸附。
-  const overhang: Rect =
-    side === 'left'
-      ? { x: bar.x, y: bar.y, width: leftOverlap, height: bar.height }
-      : {
-          x: workArea.x + workArea.width,
-          y: bar.y,
-          width: rightOverlap,
-          height: bar.height
-        };
-  if (neighborWorkAreas.some((area) => rectsIntersect(overhang, area))) {
+  if (neighborWorkAreas.some((area) => pointInRect(cursor, area))) {
     return undefined;
   }
-  return side;
+  const leftGap = cursor.x - workArea.x;
+  const rightGap = workArea.x + workArea.width - cursor.x;
+  if (leftGap <= NOTE_DOCK_SNAP_OVERLAP_PX && leftGap <= rightGap) {
+    return 'left';
+  }
+  if (rightGap <= NOTE_DOCK_SNAP_OVERLAP_PX) {
+    return 'right';
+  }
+  return undefined;
 }
 
 // 磁吸判定：书签头被原生拖动时看它离「静止贴边位」的水平位移——≥48px 立即展开，
@@ -288,6 +305,15 @@ function distanceToWorkArea(x: number, y: number, workArea: DisplayWorkArea): nu
 function rectsIntersect(a: Rect, b: DisplayWorkArea): boolean {
   return (
     a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
+  );
+}
+
+function pointInRect(point: { x: number; y: number }, rect: DisplayWorkArea): boolean {
+  return (
+    point.x >= rect.x &&
+    point.x < rect.x + rect.width &&
+    point.y >= rect.y &&
+    point.y < rect.y + rect.height
   );
 }
 

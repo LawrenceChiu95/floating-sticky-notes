@@ -138,10 +138,9 @@ textarea {
   box-shadow: inset 0 0 0 1px rgba(43, 42, 39, 0.1);
 }
 
-/* 拖出揭示的隐身占位：dock 切 null 后原生窗口长开有 1~2 帧空档，这期间主壳
-   保持 opacity 0（仍可命中、-webkit-app-region 拖动不受影响），视觉由
-   .dock-expand-bookmark 占位书签头顶住。clip 就位后与恢复可见同一 commit，
-   首帧即是书签头矩形——不能用 visibility:hidden（不可命中会杀掉拖动）。 */
+/* 落点长成 prepare：主壳 opacity 0（仍可命中、app-region 不受影响），视觉由
+   .dock-expand-bookmark 顶住。reveal 起撤隐身，替身再留 ~120ms 溶进标题栏。
+   不能用 visibility:hidden（不可命中会杀掉拖动）。 */
 .note-shell--expand-hold {
   opacity: 0;
 }
@@ -149,8 +148,21 @@ textarea {
 .dock-expand-bookmark {
   position: fixed;
   /* 位置与尺寸由内联样式给（expandFrom 是新窗口坐标系里的书签头矩形）。 */
+  overflow: hidden;
   z-index: 10;
   pointer-events: none;
+  transition: opacity 120ms cubic-bezier(0.33, 0.75, 0.35, 1);
+}
+
+/* DockedNoteShell 默认 100vw/100vh 铺满当前窗。替身必须钉死在落点 96×32，
+   否则右贴边揭示首帧是一整面纸，书签头视觉根本没出现——用户会觉得「没变」。 */
+.dock-expand-bookmark .note-shell {
+  width: 100%;
+  height: 100%;
+}
+
+.dock-expand-bookmark--dissolve {
+  opacity: 0;
 }
 
 /* 透明拖动面：默认（左贴边）只让出朝桌面的右侧 5px no-drag 传感条，上下沿
