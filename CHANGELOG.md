@@ -199,7 +199,8 @@
 - 提供待办清单、图片、颜色和透明度等核心功能。
 - 开始接入系统托盘与开机启动能力。
 
-[未发布]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.18...HEAD
+[未发布]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.19...HEAD
+[0.1.19]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.18...v0.1.19
 [0.1.18]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.17...v0.1.18
 [0.1.17]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.16...v0.1.17
 [0.1.16]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.15...v0.1.16

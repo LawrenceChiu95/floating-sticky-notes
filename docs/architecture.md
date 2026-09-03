@@ -90,4 +90,4 @@ Windows 关闭全部便签窗口后仍由系统托盘常驻。只有托盘“退
 
 `CHANGELOG.md` 是唯一人工内容源。`predev` 和 `prebuild` 运行 `scripts/build-release-notes.cjs`，按稳定核心版本提取版本号、发布日期、分类和条目，生成 `main/generated/release-notes.ts`，随后由主进程 bundle 打入应用。运行时不读取仓库 Markdown，也不联网获取 Release 文案。
 
-版本反馈窗口使用自己的 renderer、最小 preload 和 presenter。离线归档按 SemVer 升序保存，自动路径在筛选未读范围后按 SemVer 倒序展示，确保最新版本位于最上方；手动路径只显示当前版本。窗口固定宽度并在显示前按内容测量高度；少量内容自然收紧，长内容只滚动中间版本/条目区域，编辑式页头和底部操作保持可见。自动与手动请求复用唯一活动窗口，只有来源为自动且窗口真实显示成功时才写入已读版本。完整产品行为见 [`docs/design/release-highlights.md`](design/release-highlights.md)。
+版本反馈窗口使用自己的 renderer、最小 preload 和 presenter。离线归档按 SemVer 升序保存，自动路径在筛选未读范围后按 SemVer 倒序展示，确保最新版本位于最上方。手动路径仍加载全部历史，但窗口高度按最近两个版本测量；更早版本留在滚动区。窗口固定宽度并在显示前按内容测量高度；少量内容自然收紧，长内容只滚动中间版本/条目区域，编辑式页头和底部操作保持可见。自动与手动请求复用唯一活动窗口，只有来源为自动且窗口真实显示成功时才写入已读版本。完整产品行为见 [`docs/design/release-highlights.md`](design/release-highlights.md)。

@@ -23,7 +23,7 @@
 
 - 本项目是个人仓库 [`LawrenceChiu95/floating-sticky-notes`](https://github.com/LawrenceChiu95/floating-sticky-notes)。创建或编辑 Issue、评论、PR、Release、标签等所有 GitHub 写操作，必须使用仓库所有者账号 `LawrenceChiu95`，不得使用其他 GitHub 身份。
 - 每个会话第一次执行 GitHub 写操作前，必须用 `gh api user --jq .login` 核对当前活动身份；不能只根据 remote URL 或仓库 owner 推断。
-- 若活动身份不是 `LawrenceChiu95`，停止写操作并先执行 `gh auth switch --hostname github.com --user LawrenceChiu95`，再次核对成功后才能继续。
+- 若活动身份不是 `LawrenceChiu95`，停止写操作并先执行 `gh auth switch --hostname github.com --user LawrenceChiu95`，再次核对成功后才能继续。本机 `~/.gitconfig` 把 `https://github.com/` 改写成 SSH，默认 SSH 会落到公司号；个人仓库 push 必须绕开 insteadOf，用 `LawrenceChiu95` token 的 `x-access-token` HTTPS URL，且不要把 token URL 写进 branch upstream。
 
 ## 不可随意改变的边界
 

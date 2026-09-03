@@ -1,6 +1,6 @@
 # 收起横条贴边吸附
 
-> **现状（2026-09-02）：** 形状 96×32 横书签头；判定模型是「**松手才吸**」。**架构定案：窗口交接**——落定闪烁根因经 GitHub 调研实锤为 Electron 结构性缺陷（可见时刻改透明窗尺寸，Chromium 合成器内容帧晚于 WindowServer 几何生效 1~N 拍，中间帧露空；官方 issue 2017→2025 全 not_planned；escrcpy/Qt/AHK 及 QQ/Snipaste/SideNotes 等成熟实现全部「恒定尺寸 + 纯位移」）。因此废除 union→96×32 裁窗，改为：书签头是**独立的 96×32 恒尺寸窗口**（预渲染、showInactive 上屏，像素与 DOM morph 末帧一致），交接后源便签窗隐藏；展开反向走同一套交接。不变量：**窗口可见时尺寸永远恒定**。union 生长 + 300ms DOM morph 动画、物理按键松手监视、悬停探头滑行全部保留。判定模型与外观不变。Mac 真机已验收贴边吸附、快速甩边与落点长成展开；Windows 真机与正式发布未做。
+> **现状（2026-09-03）：** 形状 96×32 横书签头；判定模型是「**松手才吸**」。**架构定案：窗口交接**——落定闪烁根因经 GitHub 调研实锤为 Electron 结构性缺陷（可见时刻改透明窗尺寸，Chromium 合成器内容帧晚于 WindowServer 几何生效 1~N 拍，中间帧露空；官方 issue 2017→2025 全 not_planned；escrcpy/Qt/AHK 及 QQ/Snipaste/SideNotes 等成熟实现全部「恒定尺寸 + 纯位移」）。因此废除 union→96×32 裁窗，改为：书签头是**独立的 96×32 恒尺寸窗口**（预渲染、showInactive 上屏，像素与 DOM morph 末帧一致），交接后源便签窗隐藏；展开反向走同一套交接。不变量：**窗口可见时尺寸永远恒定**。union 生长 + 300ms DOM morph 动画、物理按键松手监视、悬停探头滑行全部保留。判定模型与外观不变。已随 [0.1.19](https://github.com/LawrenceChiu95/floating-sticky-notes/releases/tag/v0.1.19) 发布；Mac 真机已验收贴边吸附、快速甩边与落点长成展开。Windows 贴边未做 PC 真机验收。
 
 ## 背景
 
