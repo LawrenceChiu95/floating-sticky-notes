@@ -1,3 +1,4 @@
+import { describeUpdateFailure } from '../shared/update-error';
 import { createSafeDiagnosticRecorder, type DiagnosticRecorder } from './diagnostics';
 import type { UpdateProgressPresenter } from './update-progress-window';
 
@@ -179,16 +180,11 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     logError('Auto-update failed', error);
 
     if (shouldNotify && !disposed) {
-      options.dialog.showErrorBox(
-        isInstallFailure
-          ? '安装更新失败'
-          : isDownloadFailure
-            ? '下载更新失败'
-            : '检查更新失败',
-        isInstallFailure
-          ? '便签暂时无法退出安装，请稍后再试。'
-          : '暂时无法完成更新，请稍后重试；如果仍失败，请检查网络。'
+      const { title, content } = describeUpdateFailure(
+        isInstallFailure ? 'install' : isDownloadFailure ? 'download' : 'check',
+        error
       );
+      options.dialog.showErrorBox(title, content);
     }
 
     if (!operation.checkPending && !operation.downloadPending) {

@@ -531,7 +531,7 @@ describe('update controller', () => {
     );
     expect(dialog.showErrorBox).toHaveBeenCalledWith(
       '检查更新失败',
-      expect.stringContaining('检查网络')
+      '连接更新服务器超时或被中断，请稍后重试。'
     );
   });
 
@@ -583,6 +583,21 @@ describe('update controller', () => {
     expect(dialog.showErrorBox).toHaveBeenCalledWith(
       '检查更新失败',
       expect.stringContaining('请稍后重试')
+    );
+  });
+
+  it('explains proxy and tunnel failures on a manual check', async () => {
+    const updater = new FakeUpdater();
+    const dialog = createDialog();
+    const controller = createUpdateController({ updater, dialog, logError: vi.fn() });
+
+    await controller.checkManually();
+    updater.emit('error', new Error('net::ERR_TUNNEL_CONNECTION_FAILED'));
+    await flushMicrotasks();
+
+    expect(dialog.showErrorBox).toHaveBeenCalledWith(
+      '检查更新失败',
+      '当前网络代理或 VPN 连不上更新服务器。请关闭失效的代理/VPN，或换一个网络后再试。'
     );
   });
 });

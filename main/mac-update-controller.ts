@@ -1,3 +1,4 @@
+import { describeUpdateFailure } from '../shared/update-error';
 import { createSafeDiagnosticRecorder, type DiagnosticRecorder } from './diagnostics';
 import { gt, valid } from 'semver';
 
@@ -46,7 +47,7 @@ type MacUpdateControllerOptions = {
   logError?: (message: string, error: unknown) => void;
 };
 
-type MacUpdatePhase = 'idle' | 'checking' | 'prompting' | 'downloading';
+type MacUpdatePhase = 'idle' | 'checking' | 'prompting' | 'downloading' | 'installing';
 
 export function shouldEnableMacManualUpdates(
   platform: NodeJS.Platform,
@@ -158,20 +159,28 @@ export function createMacUpdateController(
         return;
       }
 
+      phase = 'installing';
       await beforeInstall();
       await options.service.openInstaller(filePath);
       recordDiagnostic('mac_update_installer_opened', { version: update.version });
       quit();
     } catch (error) {
-      recordDiagnostic('mac_update_failed', { source, phase, error });
+      const failedPhase = phase;
+      recordDiagnostic('mac_update_failed', { source, phase: failedPhase, error });
       phase = 'idle';
       setProgress(-1);
       logError('macOS update failed', error);
       if (reportErrors) {
-        options.dialog.showErrorBox(
-          '检查更新失败',
-          '暂时无法完成更新，请稍后重试；如果仍失败，请检查网络和下载目录权限。'
+        const { title, content } = describeUpdateFailure(
+          failedPhase === 'installing'
+            ? 'install'
+            : failedPhase === 'downloading'
+              ? 'download'
+              : 'check',
+          error,
+          { includeDownloadDirectory: failedPhase === 'downloading' }
         );
+        options.dialog.showErrorBox(title, content);
       }
     }
   };
