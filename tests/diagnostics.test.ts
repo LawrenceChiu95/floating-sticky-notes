@@ -78,6 +78,28 @@ describe('update diagnostics', () => {
     ).toBe('https://github.com/owner/repo/releases/latest');
   });
 
+  it('does not treat https:// as a Windows drive path', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'sticky-update-url-'));
+    const filePath = join(directory, 'updater-diagnostic.log');
+    const logger = createDiagnosticLogger({
+      filePath,
+      now: () => new Date('2026-09-03T00:00:00.000Z')
+    });
+
+    logger.record('updater_request_started', {
+      url: 'https://github.com/LawrenceChiu95/floating-sticky-notes-updates/releases/latest'
+    });
+    logger.info('C:\\Users\\Alice\\AppData\\Roaming\\floating-sticky-notes\\logs\\diagnostic.log');
+
+    const serialized = readFileSync(filePath, 'utf8');
+    expect(serialized).toContain(
+      'https://github.com/LawrenceChiu95/floating-sticky-notes-updates/releases/latest'
+    );
+    expect(serialized).not.toContain('http<local-path>');
+    expect(serialized).toContain('<local-path>');
+    expect(serialized).not.toContain('C:\\Users\\Alice');
+  });
+
   it('records updater request timing without changing the request', () => {
     const listeners: Record<string, (...args: any[]) => void> = {};
     const webRequest = {

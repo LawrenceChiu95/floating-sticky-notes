@@ -1,3 +1,8 @@
+import {
+  describeUpdateFailure,
+  planUpdateCheckRetry,
+  type UpdateNetwork
+} from '../shared/update-error';
 import { createSafeDiagnosticRecorder, type DiagnosticRecorder } from './diagnostics';
 import { gt, valid } from 'semver';
 
@@ -40,13 +45,14 @@ type MacUpdateControllerOptions = {
   dialog: MacUpdateDialog;
   service: MacUpdateService;
   diagnostics?: DiagnosticRecorder;
+  network?: UpdateNetwork;
   beforeInstall?: () => Promise<void>;
   quit?: () => void;
   setProgress?: (progress: number) => void;
   logError?: (message: string, error: unknown) => void;
 };
 
-type MacUpdatePhase = 'idle' | 'checking' | 'prompting' | 'downloading';
+type MacUpdatePhase = 'idle' | 'checking' | 'prompting' | 'downloading' | 'installing';
 
 export function shouldEnableMacManualUpdates(
   platform: NodeJS.Platform,
@@ -64,6 +70,60 @@ export function createMacUpdateController(
   const logError = options.logError ?? ((message, error) => console.error(message, error));
   const recordDiagnostic = createSafeDiagnosticRecorder(options.diagnostics).record;
   let phase: MacUpdatePhase = 'idle';
+
+  const loadLatestWithRetry = async (source: 'manual' | 'startup') => {
+    if (options.network) {
+      try {
+        await options.network.setProxyMode('system');
+      } catch (proxyError) {
+        recordDiagnostic('mac_update_proxy_mode_failed', {
+          source,
+          error: proxyError
+        });
+      }
+    }
+    let checkAttempt = 0;
+    for (;;) {
+      try {
+        const update = await options.service.getLatest();
+        recordDiagnostic('mac_update_metadata_loaded', {
+          source,
+          latestVersion: update.version,
+          attempt: checkAttempt
+        });
+        return update;
+      } catch (error) {
+        const retryAction = planUpdateCheckRetry(error, checkAttempt);
+        if (retryAction === 'none') {
+          throw error;
+        }
+        if (retryAction === 'retry-direct') {
+          if (!options.network) {
+            throw error;
+          }
+          try {
+            await options.network.setProxyMode('direct');
+            recordDiagnostic('mac_update_proxy_mode_changed', {
+              source,
+              mode: 'direct'
+            });
+          } catch (proxyError) {
+            recordDiagnostic('mac_update_proxy_mode_failed', {
+              source,
+              error: proxyError
+            });
+            throw error;
+          }
+        }
+        checkAttempt += 1;
+        recordDiagnostic('mac_update_check_retry', {
+          source,
+          action: retryAction,
+          attempt: checkAttempt
+        });
+      }
+    }
+  };
 
   const startCheck = async (isManual: boolean): Promise<void> => {
     const source = isManual ? 'manual' : 'startup';
@@ -90,11 +150,7 @@ export function createMacUpdateController(
     recordDiagnostic('mac_update_check_started', { source });
 
     try {
-      const update = await options.service.getLatest();
-      recordDiagnostic('mac_update_metadata_loaded', {
-        source,
-        latestVersion: update.version
-      });
+      const update = await loadLatestWithRetry(source);
       if (!valid(options.currentVersion) || !gt(update.version, options.currentVersion)) {
         phase = 'idle';
         recordDiagnostic('mac_update_not_available', { source, latestVersion: update.version });
@@ -158,20 +214,28 @@ export function createMacUpdateController(
         return;
       }
 
+      phase = 'installing';
       await beforeInstall();
       await options.service.openInstaller(filePath);
       recordDiagnostic('mac_update_installer_opened', { version: update.version });
       quit();
     } catch (error) {
-      recordDiagnostic('mac_update_failed', { source, phase, error });
+      const failedPhase = phase;
+      recordDiagnostic('mac_update_failed', { source, phase: failedPhase, error });
       phase = 'idle';
       setProgress(-1);
       logError('macOS update failed', error);
       if (reportErrors) {
-        options.dialog.showErrorBox(
-          '检查更新失败',
-          '暂时无法完成更新，请稍后重试；如果仍失败，请检查网络和下载目录权限。'
+        const { title, content } = describeUpdateFailure(
+          failedPhase === 'installing'
+            ? 'install'
+            : failedPhase === 'downloading'
+              ? 'download'
+              : 'check',
+          error,
+          { includeDownloadDirectory: failedPhase === 'downloading' }
         );
+        options.dialog.showErrorBox(title, content);
       }
     }
   };

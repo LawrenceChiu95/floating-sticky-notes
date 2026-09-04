@@ -138,7 +138,118 @@ describe('macOS manual update controller', () => {
     await controller.checkManually();
     expect(dialog.showErrorBox).toHaveBeenCalledWith(
       '检查更新失败',
-      expect.stringContaining('请稍后重试')
+      '暂时无法完成更新，请稍后重试；如果仍失败，请检查网络。'
+    );
+  });
+
+  it('retries a timed-out Mac check once', async () => {
+    const service = createService({ ...newerUpdate, version: '0.1.9' });
+    vi.mocked(service.getLatest)
+      .mockRejectedValueOnce(new Error('net::ERR_CONNECTION_TIMED_OUT'))
+      .mockResolvedValueOnce({ ...newerUpdate, version: '0.1.9' });
+    const dialog = createDialog();
+    const setProxyMode = vi.fn(async () => undefined);
+    const controller = createMacUpdateController({
+      currentVersion: '0.1.9',
+      dialog,
+      service,
+      network: { setProxyMode },
+      logError: vi.fn()
+    });
+
+    await controller.checkManually();
+
+    expect(service.getLatest).toHaveBeenCalledTimes(2);
+    expect(setProxyMode).toHaveBeenCalledTimes(1);
+    expect(setProxyMode).toHaveBeenCalledWith('system');
+    expect(dialog.showErrorBox).not.toHaveBeenCalled();
+    expect(dialog.showMessageBox).toHaveBeenCalledWith(
+      expect.objectContaining({ message: '已经是最新版本' })
+    );
+  });
+
+  it('retries a Mac proxy failure over a direct connection', async () => {
+    const service = createService({ ...newerUpdate, version: '0.1.9' });
+    vi.mocked(service.getLatest)
+      .mockRejectedValueOnce(new Error('net::ERR_PROXY_CONNECTION_FAILED'))
+      .mockResolvedValueOnce({ ...newerUpdate, version: '0.1.9' });
+    const dialog = createDialog();
+    const setProxyMode = vi.fn(async () => undefined);
+    const controller = createMacUpdateController({
+      currentVersion: '0.1.9',
+      dialog,
+      service,
+      network: { setProxyMode },
+      logError: vi.fn()
+    });
+
+    await controller.checkManually();
+
+    expect(setProxyMode).toHaveBeenNthCalledWith(1, 'system');
+    expect(setProxyMode).toHaveBeenNthCalledWith(2, 'direct');
+    expect(service.getLatest).toHaveBeenCalledTimes(2);
+    expect(dialog.showErrorBox).not.toHaveBeenCalled();
+  });
+
+  it('explains proxy failures on a manual Mac check', async () => {
+    const service = createService();
+    vi.mocked(service.getLatest).mockRejectedValue(
+      new Error('net::ERR_PROXY_CONNECTION_FAILED')
+    );
+    const dialog = createDialog();
+    const setProxyMode = vi.fn(async () => undefined);
+    const controller = createMacUpdateController({
+      currentVersion: '0.1.9',
+      dialog,
+      service,
+      network: { setProxyMode },
+      logError: vi.fn()
+    });
+
+    await controller.checkManually();
+    expect(setProxyMode).toHaveBeenNthCalledWith(1, 'system');
+    expect(setProxyMode).toHaveBeenNthCalledWith(2, 'direct');
+    expect(service.getLatest).toHaveBeenCalledTimes(2);
+    expect(dialog.showErrorBox).toHaveBeenCalledWith(
+      '检查更新失败',
+      '当前网络代理或 VPN 连不上更新服务器。请关闭失效的代理/VPN，或换一个网络后再试。'
+    );
+  });
+
+  it('reports a download failure instead of a check failure', async () => {
+    const service = createService();
+    vi.mocked(service.download).mockRejectedValue(new Error('offline'));
+    const dialog = createDialog([0]);
+    const controller = createMacUpdateController({
+      currentVersion: '0.1.9',
+      dialog,
+      service,
+      logError: vi.fn()
+    });
+
+    await controller.checkManually();
+    expect(dialog.showErrorBox).toHaveBeenCalledWith(
+      '下载更新失败',
+      '暂时无法完成更新，请稍后重试；如果仍失败，请检查网络和下载目录权限。'
+    );
+    expect(service.openInstaller).not.toHaveBeenCalled();
+  });
+
+  it('reports an install failure when opening the DMG fails', async () => {
+    const service = createService();
+    vi.mocked(service.openInstaller).mockRejectedValue(new Error('cannot open dmg'));
+    const dialog = createDialog([0, 0]);
+    const controller = createMacUpdateController({
+      currentVersion: '0.1.9',
+      dialog,
+      service,
+      logError: vi.fn()
+    });
+
+    await controller.checkManually();
+    expect(dialog.showErrorBox).toHaveBeenCalledWith(
+      '安装更新失败',
+      '便签暂时无法退出安装，请稍后再试。'
     );
   });
 });

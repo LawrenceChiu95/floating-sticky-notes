@@ -19,7 +19,7 @@ class FakeUpdater implements UpdateClient {
   autoDownload = true;
   autoInstallOnAppQuit = false;
   disableWebInstaller = false;
-  readonly checkForUpdates = vi.fn(async () => undefined);
+  readonly checkForUpdates = vi.fn(async (): Promise<unknown> => undefined);
   readonly downloadUpdate = vi.fn(async () => []);
   readonly quitAndInstall = vi.fn();
   private readonly listeners = new Map<UpdateEvent, Array<(value: unknown) => void>>();
@@ -509,7 +509,7 @@ describe('update controller', () => {
   it('records updater rejection details while preserving manual error feedback', async () => {
     const updater = new FakeUpdater();
     const error = Object.assign(new Error('network failed'), { code: 'ERR_CONNECTION_RESET' });
-    updater.checkForUpdates.mockRejectedValueOnce(error);
+    updater.checkForUpdates.mockRejectedValue(error);
     const dialog = createDialog();
     const record = vi.fn();
     const controller = createUpdateController({
@@ -521,9 +521,14 @@ describe('update controller', () => {
 
     await controller.checkManually();
 
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(2);
     expect(record).toHaveBeenCalledWith(
       'update_check_rejected',
-      expect.objectContaining({ operationId: 1, error })
+      expect.objectContaining({ operationId: 1, error, attempt: 0 })
+    );
+    expect(record).toHaveBeenCalledWith(
+      'update_check_retry',
+      expect.objectContaining({ operationId: 1, action: 'retry', attempt: 1 })
     );
     expect(record).toHaveBeenCalledWith(
       'update_operation_failed',
@@ -531,7 +536,7 @@ describe('update controller', () => {
     );
     expect(dialog.showErrorBox).toHaveBeenCalledWith(
       '检查更新失败',
-      expect.stringContaining('检查网络')
+      '连接更新服务器超时或被中断，请稍后重试。'
     );
   });
 
@@ -584,6 +589,143 @@ describe('update controller', () => {
       '检查更新失败',
       expect.stringContaining('请稍后重试')
     );
+  });
+
+  it('explains proxy and tunnel failures on a manual check', async () => {
+    const updater = new FakeUpdater();
+    updater.checkForUpdates.mockRejectedValue(new Error('net::ERR_TUNNEL_CONNECTION_FAILED'));
+    const dialog = createDialog();
+    const setProxyMode = vi.fn(async () => undefined);
+    const controller = createUpdateController({
+      updater,
+      dialog,
+      network: { setProxyMode },
+      logError: vi.fn()
+    });
+
+    await controller.checkManually();
+
+    expect(setProxyMode).toHaveBeenNthCalledWith(1, 'system');
+    expect(setProxyMode).toHaveBeenNthCalledWith(2, 'direct');
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(2);
+    expect(dialog.showErrorBox).toHaveBeenCalledWith(
+      '检查更新失败',
+      '当前网络代理或 VPN 连不上更新服务器。请关闭失效的代理/VPN，或换一个网络后再试。'
+    );
+  });
+
+  it('retries a timed-out check once without changing proxy settings', async () => {
+    const updater = new FakeUpdater();
+    updater.checkForUpdates
+      .mockImplementationOnce(async () => {
+        const error = new Error('net::ERR_CONNECTION_TIMED_OUT');
+        updater.emit('error', error);
+        throw error;
+      })
+      .mockResolvedValueOnce({ updateInfo: { version: '0.1.19' } });
+    const dialog = createDialog();
+    const setProxyMode = vi.fn(async () => undefined);
+    const record = vi.fn();
+    const controller = createUpdateController({
+      updater,
+      dialog,
+      network: { setProxyMode },
+      diagnostics: { record },
+      logError: vi.fn()
+    });
+
+    const check = controller.checkManually();
+    await flushMicrotasks();
+    updater.emit('update-not-available', { version: '0.1.19' });
+    await check;
+
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(2);
+    expect(setProxyMode).toHaveBeenCalledTimes(1);
+    expect(setProxyMode).toHaveBeenCalledWith('system');
+    expect(record).toHaveBeenCalledWith(
+      'update_check_retry',
+      expect.objectContaining({ action: 'retry', attempt: 1 })
+    );
+    expect(dialog.showErrorBox).not.toHaveBeenCalled();
+    expect(dialog.showMessageBox).toHaveBeenCalledWith(
+      expect.objectContaining({ message: '已经是最新版本' })
+    );
+  });
+
+  it('retries a proxy failure over a direct connection', async () => {
+    const updater = new FakeUpdater();
+    updater.checkForUpdates
+      .mockImplementationOnce(async () => {
+        const error = new Error('net::ERR_TUNNEL_CONNECTION_FAILED');
+        updater.emit('error', error);
+        throw error;
+      })
+      .mockResolvedValueOnce({ updateInfo: { version: '0.1.19' } });
+    const dialog = createDialog();
+    const setProxyMode = vi.fn(async () => undefined);
+    const record = vi.fn();
+    const controller = createUpdateController({
+      updater,
+      dialog,
+      network: { setProxyMode },
+      diagnostics: { record },
+      logError: vi.fn()
+    });
+
+    const check = controller.checkManually();
+    await flushMicrotasks();
+    updater.emit('update-not-available', { version: '0.1.19' });
+    await check;
+
+    expect(setProxyMode).toHaveBeenNthCalledWith(1, 'system');
+    expect(setProxyMode).toHaveBeenNthCalledWith(2, 'direct');
+    expect(setProxyMode.mock.invocationCallOrder[1]).toBeLessThan(
+      updater.checkForUpdates.mock.invocationCallOrder[1]
+    );
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(2);
+    expect(record).toHaveBeenCalledWith(
+      'update_check_retry',
+      expect.objectContaining({ action: 'retry-direct', attempt: 1 })
+    );
+    expect(dialog.showErrorBox).not.toHaveBeenCalled();
+  });
+
+  it('does not retry a second timeout and still reports the last error', async () => {
+    const updater = new FakeUpdater();
+    updater.checkForUpdates
+      .mockRejectedValueOnce(new Error('net::ERR_CONNECTION_TIMED_OUT'))
+      .mockRejectedValueOnce(new Error('net::ERR_CONNECTION_RESET'));
+    const dialog = createDialog();
+    const controller = createUpdateController({ updater, dialog, logError: vi.fn() });
+
+    await controller.checkManually();
+
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(2);
+    expect(dialog.showErrorBox).toHaveBeenCalledTimes(1);
+    expect(dialog.showErrorBox).toHaveBeenCalledWith(
+      '检查更新失败',
+      '连接更新服务器超时或被中断，请稍后重试。'
+    );
+  });
+
+  it('does not retry generic check failures', async () => {
+    const updater = new FakeUpdater();
+    updater.checkForUpdates.mockRejectedValueOnce(new Error('offline'));
+    const dialog = createDialog();
+    const setProxyMode = vi.fn(async () => undefined);
+    const controller = createUpdateController({
+      updater,
+      dialog,
+      network: { setProxyMode },
+      logError: vi.fn()
+    });
+
+    await controller.checkManually();
+
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(1);
+    expect(setProxyMode).toHaveBeenCalledTimes(1);
+    expect(setProxyMode).toHaveBeenCalledWith('system');
+    expect(dialog.showErrorBox).toHaveBeenCalledTimes(1);
   });
 });
 

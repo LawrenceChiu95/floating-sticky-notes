@@ -295,6 +295,6 @@ function sanitizeText(value: string, homeDirectory?: string): string {
     .replace(/((?:staging\s+)?user\s+id\s*[:=]\s*)[0-9a-f-]{16,}/gi, '$1<redacted>')
     .replace(/(Generated new staging user ID:\s*)[0-9a-f-]{16,}/gi, '$1<redacted>')
     .replace(/file:\/\/\/[A-Za-z]:\/[^\s"']+/gi, '<local-path>')
-    .replace(/[A-Za-z]:[\\/](?:[^\s"']+[\\/])*[^\s"']*/g, '<local-path>')
+    .replace(/(?<![A-Za-z])[A-Za-z]:[\\/](?:[^\s"']+[\\/])*[^\s"']*/g, '<local-path>')
     .slice(0, MAX_LOG_VALUE_LENGTH);
 }
