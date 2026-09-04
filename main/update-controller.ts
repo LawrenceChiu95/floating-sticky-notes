@@ -1,4 +1,8 @@
-import { describeUpdateFailure } from '../shared/update-error';
+import {
+  describeUpdateFailure,
+  planUpdateCheckRetry,
+  type UpdateNetwork
+} from '../shared/update-error';
 import { createSafeDiagnosticRecorder, type DiagnosticRecorder } from './diagnostics';
 import type { UpdateProgressPresenter } from './update-progress-window';
 
@@ -51,6 +55,7 @@ type UpdateControllerOptions = {
   dialog: UpdateDialog;
   progress?: UpdateProgressPresenter;
   diagnostics?: DiagnosticRecorder;
+  network?: UpdateNetwork;
   beforeInstall?: () => Promise<void>;
   logError?: (message: string, error: unknown) => void;
 };
@@ -72,6 +77,7 @@ type UpdateOperation = {
   failureHandled: boolean;
   checkPending: boolean;
   downloadPending: boolean;
+  checkAttempt: number;
   version?: string;
 };
 
@@ -369,6 +375,13 @@ export function createUpdateController(options: UpdateControllerOptions): Update
 
   options.updater.on('error', (error) => {
     recordUpdaterEvent('error', { error });
+    if (
+      phase === 'checking' &&
+      currentOperation?.checkPending &&
+      planUpdateCheckRetry(error, currentOperation.checkAttempt) !== 'none'
+    ) {
+      return;
+    }
     finishFailure(error, currentOperation?.id);
   });
 
@@ -432,7 +445,8 @@ export function createUpdateController(options: UpdateControllerOptions): Update
       manual: isManual,
       failureHandled: false,
       checkPending: true,
-      downloadPending: false
+      downloadPending: false,
+      checkAttempt: 0
     };
     const operationId = currentOperation.id;
     setPhase('checking', operationId);
@@ -440,13 +454,73 @@ export function createUpdateController(options: UpdateControllerOptions): Update
       operationId,
       source: isManual ? 'manual' : 'startup'
     });
+    if (options.network) {
+      try {
+        await options.network.setProxyMode('system');
+      } catch (proxyError) {
+        recordDiagnostic('update_proxy_mode_failed', {
+          operationId,
+          error: proxyError
+        });
+      }
+    }
     try {
-      const result = await options.updater.checkForUpdates();
-      const latestVersion = (result as { updateInfo?: UpdateInfo } | undefined)?.updateInfo?.version;
-      recordDiagnostic('update_check_resolved', { operationId, latestVersion });
-    } catch (error) {
-      recordDiagnostic('update_check_rejected', { operationId, error });
-      finishFailure(error, operationId);
+      for (;;) {
+        const activeOperation: UpdateOperation | undefined = currentOperation;
+        if (!activeOperation || activeOperation.id !== operationId) {
+          break;
+        }
+        try {
+          const result = await options.updater.checkForUpdates();
+          const latestVersion = (result as { updateInfo?: UpdateInfo } | undefined)?.updateInfo
+            ?.version;
+          recordDiagnostic('update_check_resolved', {
+            operationId,
+            latestVersion,
+            attempt: activeOperation.checkAttempt
+          });
+          break;
+        } catch (error) {
+          recordDiagnostic('update_check_rejected', {
+            operationId,
+            error,
+            attempt: activeOperation.checkAttempt
+          });
+          const retryAction = planUpdateCheckRetry(error, activeOperation.checkAttempt);
+          if (retryAction === 'none' || disposed || currentOperation?.id !== operationId) {
+            finishFailure(error, operationId);
+            break;
+          }
+
+          if (retryAction === 'retry-direct') {
+            if (!options.network) {
+              finishFailure(error, operationId);
+              break;
+            }
+            try {
+              await options.network.setProxyMode('direct');
+              recordDiagnostic('update_proxy_mode_changed', {
+                operationId,
+                mode: 'direct'
+              });
+            } catch (proxyError) {
+              recordDiagnostic('update_proxy_mode_failed', {
+                operationId,
+                error: proxyError
+              });
+              finishFailure(error, operationId);
+              break;
+            }
+          }
+
+          activeOperation.checkAttempt += 1;
+          recordDiagnostic('update_check_retry', {
+            operationId,
+            action: retryAction,
+            attempt: activeOperation.checkAttempt
+          });
+        }
+      }
     } finally {
       settleOperationPromise(operationId, 'check');
     }

@@ -142,20 +142,74 @@ describe('macOS manual update controller', () => {
     );
   });
 
+  it('retries a timed-out Mac check once', async () => {
+    const service = createService({ ...newerUpdate, version: '0.1.9' });
+    vi.mocked(service.getLatest)
+      .mockRejectedValueOnce(new Error('net::ERR_CONNECTION_TIMED_OUT'))
+      .mockResolvedValueOnce({ ...newerUpdate, version: '0.1.9' });
+    const dialog = createDialog();
+    const setProxyMode = vi.fn(async () => undefined);
+    const controller = createMacUpdateController({
+      currentVersion: '0.1.9',
+      dialog,
+      service,
+      network: { setProxyMode },
+      logError: vi.fn()
+    });
+
+    await controller.checkManually();
+
+    expect(service.getLatest).toHaveBeenCalledTimes(2);
+    expect(setProxyMode).toHaveBeenCalledTimes(1);
+    expect(setProxyMode).toHaveBeenCalledWith('system');
+    expect(dialog.showErrorBox).not.toHaveBeenCalled();
+    expect(dialog.showMessageBox).toHaveBeenCalledWith(
+      expect.objectContaining({ message: '已经是最新版本' })
+    );
+  });
+
+  it('retries a Mac proxy failure over a direct connection', async () => {
+    const service = createService({ ...newerUpdate, version: '0.1.9' });
+    vi.mocked(service.getLatest)
+      .mockRejectedValueOnce(new Error('net::ERR_PROXY_CONNECTION_FAILED'))
+      .mockResolvedValueOnce({ ...newerUpdate, version: '0.1.9' });
+    const dialog = createDialog();
+    const setProxyMode = vi.fn(async () => undefined);
+    const controller = createMacUpdateController({
+      currentVersion: '0.1.9',
+      dialog,
+      service,
+      network: { setProxyMode },
+      logError: vi.fn()
+    });
+
+    await controller.checkManually();
+
+    expect(setProxyMode).toHaveBeenNthCalledWith(1, 'system');
+    expect(setProxyMode).toHaveBeenNthCalledWith(2, 'direct');
+    expect(service.getLatest).toHaveBeenCalledTimes(2);
+    expect(dialog.showErrorBox).not.toHaveBeenCalled();
+  });
+
   it('explains proxy failures on a manual Mac check', async () => {
     const service = createService();
     vi.mocked(service.getLatest).mockRejectedValue(
       new Error('net::ERR_PROXY_CONNECTION_FAILED')
     );
     const dialog = createDialog();
+    const setProxyMode = vi.fn(async () => undefined);
     const controller = createMacUpdateController({
       currentVersion: '0.1.9',
       dialog,
       service,
+      network: { setProxyMode },
       logError: vi.fn()
     });
 
     await controller.checkManually();
+    expect(setProxyMode).toHaveBeenNthCalledWith(1, 'system');
+    expect(setProxyMode).toHaveBeenNthCalledWith(2, 'direct');
+    expect(service.getLatest).toHaveBeenCalledTimes(2);
     expect(dialog.showErrorBox).toHaveBeenCalledWith(
       '检查更新失败',
       '当前网络代理或 VPN 连不上更新服务器。请关闭失效的代理/VPN，或换一个网络后再试。'

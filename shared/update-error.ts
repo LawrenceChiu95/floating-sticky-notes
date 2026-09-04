@@ -1,5 +1,11 @@
 export type UpdateFailurePhase = 'check' | 'download' | 'install';
 export type UpdateNetworkFailureKind = 'proxy' | 'timeout' | 'generic';
+export type UpdateCheckRetryAction = 'none' | 'retry' | 'retry-direct';
+export type UpdateProxyMode = 'system' | 'direct';
+
+export type UpdateNetwork = {
+  setProxyMode: (mode: UpdateProxyMode) => Promise<void>;
+};
 
 const PROXY_PATTERN =
   /PROXY_CONNECTION_FAILED|TUNNEL_CONNECTION_FAILED|ERR_PROXY|ERR_TUNNEL|\bproxy\b|\btunnel\b/i;
@@ -15,6 +21,24 @@ export function classifyUpdateNetworkError(error: unknown): UpdateNetworkFailure
     return 'timeout';
   }
   return 'generic';
+}
+
+export function planUpdateCheckRetry(
+  error: unknown,
+  attempt: number
+): UpdateCheckRetryAction {
+  if (attempt > 0) {
+    return 'none';
+  }
+
+  const kind = classifyUpdateNetworkError(error);
+  if (kind === 'proxy') {
+    return 'retry-direct';
+  }
+  if (kind === 'timeout') {
+    return 'retry';
+  }
+  return 'none';
 }
 
 export function describeUpdateFailure(

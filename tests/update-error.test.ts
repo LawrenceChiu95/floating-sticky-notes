@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   classifyUpdateNetworkError,
-  describeUpdateFailure
+  describeUpdateFailure,
+  planUpdateCheckRetry
 } from '../shared/update-error';
 
 describe('update failure copy', () => {
@@ -19,6 +20,17 @@ describe('update failure copy', () => {
       classifyUpdateNetworkError(new Error('net::ERR_CONNECTION_RESET'))
     ).toBe('timeout');
     expect(classifyUpdateNetworkError(new Error('offline'))).toBe('generic');
+  });
+
+  it('retries a first proxy failure over a direct connection and a first timeout once', () => {
+    expect(planUpdateCheckRetry(new Error('net::ERR_PROXY_CONNECTION_FAILED'), 0)).toBe(
+      'retry-direct'
+    );
+    expect(planUpdateCheckRetry(new Error('net::ERR_CONNECTION_TIMED_OUT'), 0)).toBe('retry');
+    expect(planUpdateCheckRetry(new Error('net::ERR_CONNECTION_RESET'), 0)).toBe('retry');
+    expect(planUpdateCheckRetry(new Error('offline'), 0)).toBe('none');
+    expect(planUpdateCheckRetry(new Error('net::ERR_CONNECTION_TIMED_OUT'), 1)).toBe('none');
+    expect(planUpdateCheckRetry(new Error('net::ERR_TUNNEL_CONNECTION_FAILED'), 1)).toBe('none');
   });
 
   it('keeps install copy independent of network errors', () => {

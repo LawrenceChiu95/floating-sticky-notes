@@ -58,7 +58,7 @@ GitHub provider 会关闭不兼容的多段 Range 请求，但保留单段 Range
 
 构建脚本根据 `package.json` 的版本号自动选择通道：`0.1.13-rc.1` 生成 `rc.yml`，正式版本生成 `latest.yml`。RC 验证使用两个连续的预发布版本验证差分下载，不依赖额外环境变量；正式构建继续使用 `latest`。
 
-应用启动后静默检查一次更新；用户也可以从托盘手动检查。发现新版本后，下载和重启安装都需要用户确认；执行 `quitAndInstall` 前会先保存便签数据。
+应用启动后静默检查一次更新；用户也可以从托盘手动检查。检查阶段对代理/隧道失败会改走 updater 专用 session 的直连再试一次，对超时或连接重置会按原网络再试一次；通用错误不重试，下载和安装阶段也不自动重试。直连只作用于本次进程的更新 session，下次启动仍跟随系统代理。发现新版本后，下载和重启安装都需要用户确认；执行 `quitAndInstall` 前会先保存便签数据。
 
 用户确认下载后，更新控制器通过窄 presenter 接口驱动独立的进度窗口。该窗口使用自己的 preload 和 renderer，只能接收只读进度快照，不具备便签读写 IPC 权限。控制器按 operation ID 和显式阶段接受 `download-progress`、`update-downloaded` 与错误事件，忽略迟到或重复事件；详细设计见 [`docs/design/windows-update-progress.md`](design/windows-update-progress.md)。
 
@@ -82,7 +82,7 @@ Windows 关闭全部便签窗口后仍由系统托盘常驻。只有托盘“退
 
 只有 `process.platform === 'darwin'` 且 `app.isPackaged === true` 时，才启用 Mac 半自动更新。Mac 不调用 `electron-updater` 的 `quitAndInstall`，而是读取同一更新源中的 `latest-mac.yml`，并只接受符合 `StickyNotes-Mac-<version>.dmg` 格式的安装镜像。
 
-应用启动后静默检查，托盘也可以手动检查。用户确认下载后，主进程把 DMG 流式写入“下载”文件夹，并校验元数据声明的文件大小和 SHA-512；校验通过后才会询问是否保存便签、打开安装镜像并退出。Mac 构建对完整 app bundle 使用 ad-hoc 签名和 hardened runtime，构建脚本会执行严格签名校验；由于它没有 Apple Developer ID 且未经过公证，Gatekeeper 不会直接信任，用户仍需把应用拖到 Applications，并在“系统设置 → 隐私与安全性”中选择“仍要打开”。
+应用启动后静默检查，托盘也可以手动检查。检查阶段与 Windows 共用同一套重试规则：代理/隧道失败改走独立更新 session 的直连再试一次，超时或连接重置再试一次。用户确认下载后，主进程把 DMG 流式写入“下载”文件夹，并校验元数据声明的文件大小和 SHA-512；校验通过后才会询问是否保存便签、打开安装镜像并退出。Mac 构建对完整 app bundle 使用 ad-hoc 签名和 hardened runtime，构建脚本会执行严格签名校验；由于它没有 Apple Developer ID 且未经过公证，Gatekeeper 不会直接信任，用户仍需把应用拖到 Applications，并在“系统设置 → 隐私与安全性”中选择“仍要打开”。
 
 ## 版本更新反馈
 

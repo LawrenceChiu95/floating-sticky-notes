@@ -19,6 +19,7 @@ describe('auto-update main-process wiring', () => {
     expect(mainSource).toContain('updater.logger = diagnosticLogger');
     expect(mainSource).toContain('attachUpdaterRequestDiagnostics(');
     expect(mainSource).toContain('diagnostics: diagnosticLogger');
+    expect(mainSource).toContain('network: createUpdateNetwork(updater.netSession)');
     expect(mainSource).not.toContain('showUpdateLog: () =>');
   });
 
@@ -44,7 +45,9 @@ describe('auto-update main-process wiring', () => {
     expect(mainSource).toContain('currentVersion: app.getVersion()');
     expect(mainSource).toContain('diagnostics: diagnosticLogger');
     expect(mainSource).toContain('mac_update_error');
-    expect(mainSource).toContain('fetch: (input, init) => net.fetch(input, init)');
+    expect(mainSource).toContain("session.fromPartition('sticky-notes-mac-updater'");
+    expect(mainSource).toContain('fetch: (input, init) => macUpdateSession.fetch(input, init)');
+    expect(mainSource).toContain('network: createUpdateNetwork(macUpdateSession)');
     expect(mainSource).toContain('openPath: (filePath) => shell.openPath(filePath)');
     expect(mainSource).toContain('window.setProgressBar(progress)');
   });

@@ -1,4 +1,14 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, net, protocol, screen, shell } from 'electron';
+import {
+  app,
+  BrowserWindow,
+  clipboard,
+  dialog,
+  ipcMain,
+  protocol,
+  screen,
+  session,
+  shell
+} from 'electron';
 import { release as getOsRelease, arch as getOsArch, homedir } from 'node:os';
 import { is } from '@electron-toolkit/utils';
 import electronUpdater from 'electron-updater';
@@ -41,6 +51,7 @@ import {
   shouldEnableMacManualUpdates
 } from './mac-update-controller';
 import { createMacUpdateService } from './mac-update-service';
+import { createUpdateNetwork } from './update-network';
 import { type ManagedNoteWindow, NotesManager } from './notes-manager';
 import { preventNoteWindowNavigation } from './navigation-guard';
 import type { NoteRecord, NoteBounds } from './note-state';
@@ -2405,19 +2416,24 @@ function createPlatformUpdateController(): PlatformUpdateController | undefined 
       beforeInstall,
       progress,
       diagnostics: diagnosticLogger,
+      network: createUpdateNetwork(updater.netSession),
       logError: createDiagnosticMessageLogger('windows_update_error')
     });
   }
 
   if (shouldEnableMacManualUpdates(process.platform, app.isPackaged)) {
+    const macUpdateSession = session.fromPartition('sticky-notes-mac-updater', {
+      cache: false
+    });
     return createMacUpdateController({
       currentVersion: app.getVersion(),
       dialog,
       service: createMacUpdateService({
         downloadsPath: app.getPath('downloads'),
-        fetch: (input, init) => net.fetch(input, init),
+        fetch: (input, init) => macUpdateSession.fetch(input, init),
         openPath: (filePath) => shell.openPath(filePath)
       }),
+      network: createUpdateNetwork(macUpdateSession),
       beforeInstall,
       diagnostics: diagnosticLogger,
       logError: createDiagnosticMessageLogger('mac_update_error'),
