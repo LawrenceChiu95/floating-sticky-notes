@@ -170,7 +170,7 @@ describe('release notes build extraction', () => {
     );
 
     const archive = extractReleaseNotesArchive?.(repositoryChangelog, packageJson.version);
-    // 当前正式版本对应的档案末章就是 0.1.19。
+    // 当前正式版本对应的档案末章就是 0.1.20。
     expect(archive?.releases.at(-1)?.version).toBe(
       getStableReleaseVersion?.(packageJson.version)
     );

@@ -4,6 +4,8 @@
 
 ## [未发布]
 
+## [0.1.20] - 2026-09-04
+
 ### 变更
 
 - 两块屏幕中间那条缝也可以把收起的横条贴上去。探出和缩回跟外缘同一套原生滑行。不松手继续拖，仍然能拖到另一块屏。
@@ -209,7 +211,8 @@
 - 提供待办清单、图片、颜色和透明度等核心功能。
 - 开始接入系统托盘与开机启动能力。
 
-[未发布]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.19...HEAD
+[未发布]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.20...HEAD
+[0.1.20]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.19...v0.1.20
 [0.1.19]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.18...v0.1.19
 [0.1.18]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.17...v0.1.18
 [0.1.17]: https://github.com/LawrenceChiu95/floating-sticky-notes/compare/v0.1.16...v0.1.17
