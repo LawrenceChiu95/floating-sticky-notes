@@ -59,21 +59,97 @@ describe('sticky note collapse wiring', () => {
     expect(revealExpandedIndex).toBeGreaterThan(nativeExpandIndex);
     expect(revealExpandedIndex).toBeGreaterThan(viewportWaitIndex);
     expect(appSource).toContain('window.innerHeight > NOTE_COLLAPSED_HEIGHT');
+    expect(appSource).toContain('setTimeout(handleResize, NOTE_VIEWPORT_RESIZE_FALLBACK_MS)');
+    expect(appSource).not.toContain('setTimeout(finish, NOTE_VIEWPORT_RESIZE_FALLBACK_MS)');
   });
 
   it('restores the shared content scroll position after the expanded viewport returns', () => {
     const captureIndex = appSource.indexOf(
       'collapsedScrollTopRef.current = noteContentRef.current?.scrollTop ?? 0;'
     );
-    const viewportWaitIndex = appSource.indexOf('await waitForExpandedViewport();');
-    const restoreIndex = appSource.indexOf('noteContentRef.current.scrollTop = scrollTop;');
-    const clearIndex = appSource.indexOf('collapsedScrollTopRef.current = undefined;');
+    const helperSource = appSource.slice(
+      appSource.indexOf('const restoreCollapsedScrollTop = (): void => {'),
+      appSource.indexOf('const captureCollapsedScrollTop')
+    );
+    const collapseHandlerIndex = appSource.indexOf('const handleCollapsedChange');
+    const collapseViewportWaitIndex = appSource.indexOf(
+      'await waitForExpandedViewport();',
+      collapseHandlerIndex
+    );
+    const collapseRestoreIndex = appSource.indexOf(
+      'restoreCollapsedScrollTop();',
+      collapseHandlerIndex
+    );
+    const missingContentGuardIndex = helperSource.indexOf(
+      'if (scrollTop === undefined || !noteContent)'
+    );
+    const collapsedViewportGuardIndex = helperSource.indexOf(
+      'window.innerHeight <= NOTE_COLLAPSED_HEIGHT'
+    );
+    const restoreWriteIndex = helperSource.indexOf('noteContent.scrollTop = scrollTop;');
+    const keepClampedIndex = helperSource.indexOf(
+      'if (scrollTop === 0 || noteContent.scrollTop > 0)'
+    );
+    const keepClampedBlock = helperSource.slice(keepClampedIndex, helperSource.indexOf('};', keepClampedIndex));
+    const clearBeforeKeep = helperSource.slice(0, keepClampedIndex);
+    const clearIndex = keepClampedBlock.indexOf('collapsedScrollTopRef.current = undefined;');
 
     expect(appSource).toContain('ref={noteContentRef}');
     expect(captureIndex).toBeGreaterThan(-1);
     expect(captureIndex).toBeLessThan(appSource.indexOf('setIsCollapseTransitioning(true);'));
-    expect(restoreIndex).toBeGreaterThan(viewportWaitIndex);
-    expect(clearIndex).toBeGreaterThan(restoreIndex);
+    expect(missingContentGuardIndex).toBeGreaterThan(-1);
+    expect(collapsedViewportGuardIndex).toBeGreaterThan(missingContentGuardIndex);
+    expect(restoreWriteIndex).toBeGreaterThan(collapsedViewportGuardIndex);
+    expect(keepClampedIndex).toBeGreaterThan(restoreWriteIndex);
+    expect(clearBeforeKeep).not.toContain('collapsedScrollTopRef.current = undefined;');
+    expect(clearIndex).toBeGreaterThan(-1);
+    expect(keepClampedBlock).toMatch(
+      /if \(scrollTop === 0 \|\| noteContent\.scrollTop > 0\) \{\s*collapsedScrollTopRef\.current = undefined;\s*\}/s
+    );
+    expect(collapseHandlerIndex).toBeGreaterThan(-1);
+    expect(collapseViewportWaitIndex).toBeGreaterThan(collapseHandlerIndex);
+    expect(collapseRestoreIndex).toBeGreaterThan(collapseViewportWaitIndex);
+  });
+
+  it('restores the shared content scroll position after a docked note expands', () => {
+    // 贴边只能从收起横条进去：收起时已经记下 scrollTop。拖出展开重挂正文后
+    // 必须等窗口长开再写回，不能在 flushSync 里趁书签头尺寸把值夹成 0。
+    const startExpandSource = appSource.slice(
+      appSource.indexOf('const startDockExpandReveal'),
+      appSource.indexOf('const prepareDockExpandReveal')
+    );
+    const prepareExpandSource = appSource.slice(
+      appSource.indexOf('const prepareDockExpandReveal'),
+      appSource.indexOf('const runPendingDockExpandReveal')
+    );
+    const revealSource = appSource.slice(
+      appSource.indexOf('const beginExpandHoldReveal'),
+      appSource.indexOf('const pinExpandClipToBookmark')
+    );
+    const shrinkSource = appSource.slice(
+      appSource.indexOf('const startDockShrinkToBookmark'),
+      appSource.indexOf('// 恢复性聚焦守卫')
+    );
+
+    const startWaitIndex = startExpandSource.indexOf('await waitForExpandedViewport();');
+    const startFrameIndex = startExpandSource.indexOf('await waitForAnimationFrame();');
+    const startRestoreIndex = startExpandSource.indexOf('restoreCollapsedScrollTop();');
+    const prepareWaitIndex = prepareExpandSource.indexOf('await waitForExpandedViewport();');
+    const prepareFrameIndex = prepareExpandSource.indexOf('await waitForAnimationFrame();');
+    const prepareRestoreIndex = prepareExpandSource.indexOf('restoreCollapsedScrollTop();');
+
+    expect(startWaitIndex).toBeGreaterThan(-1);
+    expect(startFrameIndex).toBeGreaterThan(startWaitIndex);
+    expect(startRestoreIndex).toBeGreaterThan(startFrameIndex);
+    expect(prepareWaitIndex).toBeGreaterThan(-1);
+    expect(prepareFrameIndex).toBeGreaterThan(prepareWaitIndex);
+    const revealRestoreIndex = revealSource.indexOf('restoreCollapsedScrollTop();');
+    const revealClipIndex = revealSource.indexOf('runExpandClipReveal');
+    expect(prepareRestoreIndex).toBeGreaterThan(prepareFrameIndex);
+    expect(revealRestoreIndex).toBeGreaterThan(-1);
+    expect(revealClipIndex).toBeGreaterThan(revealRestoreIndex);
+    expect(shrinkSource).toContain('captureCollapsedScrollTop();');
+    expect(shrinkSource).not.toContain('?? 0');
   });
 
   it('animates the visible shell instead of the BrowserWindow viewport', () => {
@@ -350,6 +426,7 @@ describe('sticky note collapse wiring', () => {
     expect(handlerIndex).toBeGreaterThan(-1);
     const restoreIndex = appSource.indexOf('setShouldRenderContent(true);', handlerIndex);
     expect(restoreIndex).toBeGreaterThan(handlerIndex);
+    expect(appSource).toContain('restoreCollapsedScrollTop();');
   });
 
   it('renders the docked state as a bookmark tab without note chrome', () => {

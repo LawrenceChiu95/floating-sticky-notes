@@ -216,6 +216,27 @@ function App(): JSX.Element {
   const noteInputRef = useRef<HTMLTextAreaElement | null>(null);
   const noteContentRef = useRef<HTMLDivElement | null>(null);
   const collapsedScrollTopRef = useRef<number>();
+  const restoreCollapsedScrollTop = (): void => {
+    const scrollTop = collapsedScrollTopRef.current;
+    const noteContent = noteContentRef.current;
+    if (scrollTop === undefined || !noteContent) {
+      return;
+    }
+    if (window.innerHeight <= NOTE_COLLAPSED_HEIGHT) {
+      return;
+    }
+    noteContent.scrollTop = scrollTop;
+    // 视口已长开但正文还没撑开时，赋值会被夹成 0；这时必须留着记下的位置。
+    if (scrollTop === 0 || noteContent.scrollTop > 0) {
+      collapsedScrollTopRef.current = undefined;
+    }
+  };
+  const captureCollapsedScrollTop = (): void => {
+    const noteContent = noteContentRef.current;
+    if (noteContent) {
+      collapsedScrollTopRef.current = noteContent.scrollTop;
+    }
+  };
   const checklistInputRefs = useRef(new Map<string, HTMLTextAreaElement>());
   const pendingFocusRestoreRef = useRef<ChecklistFocusTarget>();
   const lastEditingTargetRef = useRef<{ type: 'note' } | { type: 'checklist'; itemId: string }>({
@@ -258,6 +279,8 @@ function App(): JSX.Element {
       if (generation !== dockRevealGenerationRef.current) {
         return;
       }
+      await waitForAnimationFrame();
+      restoreCollapsedScrollTop();
       const shell = noteShellRef.current;
       if (!shell) {
         setDockExpandHold(null);
@@ -279,6 +302,8 @@ function App(): JSX.Element {
       if (generation !== dockRevealGenerationRef.current) {
         return;
       }
+      await waitForAnimationFrame();
+      restoreCollapsedScrollTop();
       const shell = noteShellRef.current;
       if (!shell) {
         setDockExpandHold(null);
@@ -318,6 +343,7 @@ function App(): JSX.Element {
   };
 
   const beginExpandHoldReveal = (fromClip: string, generation: number): void => {
+    restoreCollapsedScrollTop();
     flushSync(() => {
       setDockExpandHold((previous) =>
         previous ? { ...previous, phase: 'reveal' } : previous
@@ -527,6 +553,7 @@ function App(): JSX.Element {
       phase: 'preparing'
     };
     activeDockShrinkTransactionRef.current = transaction;
+    captureCollapsedScrollTop();
     const sourceScreenPoint = { x: window.screenX, y: window.screenY };
     const unionScreenPoint = {
       x: sourceScreenPoint.x - payload.strip.x,
@@ -1564,11 +1591,7 @@ function App(): JSX.Element {
           const visualTransition = waitForHeightTransition(noteShellRef.current);
           setIsCollapsed(false);
           await waitForAnimationFrame();
-          const scrollTop = collapsedScrollTopRef.current;
-          if (scrollTop !== undefined && noteContentRef.current) {
-            noteContentRef.current.scrollTop = scrollTop;
-            collapsedScrollTopRef.current = undefined;
-          }
+          restoreCollapsedScrollTop();
           await visualTransition;
         }
         setStatusMessage('');
@@ -2261,7 +2284,11 @@ function waitForExpandedViewport(): Promise<void> {
     };
 
     window.addEventListener('resize', handleResize);
-    fallbackTimer = setTimeout(finish, NOTE_VIEWPORT_RESIZE_FALLBACK_MS);
+    // 超时不能冒充成功：视口仍是书签头高度时写回 scrollTop 会被夹成 0。
+    // 错过 resize 事件但高度已经长开时，到期再读一次 innerHeight。
+    // 高度一直不长开就让 promise 挂起（fail-closed）：贴边展开走现成 ACK
+    // 超时；普通展开会停在 isCollapseTransitioning，等下次 resize 再续。
+    fallbackTimer = setTimeout(handleResize, NOTE_VIEWPORT_RESIZE_FALLBACK_MS);
     handleResize();
   });
 }
