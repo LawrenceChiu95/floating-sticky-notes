@@ -14,7 +14,9 @@ import {
   buildExpandBoundsFromDock,
   offsetDockYToAvoidOverlap,
   restoreDockedBounds,
-  resolveDockShrinkDelta
+  resolveDockShrinkDelta,
+  isSharedEdgeDock,
+  visibleDockHitRect
 } from '../shared/note-dock';
 
 const workArea = { x: 0, y: 25, width: 1440, height: 875 };
@@ -75,8 +77,8 @@ describe('note dock geometry', () => {
     ).toBe('left');
   });
 
-  it('does not snap when the overhang lands on a neighbor display', () => {
-    // 多屏共边：横条「探出左缘」其实是拖进了左边那块屏，不是推向屏幕边缘。
+  it('snaps on a shared edge even when the overhang lands on a neighbor display', () => {
+    // 多屏共边：探出落在邻屏仍贴本屏这条边；不松手继续拖才能进邻屏。
     const leftNeighbor = { x: -1440, y: 0, width: 1440, height: 900 };
     expect(
       resolveCollapsedDockSide(
@@ -84,13 +86,25 @@ describe('note dock geometry', () => {
         workArea,
         [leftNeighbor]
       )
-    ).toBeUndefined();
-    // 右缘没有邻屏，照常吸附。
+    ).toBe('left');
     expect(
       resolveCollapsedDockSide(
         { x: 1168, y: 80, width: 280, height: 40 },
         workArea,
         [leftNeighbor]
+      )
+    ).toBe('right');
+  });
+
+  it('still snaps on a shared edge if the cursor has already crossed onto the neighbor', () => {
+    // 往共边推时节光标往往会先一步进邻屏；横条已探出 8px 仍算贴本屏。
+    const rightNeighbor = { x: 1440, y: 0, width: 1440, height: 900 };
+    expect(
+      resolveCollapsedDockSide(
+        { x: 1168, y: 80, width: 280, height: 40 },
+        workArea,
+        [rightNeighbor],
+        { x: 1440, y: 100 }
       )
     ).toBe('right');
   });
@@ -250,9 +264,8 @@ describe('note dock geometry', () => {
     });
   });
 
-  it('keeps the tab fully visible when the hidden half would leak onto a neighbor display', () => {
-    // 多屏共边：左贴边的隐藏半幅会落进左边那块屏的工作区——窗口收成只有
-    // 可见头那么宽、完整贴在屏内，不留透明死区。
+  it('keeps shared-edge rest on the same half-hidden pose as an outer edge', () => {
+    // 共边休息/露出与外缘同一套原生滑行；邻屏那半靠 DOM clip。
     const leftNeighbor = { x: -1440, y: 0, width: 1440, height: 900 };
     expect(
       buildDockedBounds({
@@ -262,9 +275,9 @@ describe('note dock geometry', () => {
         neighborWorkAreas: [leftNeighbor]
       })
     ).toEqual({
-      x: 0,
+      x: -NOTE_DOCK_HIDDEN_PX,
       y: 80,
-      width: NOTE_DOCK_VISIBLE_PX,
+      width: NOTE_DOCK_WIDTH,
       height: NOTE_DOCK_HEIGHT
     });
     // 相邻屏在左边不影响右贴边半藏。
@@ -274,6 +287,20 @@ describe('note dock geometry', () => {
         y: 80,
         workArea,
         neighborWorkAreas: [leftNeighbor]
+      })
+    ).toEqual({
+      x: 1440 - NOTE_DOCK_WIDTH + NOTE_DOCK_HIDDEN_PX,
+      y: 80,
+      width: NOTE_DOCK_WIDTH,
+      height: NOTE_DOCK_HEIGHT
+    });
+    const rightNeighbor = { x: 1440, y: 0, width: 1440, height: 900 };
+    expect(
+      buildDockedBounds({
+        side: 'right',
+        y: 80,
+        workArea,
+        neighborWorkAreas: [rightNeighbor]
       })
     ).toEqual({
       x: 1440 - NOTE_DOCK_WIDTH + NOTE_DOCK_HIDDEN_PX,
@@ -292,9 +319,59 @@ describe('note dock geometry', () => {
     ).toBe(-NOTE_DOCK_HIDDEN_PX);
   });
 
+  it('does not treat a vertically offset display as a shared edge', () => {
+    // 外缘半藏 x 可能碰巧等于另一块竖向错开屏的左缘；必须用隐藏半幅是否相交。
+    const belowOffset = { x: -NOTE_DOCK_HIDDEN_PX, y: 900, width: 1440, height: 900 };
+    expect(
+      isSharedEdgeDock({
+        side: 'left',
+        y: 80,
+        workArea: { x: 0, y: 0, width: 1440, height: 900 },
+        neighborWorkAreas: [belowOffset]
+      })
+    ).toBe(false);
+    expect(
+      isSharedEdgeDock({
+        side: 'left',
+        y: 80,
+        workArea,
+        neighborWorkAreas: [{ x: -1440, y: 0, width: 1440, height: 900 }]
+      })
+    ).toBe(true);
+  });
+
+  it('hit-tests only the on-screen half while the tab is tucked', () => {
+    const rest = {
+      x: -NOTE_DOCK_HIDDEN_PX,
+      y: 80,
+      width: NOTE_DOCK_WIDTH,
+      height: NOTE_DOCK_HEIGHT
+    };
+    expect(
+      visibleDockHitRect({
+        side: 'left',
+        bounds: rest,
+        workArea: { x: 0, y: 0, width: 1440, height: 900 },
+        revealed: false
+      })
+    ).toEqual({
+      x: 0,
+      y: 80,
+      width: NOTE_DOCK_VISIBLE_PX,
+      height: NOTE_DOCK_HEIGHT
+    });
+    expect(
+      visibleDockHitRect({
+        side: 'left',
+        bounds: rest,
+        workArea: { x: 0, y: 0, width: 1440, height: 900 },
+        revealed: true
+      })
+    ).toEqual(rest);
+  });
+
   it('reveals the full tab flush against the screen edge on hover peek', () => {
-    // 悬停探头：整条 96px 滑进屏内贴在边缘，没有隐藏半幅，也就不触发
-    // 邻屏漏出守卫。
+    // 悬停探头：整条 96px 滑进屏内贴在边缘。
     const leftNeighbor = { x: -1440, y: 0, width: 1440, height: 900 };
     expect(buildDockedBounds({ side: 'left', y: 80, workArea, reveal: true })).toEqual({
       x: 0,
@@ -401,7 +478,7 @@ describe('note dock geometry', () => {
 
   it('restores onto the display the persisted x belongs to when two edges tie on y', () => {
     // 多屏同名边（每屏都有一条右边缘）y 距离打平：持久化的静止位 x 决定回
-    // 哪块屏。主屏右缘与副屏共边 → 回退 48px 全露；副屏右缘无邻居 → 半藏。
+    // 哪块屏。主屏右缘与副屏共边、副屏右缘无邻居，休息位都是 96×32 半藏。
     const mainArea = { x: 0, y: 0, width: 1440, height: 900 };
     const sideArea = { x: 1440, y: 0, width: 2560, height: 1440 };
     const workAreas = [mainArea, sideArea];
@@ -418,14 +495,14 @@ describe('note dock geometry', () => {
     ).toEqual({
       x: 1392,
       y: 400,
-      width: NOTE_DOCK_VISIBLE_PX,
+      width: NOTE_DOCK_WIDTH,
       height: NOTE_DOCK_HEIGHT
     });
     // 旧记录没有 x：候选 y 距离打平，退化为数组序优先（原行为），不会恢复失败。
     expect(restoreDockedBounds({ dock: { side: 'right', y: 400 }, workAreas })).toEqual({
       x: 1392,
       y: 400,
-      width: NOTE_DOCK_VISIBLE_PX,
+      width: NOTE_DOCK_WIDTH,
       height: NOTE_DOCK_HEIGHT
     });
   });

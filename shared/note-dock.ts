@@ -48,23 +48,13 @@ export function resolveCollapsedDockSide(
         ? 'right'
         : undefined;
   if (side) {
-    // 探出部分落在相邻显示器上 = 在跨屏拖动，不是推向真屏幕边缘，不吸附。
-    const overhang: Rect =
-      side === 'left'
-        ? { x: bar.x, y: bar.y, width: leftOverlap, height: bar.height }
-        : {
-            x: workArea.x + workArea.width,
-            y: bar.y,
-            width: rightOverlap,
-            height: bar.height
-          };
-    if (!neighborWorkAreas.some((area) => rectsIntersect(overhang, area))) {
-      return side;
-    }
+    // 共边也允许贴：探出落在邻屏 = 贴在本屏靠缝的那条边。休息/露出/滑行与外缘
+    // 完全相同；半藏那截会落到邻屏上，不再用 CSS 裁切以免搞坏运动。
+    return side;
   }
   // 快速甩边：原生拖动里 getBounds 滞后光标（真机 2026-09-01/02：松手瞬间
   // 横条还差几十到几百 px 才探出，光标已经顶在工作区边缘）。光标贴边视为
-  // 同一吸附意图；落在邻屏则仍是跨屏拖动，不吸。
+  // 同一吸附意图。横条还没探出 8px、光标却已落到邻屏 = 已经甩过去了，不吸。
   if (!cursor) {
     return undefined;
   }
@@ -133,7 +123,7 @@ export function buildDockedBounds(input: {
     input.workArea.y,
     input.workArea.y + input.workArea.height - NOTE_DOCK_HEIGHT
   );
-  // 悬停探头：整条 96px 滑进屏内贴在边缘，没有隐藏半幅，天然不漏邻屏。
+  // 悬停探头：整条 96px 滑进屏内。共边也走同一套半藏→滑出，不改窗口尺寸。
   if (input.reveal) {
     return {
       x:
@@ -145,8 +135,28 @@ export function buildDockedBounds(input: {
       height: NOTE_DOCK_HEIGHT
     };
   }
-  // 藏进屏外的那一半不能漏到相邻显示器上（多屏共边时会显示在旁边的屏里）；
-  // 会漏就把窗口收成只有可见头那么宽、完整贴在屏内，不留透明死区。
+  return {
+    x:
+      input.side === 'left'
+        ? input.workArea.x - NOTE_DOCK_HIDDEN_PX
+        : input.workArea.x + input.workArea.width - NOTE_DOCK_WIDTH + NOTE_DOCK_HIDDEN_PX,
+    y,
+    width: NOTE_DOCK_WIDTH,
+    height: NOTE_DOCK_HEIGHT
+  };
+}
+
+export function isSharedEdgeDock(input: {
+  side: DockSide;
+  y: number;
+  workArea: DisplayWorkArea;
+  neighborWorkAreas?: DisplayWorkArea[];
+}): boolean {
+  const y = clamp(
+    input.y,
+    input.workArea.y,
+    input.workArea.y + input.workArea.height - NOTE_DOCK_HEIGHT
+  );
   const hiddenRect: Rect = {
     x:
       input.side === 'left'
@@ -156,27 +166,30 @@ export function buildDockedBounds(input: {
     width: NOTE_DOCK_HIDDEN_PX,
     height: NOTE_DOCK_HEIGHT
   };
-  const leaksToNeighbor = (input.neighborWorkAreas ?? []).some((area) =>
-    rectsIntersect(hiddenRect, area)
-  );
-  if (leaksToNeighbor) {
+  return (input.neighborWorkAreas ?? []).some((area) => rectsIntersect(hiddenRect, area));
+}
+
+export function visibleDockHitRect(input: {
+  side: DockSide;
+  bounds: Rect;
+  workArea: DisplayWorkArea;
+  revealed: boolean;
+}): Rect {
+  if (input.revealed) {
+    return input.bounds;
+  }
+  if (input.side === 'left') {
     return {
-      x:
-        input.side === 'left'
-          ? input.workArea.x
-          : input.workArea.x + input.workArea.width - NOTE_DOCK_VISIBLE_PX,
-      y,
+      x: Math.max(input.bounds.x, input.workArea.x),
+      y: input.bounds.y,
       width: NOTE_DOCK_VISIBLE_PX,
       height: NOTE_DOCK_HEIGHT
     };
   }
   return {
-    x:
-      input.side === 'left'
-        ? input.workArea.x - NOTE_DOCK_HIDDEN_PX
-        : input.workArea.x + input.workArea.width - NOTE_DOCK_WIDTH + NOTE_DOCK_HIDDEN_PX,
-    y,
-    width: NOTE_DOCK_WIDTH,
+    x: input.workArea.x + input.workArea.width - NOTE_DOCK_VISIBLE_PX,
+    y: input.bounds.y,
+    width: NOTE_DOCK_VISIBLE_PX,
     height: NOTE_DOCK_HEIGHT
   };
 }
