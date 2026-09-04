@@ -47,6 +47,8 @@
 8. 在 Windows 上验证安装、启动、托盘、版本说明窗口和本地数据保留；在 Apple Silicon Mac 上验证 DMG、启动、托盘、版本说明窗口和本地数据保留。Mac 还必须使用从浏览器或聊天工具外部取得、带 quarantine 的最终 DMG 验证首次启动：系统可以因未公证而阻止直接打开，但提示不得再是“应用已损坏”；进入“系统设置 → 隐私与安全性”选择“仍要打开”后，应用必须正常启动。多版本测试数据应确认最新版本在最上方，每个功能点都有独立圆点；托盘手动入口只显示当前版本且不修改已读状态。Draft 资源不能通过 `releases/latest/download` 访问，因此这一阶段不能冒充线上更新闭环已经完成。
 9. 真机基础验证通过后发布 Draft，并明确将该 Release 标记为 GitHub 的 latest，然后最后上传：
 
+   GitHub API 的 `make_latest` 必须传字符串 `"true"`。布尔 `true` 会被忽略，`/releases/latest` 会继续指向旧版；上传 yml 前先确认 latest 已切到本版。
+
    ```text
    latest.yml
    latest-mac.yml
