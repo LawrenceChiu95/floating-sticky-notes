@@ -3,6 +3,11 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const mainSource = readFileSync(resolve(__dirname, '../main/main.ts'), 'utf8');
+const expandTransactionSource = readFileSync(
+  resolve(__dirname, '../main/dock-expand-transaction.ts'),
+  'utf8'
+);
+const ackSource = readFileSync(resolve(__dirname, '../main/dock-renderer-ack.ts'), 'utf8');
 const monitorSource = readFileSync(
   resolve(__dirname, '../main/mouse-button-monitor.ts'),
   'utf8'
@@ -620,10 +625,14 @@ describe('sticky note collapse wiring', () => {
     // 视口还是 union 就 setDock 会把书签头拉满整个 union 再缩回。红线：shrink
     // overlay 还在时绝不走 `if (dock)` 全窗渲染；主进程裁窗后不发裸 {dock}
     // 抢跑切换（macOS setBounds 对 renderer 异步，裸消息到时视口还是 union）
-    // ——裸 {dock} 只允许出现在展开回滚（prepare 失败 / 提交失败两发，主窗都
-    // 还在隐藏态，不构成可见 surface 切换）。
+    // ——带 transitionId 的 dock 回滚只允许出现在展开失败路径，主窗都还在
+    // 隐藏态，不构成可见 surface 切换。
     expect(appSource).toContain('if (dock && !dockShrink) {');
-    expect(mainSource.split("dock-applied', { dock: { side } });").length - 1).toBe(2);
+    const rollbackPortIndex = mainSource.indexOf('sendRollback: () => {');
+    expect(rollbackPortIndex).toBeGreaterThan(-1);
+    expect(mainSource.slice(rollbackPortIndex, rollbackPortIndex + 260)).toContain(
+      'dock: { side },'
+    );
     expect(styles).toContain('.note-shell--shrink-hold');
     expect(styles).toContain('.dock-shrink-stub');
     expect(appSource).not.toContain('startDockMorphToBookmark');
@@ -637,7 +646,7 @@ describe('sticky note collapse wiring', () => {
     );
     // 窗口交接的展开通知带 transitionId 与 expandFrom（prepare 阶段）。
     const expandNotifyIndex = mainSource.indexOf(
-      "noteWindow.webContents.send('sticky-notes:dock-applied', {\n          dock: null,\n          transitionId,\n          expandFrom:",
+      "noteWindow.webContents.send('sticky-notes:dock-applied', {\n          dock: null,\n          transitionId,\n          expandFrom",
       expandCheckIndex
     );
     const undockCallIndex = mainSource.indexOf('undockNoteForWebContents(');
@@ -702,15 +711,15 @@ describe('sticky note collapse wiring', () => {
     expect(shrinkNotifyIndex).toBeLessThan(readyAwaitIndex);
     expect(readyAwaitIndex).toBeLessThan(unionResizeIndex);
     const readySegment = mainSource.slice(shrinkNotifyIndex, unionResizeIndex);
-    expect(mainSource).toContain("type DockRendererAck = 'received' | 'timeout' | 'aborted';");
+    expect(ackSource).toContain("export type DockRendererAck = 'received' | 'timeout' | 'aborted';");
     expect(readySegment).toContain('const readyResult = await readyPromise;');
     expect(readySegment).not.toContain('noteWindow.setResizable(false);');
     // 等待期挂 epoch 抢拖熔断（50ms 轮询）与超时兑底（丢回执不卡死吸附）。
-    expect(mainSource).toContain(
-      'incomingChannel === channel && incomingId === transitionId'
+    expect(ackSource).toContain(
+      'incomingChannel !== channel || incomingId !== transitionId'
     );
-    expect(mainSource).toContain("finish('aborted')");
-    expect(mainSource).toContain("finish('timeout'), timeoutMs");
+    expect(ackSource).toContain("finish('aborted')");
+    expect(ackSource).toContain("finish('timeout'), timeoutMs");
     // ③renderer 侧：握手发出前 stub 已同步提交、按旧视口不变边缘锚定，并
     // 真实经过一次 paint。flushSync 只保证 DOM commit，不保证 WindowServer
     // 已看到这一帧；双 rAF barrier 必须位于钉位与 ready ACK 之间。
@@ -857,7 +866,7 @@ describe('sticky note collapse wiring', () => {
 
     // main 的 ACK 只有 received 能前进；timeout、abort、catch 都走同一个
     // 横条恢复入口。真实按下时只登记 pending，不能和原生拖拽争写窗口。
-    expect(mainSource).toContain("if (readyResult !== 'received') {");
+    expect(expandTransactionSource).toContain("if (ready !== 'received' || !port.isEpochCurrent()) {");
     expect(mainSource).toContain("if (unionSizeResult !== 'received') {");
     expect(mainSource).toContain("if (shrinkResult !== 'received') {");
     // 窗口交接：裁窗时代的 targetPosition/visualCommit 两道 ACK 已拆除；
@@ -865,7 +874,7 @@ describe('sticky note collapse wiring', () => {
     expect(mainSource).not.toContain("if (targetPositionResult !== 'received') {");
     expect(mainSource).not.toContain("if (visualCommitResult !== 'received') {");
     expect(mainSource).toContain('if (!tabReady || tab.isDestroyed() || epoch !== transitionEpoch) {');
-    expect(mainSource).toContain("if (expandReady !== 'received' || epoch !== transitionEpoch) {");
+    expect(expandTransactionSource).toContain("if (!port.isEpochCurrent()) {");
     const unionResizeIndex = mainSource.indexOf('noteWindow.setBounds(unionAtSource, false);');
     const unionMoveIndex = mainSource.indexOf('noteWindow.setBounds(union, false);');
     // 交接顺序：union 移动（动画在其上播放）→ 书签头窗上屏 → 主窗隐藏 → 提交。
@@ -952,6 +961,23 @@ describe('sticky note collapse wiring', () => {
     expect(appSource).not.toContain('note-shell--undock-grow');
     expect(styles).not.toMatch(/\.note-shell\s*{[^}]*transition:[^;}]*width/s);
     expect(styles).not.toMatch(/\.note-shell\s*{[^}]*transition:[^;}]*height/s);
+  });
+
+  it('keeps a failed dock expansion at its release point until a new drag', () => {
+    expect(mainSource).toContain('const handleDockTabMove = createDockWindowMoveHandler(');
+    expect(mainSource).toContain('tab.on(\'move\', handleDockTabMove);');
+    expect(mainSource).toContain('dockWindowMoveHandlerReady = true;');
+    expect(mainSource).toContain('dockExpandFailureHold = true;');
+    expect(expandTransactionSource).toContain("port.recordStage('rollback'");
+    expect(mainSource).toContain("recordDockExpandStage(expandContext, 'prepare-ack-late'");
+    expect(mainSource).toContain(
+      'if (isMagneticTransitionInFlight || dockExpandFailureHold || noteWindow.isDestroyed())'
+    );
+    expect(mainSource).toContain(
+      "if (dockExpandFailureHold) {\n        // Failed prepare/undock stays at the release point."
+    );
+    expect(mainSource).toContain('dockExpandFailureHold = false;');
+    expect(mainSource).toContain('transitionId,\n      side,\n      sourceBounds: sliverBounds');
   });
 
   it('folds toolbar buttons into the toggle with a right-to-left cascade on collapse', () => {

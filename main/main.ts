@@ -97,6 +97,15 @@ import {
   type DisplayWorkArea
 } from './window-options';
 import { createDebouncedValueAction } from '../shared/debounced-action';
+import { createDockWindowMoveHandler } from './dock-window-move';
+import {
+  runDockExpandTransaction,
+  type DockExpandTransactionPort
+} from './dock-expand-transaction';
+import {
+  waitForDockRendererAck as waitForDockRendererAckTransaction,
+  type DockRendererAck
+} from './dock-renderer-ack';
 import {
   buildDockedBounds,
   buildExpandBoundsFromDock,
@@ -365,6 +374,12 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
   // ready ACK 可能快于 waiter 武装（快 renderer 在 waitForDockTabReady 挂上
   // resolver 之前就 paint 完）：事件侧永远先落旗标，waiter 先查旗标再等。
   let dockTabReadyReceived = false;
+  // Restored tab setBounds can synchronously emit move on Windows before the
+  // note-window closure below has initialized its move state.
+  let dockWindowMoveHandlerReady = false;
+  // A failed expand must leave the bookmark at the user's release point.  The
+  // hover reconciler stays quiet until a new drag explicitly re-arms it.
+  let dockExpandFailureHold = false;
   const getDockTabWindow = (): BrowserWindow | null =>
     dockTabWindow && !dockTabWindow.isDestroyed() ? dockTabWindow : null;
   const noteWindow = new BrowserWindow(createNoteWindowOptions(note.bounds, workAreas));
@@ -422,6 +437,11 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
     }
     return listenerBag.boundsChanged?.();
   }, 300);
+  const handleDockTabMove = createDockWindowMoveHandler(
+    () => dockWindowMoveHandlerReady,
+    () => handleDockWindowMove(),
+    () => saveBounds.schedule(undefined)
+  );
   // 书签头窗：每便签一枚，首次吸附事务或启动恢复时创建。出生为普通横条
   // 尺寸（出生即 96×32 整页拖窗区的窗口在 macOS 收不到 OS 鼠标事件——主窗
   // 实测教训），调用方在 ready ACK（真实数据首帧 paint）后于隐藏态定型到
@@ -440,10 +460,7 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
         dockTabWindow = null;
       }
     });
-    tab.on('move', () => {
-      handleDockWindowMove();
-      saveBounds.schedule(undefined);
-    });
+    tab.on('move', handleDockTabMove);
     tab.webContents.on('ipc-message', (_event, channel) => {
       if (channel === 'sticky-notes:dock-tab-ready') {
         dockTabReadyReceived = true;
@@ -571,6 +588,9 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
       }
       // 滑行途中不打断：收尾的 reconcile 会用光标真相复核。
       if (isMagneticTransitionInFlight) {
+        return;
+      }
+      if (dockExpandFailureHold) {
         return;
       }
       // 拖动/停歇比对进行中不开火：此时写窗会撞上活拖拽会话（与 reconcile
@@ -830,6 +850,7 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
             if (!isCursorOverWindow(4)) {
               return;
             }
+            dockExpandFailureHold = false;
             pressOnWindow = true;
             dockReleaseIntentCursor = null;
             if (!isMagneticTransitionInFlight) {
@@ -911,7 +932,6 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
       armSettleWatch('docked', { ignoreCursor: fromRelease });
     }
   };
-  type DockRendererAck = 'received' | 'timeout' | 'aborted';
   const waitForDockRendererAck = (
     channel:
       | 'sticky-notes:dock-shrink-ready'
@@ -920,39 +940,17 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
       | 'sticky-notes:dock-expand-ready',
     transitionId: number,
     epoch: number,
-    timeoutMs = 600
+    timeoutMs = 600,
+    onLateAck?: () => void
   ): Promise<DockRendererAck> =>
-    new Promise((resolve) => {
-      let settled = false;
-      let abortPoll: NodeJS.Timeout | undefined;
-      let fallback: NodeJS.Timeout | undefined;
-      const finish = (result: DockRendererAck): void => {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        if (abortPoll) {
-          clearInterval(abortPoll);
-        }
-        if (fallback) {
-          clearTimeout(fallback);
-        }
-        noteWindow.webContents.off('ipc-message', onMessage);
-        resolve(result);
-      };
-      const onMessage = (_event: unknown, incomingChannel: string, incomingId: unknown): void => {
-        if (incomingChannel === channel && incomingId === transitionId) {
-          finish('received');
-        }
-      };
-      noteWindow.webContents.on('ipc-message', onMessage);
-      abortPoll = setInterval(() => {
-        if (noteWindow.isDestroyed() || epoch !== transitionEpoch) {
-          finish('aborted');
-        }
-      }, 50);
-      fallback = setTimeout(() => finish('timeout'), timeoutMs);
-    });
+    waitForDockRendererAckTransaction(
+      noteWindow.webContents,
+      channel,
+      transitionId,
+      () => epoch === transitionEpoch,
+      timeoutMs,
+      onLateAck
+    );
   type DockTransitionContext = {
     transitionId: number;
     epoch: number;
@@ -974,6 +972,34 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
       stage,
       ...(result ? { result } : {}),
       ...(error === undefined ? {} : { error }),
+      bounds: noteWindow.isDestroyed() ? undefined : noteWindow.getBounds()
+    });
+  };
+  type DockExpandTransitionContext = {
+    transitionId: number;
+    epoch: number;
+    side: DockSide;
+    sourceBounds: { x: number; y: number; width: number; height: number };
+    bounds: { x: number; y: number; width: number; height: number };
+    expandFrom: { x: number; y: number; width: number; height: number };
+  };
+  const recordDockExpandStage = (
+    context: DockExpandTransitionContext,
+    stage: string,
+    result?: string,
+    error?: unknown
+  ): void => {
+    diagnosticLogger?.record('dock_expand_stage', {
+      webContentsId: noteWebContentsId,
+      transitionId: context.transitionId,
+      epoch: context.epoch,
+      side: context.side,
+      stage,
+      ...(result ? { result } : {}),
+      ...(error === undefined ? {} : { error }),
+      sourceBounds: context.sourceBounds,
+      expandBounds: context.bounds,
+      expandFrom: context.expandFrom,
       bounds: noteWindow.isDestroyed() ? undefined : noteWindow.getBounds()
     });
   };
@@ -1532,6 +1558,11 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
     if (collapseController.getPresentation() === 'docked') {
       stopDragQuiet();
       dockPeekReconcilePending = false;
+      if (dockExpandFailureHold) {
+        // Failed prepare/undock stays at the release point.  A new press or
+        // move clears the hold; hover must not silently rewrite that baseline.
+        return;
+      }
       // 贴边态的悬停复核轮询常开：运行中新贴边/钉回/探头收尾都经过这里武装
       // （启动恢复在创建末尾单独补武装）；离开贴边态时轮询自己停。
       ensurePeekLinger();
@@ -1553,7 +1584,7 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
   // 光标查询（红线是轮询跟光标，单次查询合法），所以迟到的 leave、滑行中
   // 光标折返都自愈。藏与露只是窗口几何，不搬 DOM。
   const reconcileDockPeekHover = async (): Promise<void> => {
-    if (isMagneticTransitionInFlight || noteWindow.isDestroyed()) {
+    if (isMagneticTransitionInFlight || dockExpandFailureHold || noteWindow.isDestroyed()) {
       return;
     }
     const presentationNow = collapseController.getPresentation();
@@ -1742,6 +1773,7 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
     }
 
     // docked 态的拖动发生在书签头窗上（原生 app-region drag）。
+    dockExpandFailureHold = false;
     const current = activeWindow.getBounds();
     // 松手才展开（与松手才吸对称，2026-09-01 真机定案）：move 流上不做任何
     // 阈值判定、不写窗，书签头全程跟手自由拖——竖拖的横向抖动与明确的向外
@@ -1768,75 +1800,96 @@ function createElectronNoteWindow(note: NoteRecord): ManagedNoteWindow {
     });
 
     const epoch = ++transitionEpoch;
+    const transitionId = ++dockTransitionSequence;
+    const expandFrom = {
+      x: sliverBounds.x - bounds.x,
+      y: sliverBounds.y - bounds.y,
+      width: sliverBounds.width,
+      height: sliverBounds.height
+    };
+    const expandContext: DockExpandTransitionContext = {
+      transitionId,
+      epoch,
+      side,
+      sourceBounds: sliverBounds,
+      bounds,
+      expandFrom
+    };
     peekGlide = null;
     isMagneticTransitionInFlight = true;
-    diagnosticLogger?.record('dock_expand', { webContentsId: noteWebContentsId });
-    void (async () => {
-      const transitionId = ++dockTransitionSequence;
-      const tab = getDockTabWindow();
-      try {
+    dockExpandFailureHold = false;
+    diagnosticLogger?.record('dock_expand', {
+      webContentsId: noteWebContentsId,
+      transitionId,
+      side,
+      sourceBounds: sliverBounds,
+      expandBounds: bounds,
+      expandFrom
+    });
+    recordDockExpandStage(expandContext, 'started', 'pending');
+    const tab = getDockTabWindow();
+    const transactionPort: DockExpandTransactionPort = {
+      isDestroyed: () => noteWindow.isDestroyed(),
+      isEpochCurrent: () => epoch === transitionEpoch,
+      prepareNative: () => {
         noteWindow.setBounds(bounds, false);
         noteWindow.setMinimumSize(NOTE_MIN_WIDTH, NOTE_MIN_HEIGHT);
         noteWindow.setResizable(true);
-        const expandReadyPromise = waitForDockRendererAck(
+        recordDockExpandStage(expandContext, 'prepare-sent', 'pending');
+      },
+      waitForReady: () =>
+        waitForDockRendererAck(
           'sticky-notes:dock-expand-ready',
           transitionId,
-          epoch
-        );
+          epoch,
+          600,
+          () => recordDockExpandStage(expandContext, 'prepare-ack-late', 'late')
+        ),
+      sendPrepare: () => {
         noteWindow.webContents.send('sticky-notes:dock-applied', {
           dock: null,
           transitionId,
-          expandFrom: {
-            x: sliverBounds.x - bounds.x,
-            y: sliverBounds.y - bounds.y,
-            width: sliverBounds.width,
-            height: sliverBounds.height
-          }
+          expandFrom
         });
-        const expandReady = await expandReadyPromise;
-        if (noteWindow.isDestroyed()) {
-          return;
-        }
-        if (expandReady !== 'received' || epoch !== transitionEpoch) {
-          // 展开 prepare 失败/被抢：主窗仍隐藏，书签头窗仍在屏，DOM 回书签头。
-          noteWindow.webContents.send('sticky-notes:dock-applied', { dock: { side } });
-          return;
-        }
-        noteWindow.showInactive();
-        const didUndock = await getNotesManager().undockNoteForWebContents(
-          noteWebContentsId,
-          bounds
-        );
-        if (noteWindow.isDestroyed() || epoch !== transitionEpoch) {
-          return;
-        }
-        if (!didUndock) {
-          // 展开提交失败回滚：主窗撤下藏回，书签头窗仍在屏，DOM 回书签头。
-          noteWindow.hide();
-          noteWindow.webContents.send('sticky-notes:dock-applied', { dock: { side } });
-          return;
-        }
-        // 提交成功才销毁书签头窗（销毁即结束它的拖拽会话），随后 committed
-        // 让 renderer 播放 340ms clip 揭示。
+      },
+      showMain: () => noteWindow.showInactive(),
+      undock: () =>
+        getNotesManager().undockNoteForWebContents(noteWebContentsId, bounds),
+      getPresentation: collapseController.getPresentation,
+      hideMain: () => {
+        dockExpandFailureHold = true;
+        noteWindow.hide();
+      },
+      destroyTab: () => {
         if (tab && !tab.isDestroyed()) {
-          dockTabWindow = null;
+          if (dockTabWindow === tab) dockTabWindow = null;
           tab.destroy();
         }
+      },
+      sendRollback: () => {
+        noteWindow.webContents.send('sticky-notes:dock-applied', {
+          dock: { side },
+          transitionId
+        });
+      },
+      sendCommitted: () => {
+        if (epoch === transitionEpoch) dockExpandFailureHold = false;
         noteWindow.webContents.send('sticky-notes:dock-applied', {
           dock: null,
           transitionId,
           committed: true
         });
-      } catch (error) {
-        diagnosticLogger?.record('note_undock_failed', {
-          webContentsId: noteWebContentsId,
-          error
-        });
-      } finally {
-        finishMagneticTransition(epoch);
-      }
-    })();
+      },
+      recordStage: (stage, result, error) =>
+        recordDockExpandStage(expandContext, stage, result, error)
+    };
+    void runDockExpandTransaction(transactionPort).finally(() => {
+      finishMagneticTransition(epoch);
+    });
   };
+  // All state captured by handleDockWindowMove is initialized by this point;
+  // restored synchronous tab moves were intentionally ignored above.
+  dockWindowMoveHandlerReady = true;
   noteWindow.on('move', handleDockWindowMove);
   const flushPendingChanges = async (): Promise<void> => {
     await Promise.all([saveBounds.flush(), flushRendererPendingContent(noteWindow)]);
