@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>悬浮便签 · Showcase Card</title>
+    <style>
+      :root { --paper:#f6f5f1; --ink:#202722; --muted:#667168; --leaf:#566943; --line:#d7ddd3; --yellow:#f4e19a; --blue:#b8d4e5; --pink:#efc0c5; }
+      * { box-sizing:border-box; }
+      html,body { margin:0; width:100%; min-height:100%; background:var(--paper); color:var(--ink); }
+      body { font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; }
+      .frame { position:relative; overflow:hidden; background:var(--paper); }
+      .frame.landscape { width:1600px; height:1000px; }
+      .frame.social { width:1080px; height:1440px; }
+      .paper-texture { position:absolute; inset:0; pointer-events:none; opacity:.22; background:linear-gradient(120deg, rgba(255,255,255,.35), transparent 28%, rgba(86,105,67,.04) 72%, transparent); }
+      .topline { position:absolute; left:88px; right:88px; top:68px; display:flex; justify-content:space-between; align-items:center; z-index:4; }
+      .brandline { display:flex; gap:12px; align-items:center; font-size:16px; letter-spacing:.05em; }
+      .brandline img { width:42px; height:42px; border-radius:11px; box-shadow:0 8px 20px rgba(32,39,34,.15); }
+      .brandline span { color:var(--muted); font-size:12px; letter-spacing:.1em; }
+      .page { color:var(--muted); font-size:13px; letter-spacing:.13em; }
+      .headline { position:absolute; z-index:4; margin:0; font-size:86px; line-height:1.06; font-weight:780; letter-spacing:0; }
+      .subhead { position:absolute; z-index:4; color:var(--muted); font-size:19px; line-height:1.65; letter-spacing:.02em; }
+      .green { color:var(--leaf); }
+      .asset-shell { position:absolute; display:flex; align-items:center; justify-content:center; overflow:visible; }
+      .asset-shell img { display:block; width:100%; height:100%; object-fit:contain; filter:drop-shadow(0 24px 28px rgba(32,39,34,.17)); }
+      .asset-shell.missing { background:rgba(86,105,67,.07); border:1px dashed rgba(86,105,67,.35); border-radius:8px; }
+      .asset-shell.missing::after { content:"等待真实 UI 截图"; color:var(--leaf); font-size:14px; letter-spacing:.04em; }
+      .asset-shell.missing img { display:none; }
+      .edge-tab { position:absolute; z-index:5; width:96px; height:32px; object-fit:contain; filter:drop-shadow(0 8px 12px rgba(32,39,34,.18)); }
+      .edge-tab.tab-right { right:-14px; top:485px; }
+      .footer { position:absolute; left:88px; right:88px; bottom:50px; display:flex; justify-content:space-between; color:var(--muted); font-size:12px; letter-spacing:.08em; z-index:5; }
+      .footer strong { color:var(--ink); font-weight:600; }
+      .hero .headline { left:88px; top:188px; }
+      .hero .subhead { left:94px; top:400px; max-width:470px; }
+      .hero .asset-daily { left:650px; top:142px; width:560px; height:483px; transform:rotate(-1.4deg); }
+      .hero .asset-ideas { left:1040px; top:472px; width:430px; height:304px; transform:rotate(2.2deg); }
+      .hero .asset-reference { left:370px; top:606px; width:430px; height:394px; transform:rotate(1.2deg); }
+      .hero .edge-tab { right:-10px; top:552px; }
+      .states .headline { left:88px; top:154px; font-size:74px; }
+      .states .subhead { left:92px; top:276px; }
+      .states-row { position:absolute; left:88px; right:88px; top:410px; display:grid; grid-template-columns:1fr 92px 1fr 92px 1fr; align-items:center; gap:0; }
+      .state { min-width:0; }
+      .state .asset-shell { position:relative; width:100%; height:280px; }
+      .state .asset-shell img { object-fit:contain; }
+      .state .asset-shell.slim { height:80px; margin-top:90px; }
+      .state .asset-shell.tab { height:96px; margin-top:74px; }
+      .state h3 { margin:26px 0 6px; font-size:19px; }
+      .state p { margin:0; color:var(--muted); font-size:14px; }
+      .arrow { text-align:center; color:var(--leaf); font-size:42px; font-weight:300; }
+      .state-note { position:absolute; bottom:182px; width:100%; text-align:center; color:var(--leaf); font-size:15px; letter-spacing:.04em; }
+      .features .headline { left:88px; top:132px; font-size:67px; }
+      .features .subhead { left:92px; top:330px; }
+      .feature-board { position:absolute; left:90px; right:90px; top:440px; display:grid; grid-template-columns:1.1fr .9fr; gap:28px; align-items:start; }
+      .feature-card { position:relative; min-height:405px; }
+      .feature-card .asset-shell { position:relative; width:100%; height:405px; }
+      .feature-card.ref .asset-shell { height:300px; }
+      .feature-card.ref .art { position:absolute; width:250px; height:188px; right:-10px; bottom:-50px; transform:rotate(4deg); }
+      .feature-label { position:absolute; left:0; bottom:-46px; font-size:14px; color:var(--muted); }
+      .social .topline { left:70px; right:70px; top:62px; }
+      .social .brandline img { width:38px; height:38px; }
+      .social .headline { left:70px; top:170px; right:64px; font-size:74px; }
+      .social .subhead { left:74px; top:480px; max-width:810px; font-size:20px; }
+      .social .social-visual { position:absolute; left:74px; right:74px; top:630px; height:580px; }
+      .social .social-visual .asset-shell { position:absolute; }
+      .social .social-visual .asset-daily { left:0; top:0; width:660px; height:568px; transform:rotate(-1.3deg); }
+      .social .social-visual .asset-reference { right:0; bottom:18px; width:510px; height:468px; transform:rotate(2deg); }
+      .social .social-visual .asset-ideas { right:10px; top:0; width:450px; height:318px; transform:rotate(2.8deg); }
+      .social .social-visual .edge-tab { right:-18px; top:292px; }
+      .social .footer { left:70px; right:70px; bottom:52px; }
+      .social .tiny-caption { position:absolute; left:74px; bottom:115px; color:var(--leaf); font-size:14px; letter-spacing:.05em; }
+      .social .feature-list { position:absolute; left:74px; right:74px; top:650px; display:flex; gap:16px; flex-wrap:wrap; }
+      .social .feature-list span { padding:12px 17px; border:1px solid var(--line); color:var(--leaf); background:rgba(255,255,255,.34); font-size:15px; }
+      .social .document { position:absolute; right:0; top:10px; width:560px; height:420px; background:#eceeea; border:1px solid #d0d6ce; box-shadow:0 20px 40px rgba(32,39,34,.12); padding:42px; transform:rotate(1.4deg); }
+      .document .doc-title { width:210px; height:18px; background:#bdc7bd; margin-bottom:28px; }
+      .document .doc-line { height:10px; margin:13px 0; background:#d3d9d2; }
+      .document .doc-line.short { width:58%; }
+      .document .doc-stamp { position:absolute; right:34px; top:40px; color:#9da89d; border:1px solid #bbc5bb; padding:8px 12px; font-size:12px; }
+      .card-01 .headline { font-size:78px; }
+      .card-02 .headline { font-size:72px; }
+      .card-03 .headline, .card-04 .headline { font-size:76px; }
+      .card-05 .headline, .card-06 .headline { font-size:78px; }
+      .card-04 .social-visual .asset-reference { left:0; right:auto; top:0; width:670px; height:610px; }
+      .card-04 .social-visual .art { position:absolute; right:0; bottom:0; width:450px; height:338px; transform:rotate(3deg); }
+      .card-05 .social-visual { top:620px; height:560px; }
+      .card-05 .social-visual .asset-daily { left:0; width:520px; height:450px; }
+      .card-05 .social-visual .asset-ideas { left:280px; top:160px; width:480px; height:340px; }
+      .card-05 .social-visual .asset-reference { left:560px; right:auto; top:35px; width:410px; height:375px; }
+      .card-06 .headline { top:196px; }
+      .card-06 .social-visual { top:590px; height:590px; }
+      .card-06 .social-visual .asset-daily { left:155px; width:700px; height:604px; transform:rotate(-1.6deg); }
+      .card-06 .social-visual .edge-tab { right:-10px; top:328px; }
+      .card-06 .subhead { top:480px; }
+      @media (max-width:1100px) {
+        .frame.landscape { transform-origin:top left; }
+      }
+
+/* Final visual acceptance: readable social copy and explicit screen edges. */
+.brandline{font-size:25px;gap:16px}.brandline span{font-size:19px}.brandline img{width:48px;height:48px}.page,.footer{font-size:20px}
+.headline{letter-spacing:-2px}.subhead{font-size:29px}.footer{bottom:48px}
+.screen-scene{position:absolute;overflow:hidden;background:linear-gradient(140deg,#e7e9df 0%,#c4cdba 50%,#92a78d 100%);border:2px solid #ffffffb0;border-right:8px solid #24382d;border-radius:24px 10px 10px 24px;box-shadow:0 28px 65px #24382d26}
+.screen-scene:before{content:'';position:absolute;left:-30%;top:50%;width:150%;height:70%;border-radius:50%;background:linear-gradient(15deg,#66836b88,#dbe1d2aa);transform:rotate(-19deg)}
+.screen-scene .sheet{position:absolute;left:7%;top:12%;width:72%;height:70%;border:1px solid #24382d16;background:#fafbf5ae;border-radius:12px;box-shadow:0 12px 26px #24382d10;padding:40px}
+.sheet .sheet-title{font-size:20px;font-weight:650;color:#647566;margin-bottom:35px}.sheet .line{height:9px;background:#64756625;width:80%;margin:15px 0}.sheet .line:nth-child(3n){width:55%}
+.screen-scene .edge-tab{width:192px;height:64px;right:-96px;top:220px;filter:none}
+.hero .headline{top:230px;left:88px;font-size:90px;z-index:4;line-height:1.13}.hero .subhead{top:485px;left:92px;max-width:505px;line-height:1.7}
+.hero .screen-scene{left:680px;top:185px;width:848px;height:670px}
+.hero .screen-scene .asset-daily{left:48px;top:65px;width:456px;height:393px;transform:none;z-index:2}
+.hero .screen-scene .asset-reference{left:440px;top:320px;width:332px;height:304px;transform:none;z-index:3}
+.hero .scene-caption{position:absolute;left:698px;top:873px;font-size:23px;color:var(--muted)}
+.hero .pill{position:absolute;left:92px;top:695px;display:flex;gap:22px;font-size:23px;color:var(--leaf)}
+.hero .pill span{border-bottom:1px solid #bcc6b6;padding-bottom:10px}
+.features .headline{font-size:72px;top:156px}.features .subhead{top:258px;font-size:29px}
+.features .feature-board{top:370px;grid-template-columns:1fr 1fr;gap:60px}
+.features .feature-card .asset-shell{height:490px}.features .feature-card.ref .asset-shell{height:490px}
+.features .feature-card .art{display:none}.features .feature-label{font-size:25px;bottom:-45px;text-align:center;width:100%}
+.social .topline{left:66px;right:66px;top:62px}.social .brandline img{width:52px;height:52px}.social .brandline{font-size:27px}.social .brandline span{font-size:19px}
+.social .page,.social .footer{font-size:22px}.social .headline{top:188px;font-size:91px;line-height:1.13;letter-spacing:-3px}
+.social .subhead{top:430px;font-size:33px;line-height:1.6;max-width:930px}.social .footer{left:66px;right:66px;bottom:43px}
+.social .tiny-caption{font-size:27px;bottom:123px;line-height:1.6}
+.social .social-visual{left:74px;right:74px;top:600px;height:650px}
+.social .social-visual .asset-daily{width:710px;height:611px;left:12px;top:0;transform:none}
+.card-01 .headline{font-size:104px;top:176px}.card-01 .subhead{top:445px;max-width:900px}
+.card-01 .screen-scene{left:66px;top:598px;width:950px;height:660px}
+.card-01 .screen-scene .asset-daily{left:45px;top:67px;width:620px;height:534px;transform:none}
+.card-01 .screen-scene .edge-tab{width:220px;height:73px;right:-110px;top:305px;filter:none}
+.card-01 .edge-label{position:absolute;right:40px;top:408px;font-size:29px;font-weight:600;color:#29412f;writing-mode:vertical-rl;letter-spacing:8px}
+.card-01 .scene-arrow{position:absolute;left:681px;top:224px;width:147px;height:114px;z-index:4}
+.card-02 .headline{font-size:86px}.card-02 .subhead{top:420px;font-size:32px}
+.steps{position:absolute;left:74px;right:66px;top:557px;height:724px}
+.steps .step-note{position:absolute;left:0;top:0;width:520px;height:448px}
+.step-label{position:absolute;font-size:31px;line-height:1.7}.step-label b{display:block;color:var(--leaf);font-size:23px;letter-spacing:4px}
+.steps .label-1{left:594px;top:120px}.steps .label-2{left:0;top:458px}.steps .step-strip{position:absolute;left:306px;top:490px;width:610px;height:68px}
+.steps .label-3{left:0;top:608px}.steps .edge-demo{position:absolute;right:0;top:602px;width:330px;height:127px;border-right:7px solid #24382d;background:#d6dfcf;border-radius:14px 0 0 14px;overflow:hidden}
+.steps .edge-demo img{position:absolute;right:-110px;top:27px;width:220px;height:73px}.steps .down{position:absolute;font-size:42px;color:#819078;left:800px;top:563px}
+.card-03 .subhead{top:433px}.card-03 .social-visual{top:575px}.card-03 .social-visual .asset-daily{width:870px;height:749px;left:0}.card-03 .document{height:505px;width:590px;top:-35px;right:-4px;transform:none}.card-03 .tiny-caption{bottom:111px;font-size:27px}
+.card-04 .social-visual{top:595px}.card-04 .social-visual .asset-reference{width:710px;height:651px;transform:none}.card-04 .social-visual .art{width:365px;height:243px;right:-2px;bottom:55px;transform:rotate(3deg)}
+.card-05 .subhead{top:441px}.card-05 .social-visual{top:710px;height:522px}.card-05 .social-visual .asset-daily{left:-4px;top:0;width:480px;height:413px}.card-05 .social-visual .asset-ideas{left:354px;top:228px;width:526px;height:371px;transform:rotate(2deg)}.card-05 .social-visual .asset-reference{left:553px;top:-4px;width:373px;height:342px;transform:rotate(2deg)}
+.social .feature-list{top:598px;gap:26px}.social .feature-list span{font-size:28px;padding:12px 20px;background:#fff9}
+.card-06 .headline{top:196px;font-size:91px}.card-06 .subhead{top:447px;font-size:31px}
+.card-06 .social-visual{top:606px;height:500px}.card-06 .social-visual .asset-daily{left:65px;top:0;width:800px;height:525px;transform:rotate(-1.4deg)}
+.card-06 .tiny-caption{top:1193px;bottom:auto;font-size:28px;line-height:1.6}.card-06 .tiny-caption strong{font-size:29px}
+.states .headline{font-size:78px}.states .subhead{top:274px;font-size:28px}.states .states-row{top:435px;grid-template-columns:1.15fr 66px 1fr 66px .76fr;align-items:start}
+.states .state .asset-shell{height:310px}.states .state .asset-shell.slim{height:310px;margin:0}.states .state .asset-shell.tab{height:310px;margin:0}.states .state .asset-shell.tab img{max-width:210px;height:70px;margin:auto}
+.states .state h3{font-size:30px;margin-top:24px}.states .state p{font-size:24px;line-height:1.5}.states .state-note{display:none}.states .arrow{padding-top:123px}.states .footer{font-size:23px}
+
+    </style>
+  </head>
+  <body>
+    <main id="frame" class="frame"></main>
+    <script>
+      const params = new URLSearchParams(location.search);
+      const card = params.get('card') || 'hero';
+      const root = document.getElementById('frame');
+      const img = (name, cls='') => `<div class="asset-shell ${cls}"><img src="../ui/${name}" alt="真实应用界面：${name}" data-asset="${name}"></div>`;
+      const seenDirection = new URLSearchParams(location.search).get('direction') === 'seen';
+      const displayPage = (page) => seenDirection ? page.replace(/^(02|03|04)/, n => String(Number(n) + 1).padStart(2, '0')) : page;
+      const header = (page, social=false) => `<div class="topline"><div class="brandline"><img src="../../icons/app-icon.png" alt="悬浮便签图标"><div><strong>悬浮便签</strong>${social ? `<br><span>${seenDirection ? '记下，也要看见。' : '用时在眼前，不用靠边站。'}</span>` : ''}</div></div><div class="page">${displayPage(page)}</div></div>`;
+      const footer = (page) => `<div class="footer"><span>悬浮便签 · Windows / Mac</span><strong>PAGE ${displayPage(page)}</strong></div>`;
+      const sheet = `<div class="sheet"><div class="sheet-title">我的工作区</div><div class="line"></div><div class="line"></div><div class="line"></div><div class="line"></div></div>`;
+      const layouts = {
+        hero: `<section class="frame landscape hero">${header('FLOATING STICKY NOTES')}<div class="paper-texture"></div><h1 class="headline">用时在眼前，<br>不用靠边站。</h1><p class="subhead">把待办、灵感和参考图，<br>留在手边。</p><div class="pill"><span>免费开源</span><span>无需账号</span></div><div class="screen-scene">${sheet}${img('daily.png','asset-daily')}${img('reference.png','asset-reference')}<img class="edge-tab" src="../ui/tab-pink.png" alt="贴边灵感便签"></div><div class="scene-caption">暂时不用的，藏到屏幕边上。</div><div class="footer"><span>Windows x64 / Mac Apple Silicon</span><strong>你的桌面随手纸。</strong></div></section>`,
+        states: `<section class="frame landscape states">${header('SHOWCASE / 02')}<div class="paper-texture"></div><h1 class="headline">一张便签，三种分寸。</h1><p class="subhead">需要时展开，暂时不用就收起；再往边上一贴，桌面仍然清爽。</p><div class="states-row"><div class="state"><div class="asset-shell"><img src="../ui/daily.png" alt="展开便签" data-asset="daily.png"></div><h3>展开</h3><p>内容完整留在眼前</p></div><div class="arrow">→</div><div class="state"><div class="asset-shell slim"><img src="../ui/collapsed.png" alt="收起横条" data-asset="collapsed.png"></div><div class="state-note">点一下收起</div><h3>点一下收起</h3><p>保留一条可拖动的横条</p></div><div class="arrow">→</div><div class="state"><div class="asset-shell tab"><img src="../ui/tab-yellow.png" alt="贴边书签头" data-asset="tab-yellow.png"></div><div class="state-note">拖到屏幕边</div><h3>拖到边上</h3><p>半藏在边缘，悬停会探出</p></div></div><div class="footer"><span>拖出展开</span><strong>悬浮便签 · Windows / Mac</strong></div></section>`,
+        features: `<section class="frame landscape features">${header('SHOWCASE / 03')}<div class="paper-texture"></div><h1 class="headline">待办与参考，<span class="green">都在手边。</span></h1><p class="subhead">一边推进下一件事，一边把需要的画面贴在旁边。</p><div class="feature-board"><div class="feature-card"><div class="asset-shell"> <img src="../ui/daily.png" alt="清单便签" data-asset="daily.png"></div><div class="feature-label">文字、清单、一层子任务</div></div><div class="feature-card ref"><div class="asset-shell"><img src="../ui/reference.png" alt="参考图便签" data-asset="reference.png"></div><div class="asset-shell art"><img src="../ui/art.png" alt="参考海报图" data-asset="art.png"></div><div class="feature-label">图片可贴入，预览可独立缩放</div></div></div>${footer('03')}</section>`,
+        '01': `<section class="frame social card-01">${header('01 / 06',true)}<div class="paper-texture"></div><h1 class="headline">这个便签，<br><span class="green">会靠边站。</span></h1><p class="subhead">用时留在眼前，不用藏到屏幕边。<br>需要时，再拖出来。</p><div class="screen-scene">${sheet}${img('daily.png','asset-daily')}<img class="edge-tab" src="../ui/tab-yellow.png" alt="半藏在屏幕边缘的便签"><svg class="scene-arrow" viewBox="0 0 147 114" fill="none"><path d="M8 8C76 8 40 86 125 86M108 72L127 87L107 102" stroke="#526949" stroke-width="3" stroke-linecap="round"/></svg><span class="edge-label">屏幕边缘</span></div>${footer('01')}</section>`,
+        '02': `<section class="frame social card-02">${header('02 / 06',true)}<h1 class="headline">${seenDirection ? '留在眼前，<br><span class="green">也懂得让开。</span>' : '要用的留眼前，<br><span class="green">不用的藏旁边。</span>'}</h1><p class="subhead">同一张便签，三种分寸。<br>书签拖回桌面，就会展开。</p><div class="steps"><img class="step-note" src="../ui/daily.png" alt="展开便签"><div class="step-label label-1"><b>01 / 展开</b>内容在眼前</div><div class="step-label label-2"><b>02 / 点一下</b>收成标题横条</div><img class="step-strip" src="../ui/collapsed.png" alt="收起为横条"><span class="down">↓</span><div class="step-label label-3"><b>03 / 拖到边上</b>藏成一枚书签</div><div class="edge-demo"><img src="../ui/tab-yellow.png" alt="半藏书签"></div></div>${footer('02')}</section>`,
+        '03': `<section class="frame social card-03">${header('03 / 06', true)}<div class="paper-texture"></div><h1 class="headline">一抬眼，<br><span class="green">知道下一件事。</span></h1><p class="subhead">待办留在窗口上方，边做边勾。</p><div class="social-visual"><div class="document"><div class="doc-stamp">WORK NOTES</div><div class="doc-title"></div><div class="doc-line"></div><div class="doc-line short"></div><div class="doc-line"></div><div class="doc-line"></div><div class="doc-line short"></div></div>${img('daily.png','asset-daily')}</div>${footer('03')}</section>`,
+        '04': `<section class="frame social card-04">${header('04 / 06', true)}<div class="paper-texture"></div><h1 class="headline">参考图，<br><span class="green">也能贴在手边。</span></h1><p class="subhead">图片贴入便签，点击后可独立预览、缩放与拖动。</p><div class="social-visual">${img('reference.png','asset-reference')}<div class="asset-shell art"><img src="../ui/art.png" alt="参考海报图" data-asset="art.png"></div></div>${footer('04')}</section>`,
+        '05': `<section class="frame social card-05">${header('05 / 06', true)}<div class="paper-texture"></div><h1 class="headline">颜色随你。<br><span class="green">东西留在本机。</span></h1><p class="subhead">五种颜色，可调透明度。<br>文字和图片，只存在你的电脑里。</p><div class="social-visual">${img('daily.png','asset-daily')}${img('ideas.png','asset-ideas')}${img('reference.png','asset-reference')}</div><div class="feature-list"><span>无需账号</span><span>本地保存</span><span>免费开源 · MIT</span></div>${footer('05')}</section>`,
+        '06': `<section class="frame social card-06">${header('06 / 06', true)}<div class="paper-texture"></div><h1 class="headline">${seenDirection ? '让重要的事，<br><span class="green">留在眼前。</span>' : '给桌面，<br><span class="green">留一张随手纸。</span>'}</h1><p class="subhead">Windows x64 / Mac Apple Silicon</p><div class="social-visual">${img('white.png','asset-daily')}</div><div class="tiny-caption">GitHub 搜索<strong style="display:block">LawrenceChiu95 / floating-sticky-notes</strong></div>${footer('06')}</section>`
+      };
+      root.outerHTML = layouts[card] || layouts.hero;
+      document.querySelectorAll('img[data-asset]').forEach((image) => {
+        image.addEventListener('error', () => image.closest('.asset-shell')?.classList.add('missing'), { once:true });
+      });
+    </script>
+  </body>
+</html>

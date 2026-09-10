@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>悬浮便签 · 两种开场对照</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f6f5ef;color:#273027;font:16px/1.65 'PingFang SC',-apple-system,sans-serif}a{color:#4c6442;text-underline-offset:4px}
+.wrap{max-width:1460px;margin:auto;padding:44px 48px 72px}.kicker{font-size:14px;letter-spacing:2px;color:#6c7665}h1{font-size:clamp(30px,4.5vw,55px);line-height:1.2;margin:20px 0}p{max-width:940px;color:#62705d}.recommend{color:#283323;font-size:19px;max-width:970px}.recommend strong{background:#ece5a9;padding:0 4px}
+.toolbar{display:flex;gap:12px;align-items:center;margin:31px 0;flex-wrap:wrap}button{font:inherit;border:1px solid #c4cdbd;background:transparent;color:#40533b;border-radius:100px;padding:8px 21px;cursor:pointer}button[aria-pressed=true]{background:#3b5035;color:white;border-color:#3b5035}.toolbar span{font-size:13px;color:#72806b;margin-left:auto}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:28px}.variant{background:#fffefb;border:1px solid #dbe0d4;border-radius:15px;overflow:hidden}.label{padding:22px 26px;border-bottom:1px solid #e4e7de}.label .tag{font-size:13px;color:#73836a;letter-spacing:1px}h2{font-size:25px;line-height:1.3;margin:9px 0}.label p{font-size:15px;margin:8px 0 0}.image{display:block;background:#f6f5ef}.image img{display:block;width:100%;height:auto}.caption{padding:15px 25px;font-size:14px;color:#6f7967}.cover-view .image img{max-height:900px;object-fit:contain}
+body[data-view=a] .variant.b,body[data-view=b] .variant.a{display:none}body[data-view=a] .pair,body[data-view=b] .pair{grid-template-columns:1fr;max-width:1160px;margin:auto}
+.section{margin-top:56px}.section>h2{font-size:30px;margin:0 0 15px}.notes{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:25px}.memo{border-top:1px solid #b9c4af;padding:20px 0}.memo h3{margin:0 0 8px;font-size:21px}.memo p{margin:0;font-size:16px}.philosophy{display:grid;grid-template-columns:.8fr 1fr;gap:60px;align-items:center;margin-top:58px;border-top:1px solid #cbd3c1;padding-top:45px}.philosophy img{width:100%;max-height:820px;object-fit:contain}.philosophy h2{font-size:38px;line-height:1.35}.quote{font-size:27px;color:#33442b}.foot{font-size:13px;color:#7b8474;margin-top:48px}
+@media(max-width:780px){.wrap{padding:26px 18px}.pair,.notes,.philosophy{grid-template-columns:1fr;gap:24px}h2{font-size:23px}.toolbar span{margin:0}.recommend{font-size:17px}.section{margin-top:38px}.philosophy{gap:20px}.label{padding:20px}.philosophy h2{font-size:29px}}
+</style>
+<body data-view="both"><div class="wrap">
+<div class="kicker">悬浮便签 / 传播方向对照稿</div>
+<h1>同一个产品，两种开场。</h1>
+<p>你补充的产品灵魂是：记录要再次被看见，才有机会再次被想起。新版把持续置顶放到第一屏，把贴边书签作为这个主张的延伸。</p>
+<p class="recommend">建议：<strong>B 做第一屏，A 的贴边动效放第二屏。</strong> 先让人理解为什么需要它，再展示它怎么做到。</p>
+<div class="toolbar" aria-label="对照显示方式"><button data-mode="both" aria-pressed="true">并排比较</button><button data-mode="a" aria-pressed="false">只看 A 原版</button><button data-mode="b" aria-pressed="false">只看 B 新版</button><span>点图片可打开原尺寸</span></div>
+<div class="pair">
+ <article class="variant a"><div class="label"><div class="tag">A / 先讲功能记忆点</div><h2>用时在眼前，不用靠边站。</h2><p>“便签还可以这样收起来。”第一眼记住的是三种形态和桌面留白。</p></div><a class="image" href="../github/hero.png" target="_blank"><img src="../github/hero.png" alt="A 版 README 首屏"></a><div class="caption"><a href="../../../release/workbuddy-deploy/site/a.html" target="_blank">打开 A 版完整 README 预览</a></div></article>
+ <article class="variant b"><div class="label"><div class="tag">B / 先讲产品主张</div><h2>记下，也要看见。</h2><p>“我记下的事，应该留在眼前。”第一眼理解持续置顶为什么有用。</p></div><a class="image" href="../seen/hero.png" target="_blank"><img src="../seen/hero.png" alt="B 版 README 首屏：看见的力量"></a><div class="caption"><a href="../../demo/showcase-readme-seen-preview.html" target="_blank">打开 B 版完整 README 预览</a></div></article>
+</div>
+<div class="notes"><div class="memo"><h3>便利贴：内容留在眼前</h3><p>切换文档、打开网页时，便签持续显示在普通工作窗口上方，让要记的事继续进入视线。</p></div><div class="memo"><h3>书签：收起也留下记号</h3><p>需要空间时，可以收小；边缘仍留着一个视觉线索，提醒自己这里还有一件事。</p></div></div>
+<section class="section cover-view"><h2>小红书第一张，也换一种开场。</h2><div class="pair"><article class="variant a"><div class="label"><div class="tag">A / 动作钩子</div><h2>这个便签，会靠边站。</h2></div><a class="image" href="../xhs/01-cover.png" target="_blank"><img src="../xhs/01-cover.png" alt="A 版小红书封面"></a></article><article class="variant b"><div class="label"><div class="tag">B / 使用动机</div><h2>记下，也要看见。</h2></div><a class="image" href="../seen/cover.png" target="_blank"><img src="../seen/cover.png" alt="B 版小红书封面"></a></article></div></section>
+<section class="philosophy"><a href="../seen/philosophy.png" target="_blank"><img src="../seen/philosophy.png" alt="B 版理念图：便利贴与书签"></a><div><div class="kicker">B / 补上产品的来处</div><h2>便利贴贴在眼前。<br>书签露在书页外。</h2><p class="quote">这是「看见」的力量。</p><p>这张理念图把你说的现实原型带进来，适合承接首发故事。它负责讲产品为什么存在，功能画面负责证明这种体验。</p><p><a href="../../../docs/distribution/visibility-direction.md" target="_blank">阅读完整判断与新版小红书文案</a></p><p><a href="../seen/hero.png" download>下载 B 首屏</a> · <a href="../seen/cover.png" download>下载 B 封面</a> · <a href="../seen/philosophy.png" download>下载理念图</a></p></div></section>
+<p class="foot">当前为本地对照稿，GitHub 推送已暂停。B 没有覆盖 A；新增 3 张静态图与一份 README 候选稿。便签来自真实界面截图，工作窗口为示意布景，纸质场景由 imagegen 生成。尚未进行陌生用户三秒理解测试。</p>
+</div><script>document.querySelectorAll('[data-mode]').forEach(button=>button.addEventListener('click',()=>{document.body.dataset.view=button.dataset.mode;document.querySelectorAll('[data-mode]').forEach(other=>other.setAttribute('aria-pressed',String(other===button)));}));</script></body>
+</html>

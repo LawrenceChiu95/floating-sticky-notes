@@ -1,0 +1,105 @@
+[
+  {
+    "filename": "daily.png",
+    "width": 360,
+    "height": 310,
+    "name": "今日待办",
+    "color": "#FFF3B0",
+    "content": "先做一件，再做下一件。",
+    "checklist": [
+      {
+        "id": "a",
+        "text": "把方案最后一页写完",
+        "checked": true
+      },
+      {
+        "id": "b",
+        "text": "准备下午的提案",
+        "checked": false
+      },
+      {
+        "id": "b1",
+        "parentId": "b",
+        "text": "选好两张参考图",
+        "checked": true
+      },
+      {
+        "id": "b2",
+        "parentId": "b",
+        "text": "把想说的重点压成三句",
+        "checked": false
+      },
+      {
+        "id": "c",
+        "text": "六点，合上电脑去散步",
+        "checked": false
+      }
+    ]
+  },
+  {
+    "filename": "ideas.png",
+    "width": 340,
+    "height": 240,
+    "name": "先留住这个想法",
+    "color": "#FFDCE8",
+    "content": "下次做一个周末小项目：\n\n让桌面上的东西少一点，\n让脑子里的空位多一点。\n\n不急，先记在这里。"
+  },
+  {
+    "filename": "reference.png",
+    "width": 360,
+    "height": 330,
+    "name": "这张图，放手边参考",
+    "color": "#D8ECFF",
+    "image": true,
+    "content": "喜欢这组颜色。\n下一版封面，可以试试这个方向。"
+  },
+  {
+    "filename": "green.png",
+    "width": 320,
+    "height": 210,
+    "name": "留一点自己的时间",
+    "color": "#DDF7D0",
+    "content": "傍晚去走走。\n带上耳机，绕远一点。\n\n工作到这里，今天也很好。"
+  },
+  {
+    "filename": "white.png",
+    "width": 320,
+    "height": 210,
+    "name": "随手记",
+    "color": "#FAFAF7",
+    "content": "刚想到的，\n还没想好的，\n暂时不想忘的。\n\n都可以先放这里。"
+  },
+  {
+    "filename": "collapsed.png",
+    "width": 360,
+    "height": 310,
+    "collapsed": true,
+    "name": "今日待办",
+    "color": "#FFF3B0",
+    "content": "先做一件，再做下一件。"
+  },
+  {
+    "filename": "tab-yellow.png",
+    "width": 96,
+    "height": 32,
+    "tab": true,
+    "name": "今日待办",
+    "color": "#FFF3B0"
+  },
+  {
+    "filename": "tab-blue.png",
+    "width": 96,
+    "height": 32,
+    "tab": true,
+    "name": "参考图",
+    "color": "#D8ECFF"
+  },
+  {
+    "filename": "tab-pink.png",
+    "width": 96,
+    "height": 32,
+    "tab": true,
+    "name": "灵感",
+    "color": "#FFDCE8"
+  }
+]

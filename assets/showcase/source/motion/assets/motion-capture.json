@@ -1,0 +1,1010 @@
+{
+  "source": "Unmodified out/renderer built from version 0.1.21; fictional in-memory bridge fixture; renderer-only capture, not native OS recording",
+  "fixture": {
+    "name": "今日待办",
+    "color": "#FFF3B0",
+    "expandedViewportCssPx": {
+      "width": 360,
+      "height": 310
+    },
+    "deviceScaleFactor": 2
+  },
+  "sampleTimesMs": [
+    0,
+    16.667,
+    33.333,
+    50,
+    66.667,
+    83.333,
+    100,
+    116.667,
+    133.333,
+    150,
+    166.667,
+    183.333,
+    200,
+    216.667,
+    233.333,
+    250,
+    266.667,
+    283.333,
+    300
+  ],
+  "collapse": {
+    "status": "success",
+    "canvas": {
+      "width": 720,
+      "height": 620
+    },
+    "durationMs": 300,
+    "frameCount": 19,
+    "timingControl": "CDP playback rate 0 + Web Animations currentTime; Playwright clock paused JS fallback timers; terminal height transitionend dispatched after seeking final styles",
+    "frames": [
+      {
+        "index": 0,
+        "timestampMs": 0,
+        "filename": "frame-000.png",
+        "width": 720,
+        "height": 620,
+        "nonTransparentPixels": 446224,
+        "alphaBounds": {
+          "x": 0,
+          "y": 0,
+          "width": 720,
+          "height": 620
+        },
+        "domGeometry": {
+          "shell": {
+            "x": 0,
+            "y": 0,
+            "width": 360,
+            "height": 310
+          },
+          "animationCount": 29,
+          "transitioning": true
+        }
+      },
+      {
+        "index": 1,
+        "timestampMs": 16.667,
+        "filename": "frame-001.png",
+        "width": 720,
+        "height": 620,
+        "nonTransparentPixels": 384296,
+        "alphaBounds": {
+          "x": 0,
+          "y": 0,
+          "width": 720,
+          "height": 534
+        },
+        "domGeometry": {
+          "shell": {
+            "x": 0,
+            "y": 0,
+            "width": 360,
+            "height": 266.65625
+          },
+          "animationCount": 29,
+          "transitioning": true
+        }
+      },
+      {
+        "index": 2,
+        "timestampMs": 33.333,
+        "filename": "frame-002.png",
+        "width": 720,
+        "height": 620,
+        "nonTransparentPixels": 320916,
+        "alphaBounds": {
+          "x": 0,
+          "y": 0,
+          "width": 720,
+          "height": 446
+        },
+        "domGeometry": {
+          "shell": {
+            "x": 0,
+            "y": 0,
+            "width": 360,
+            "height": 222.609375
+          },
+          "animationCount": 29,
+          "transitioning": true
+        }
+      },
+      {
+        "index": 3,
+        "timestampMs": 50,
+        "filename": "frame-003.png",
+        "width": 720,
+        "height": 620,
+        "nonTransparentPixels": 258980,
+        "alphaBounds": {
+          "x": 0,
+          "y": 0,
+          "width": 720,
+          "height": 360
+        },
+        "domGeometry": {
+          "shell": {
+            "x": 0,
+            "y": 0,
+            "width": 360,
+            "height": 179.84375
+          },
+          "animationCount": 29,
+          "transitioning": true
+        }
+      },
+      {
+        "index": 4,
+        "timestampMs": 66.667,
+        "filename": "frame-004.png",
+        "width": 720,
+        "height": 620,
+        "nonTransparentPixels": 204236,
+        "alphaBounds": {
+          "x": 0,
+          "y": 0,
+          "width": 720,
+          "height": 284
+        },
+        "domGeometry": {
+          "shell": {
+            "x": 0,
+            "y": 0,
+            "width": 360,
+            "height": 141.609375
+          },
+          "animationCount": 29,
+          "transitioning": true
+        }
+      },
+      {
+        "index": 5,
+        "timestampMs": 83.333,
+        "filename": "frame-005.png",
+        "width": 720,
+        "height": 620,
+        "nonTransparentPixels": 159588,
+        "alphaBounds": {
+          "x": 0,
+          "y": 0,
+          "width": 720,
+          "height": 222
+        },
+        "domGeometry": {
+          "shell": {
+            "x": 0,
+            "y": 0,
+            "width": 360,
+            "height": 110.78125
+          },
+          "animationCount": 29,
+          "transitioning": true
+        }
+      },
+      {
+        "index": 6,
+        "timestampMs": 100,
+        "filename": "frame-006.png",
+        "width": 720,
+        "height": 620,
+        "nonTransparentPixels": 126452,
+        "alphaBounds": {
+          "x": 0,
+          "y": 0,
+          "width": 720,
+          "height": 176
+        },
+        "domGeometry": {
+          "shell": {
+            "x": 0,
+            "y": 0,
+            "width": 360,
+            "height": 87.9375
+          },
+          "animationCount": 29,
+          "transitioning": true
+        }
+      },
+      {
+        "index": 7,
+        "timestampMs": 116.667,
+        "filename": "frame-007.png",
+        "width": 720,
+        "height": 620,
+        "nonTransparentPixels": 103404,
+        "alphaBounds": {
+          "x": 0,
+          "y": 0,
+          "width": 720,
+          "height": 144
+        },
+        "domGeometry": {
+          "shell": {
+            "x": 0,
+            "y": 0,
+            "width": 360,
+            "height": 71.8125
+          },
+          "animationCount": 29,
+          "transitioning": true
+        }
+      },
+      {
+        "index": 8,
+        "timestampMs": 133.333,
+        "filename": "frame-008.png",
+        "width": 720,
+        "height": 620,
+        "nonTransparentPixels": 87564,
+        "alphaBounds": {
+          "x": 0,
+          "y": 0,
+          "width": 720,
+          "height": 122
+        },
+        "domGeometry": {
+          "shell": {
+            "x": 0,
+            "y": 0,
+            "width": 360,
+            "height": 60.59375
+          },
+          "animationCount": 28,
+          "transitioning": true
+        }
+      },
+      {
+        "index": 9,
+        "timestampMs": 150,
+        "filename": "frame-009.png",
+        "width": 720,
+        "height": 620,
+        "nonTransparentPixels": 76036,
+        "alphaBounds": {
+          "x": 0,
+          "y": 0,
+          "width": 720,
+          "height": 106
+        },
+        "domGeometry": {
+          "shell": {
+            "x": 0,
+            "y": 0,
+            "width": 360,
+            "height": 52.84375
+          },
+          "animationCount": 26,
+          "transitioning": true
+        }
+      },
+      {
+        "index": 10,
+        "timestampMs": 166.667,
+        "filename": "frame-010.png",
+        "width": 720,
+        "height": 620,
+        "nonTransparentPixels": 68828,
+        "alphaBounds": {
+          "x": 0,
+          "y": 0,
+          "width": 720,
+          "height": 96
+        },
+        "domGeometry": {
+          "shell": {
+            "x": 0,
+            "y": 0,
+            "width": 360,
+            "height": 47.5625
+          },
+          "animationCount": 25,
+          "transitioning": true
+        }
+      },
+      {
+        "index": 11,
+        "timestampMs": 183.333,
+        "filename": "frame-011.png",
+        "width": 720,
+        "height": 620,
+        "nonTransparentPixels": 63064,
+        "alphaBounds": {
+          "x": 0,
+          "y": 0,
+          "width": 720,
+          "height": 88
+        },
+        "domGeometry": {
+          "shell": {
+            "x": 0,
+            "y": 0,
+            "width": 360,
+            "height": 44.046875
+          },
+          "animationCount": 23,
+          "transitioning": true
+        }
+      },
+      {
+        "index": 12,
+        "timestampMs": 200,
+        "filename": "frame-012.png",
+        "width": 720,
+        "height": 620,
+        "nonTransparentPixels": 60184,
+        "alphaBounds": {
+          "x": 0,
+          "y": 0,
+          "width": 720,
+          "height": 84
+        },
+        "domGeometry": {
+          "shell": {
+            "x": 0,
+            "y": 0,
+            "width": 360,
+            "height": 41.8125
+          },
+          "animationCount": 21,
+          "transitioning": true
+        }
+      },
+      {
+        "index": 13,
+        "timestampMs": 216.667,
+        "filename": "frame-013.png",
+        "width": 720,
+        "height": 620,
+        "nonTransparentPixels": 58744,
+        "alphaBounds": {
+          "x": 0,
+          "y": 0,
+          "width": 720,
+          "height": 82
+        },
+        "domGeometry": {
+          "shell": {
+            "x": 0,
+            "y": 0,
+            "width": 360,
+            "height": 40.5625
+          },
+          "animationCount": 8,
+          "transitioning": true
+        }
+      },
+      {
+        "index": 14,
+        "timestampMs": 233.333,
+        "filename": "frame-014.png",
+        "width": 720,
+        "height": 620,
+        "nonTransparentPixels": 57304,
+        "alphaBounds": {
+          "x": 0,
+          "y": 0,
+          "width": 720,
+          "height": 80
+        },
+        "domGeometry": {
+          "shell": {
+            "x": 0,
+            "y": 0,
+            "width": 360,
+            "height": 40.03125
+          },
+          "animationCount": 6,
+          "transitioning": true
+        }
+      },
+      {
+        "index": 15,
+        "timestampMs": 250,
+        "filename": "frame-015.png",
+        "width": 720,
+        "height": 620,
+        "nonTransparentPixels": 57304,
+        "alphaBounds": {
+          "x": 0,
+          "y": 0,
+          "width": 720,
+          "height": 80
+        },
+        "domGeometry": {
+          "shell": {
+            "x": 0,
+            "y": 0,
+            "width": 360,
+            "height": 40
+          },
+          "animationCount": 5,
+          "transitioning": true
+        }
+      },
+      {
+        "index": 16,
+        "timestampMs": 266.667,
+        "filename": "frame-016.png",
+        "width": 720,
+        "height": 620,
+        "nonTransparentPixels": 57304,
+        "alphaBounds": {
+          "x": 0,
+          "y": 0,
+          "width": 720,
+          "height": 80
+        },
+        "domGeometry": {
+          "shell": {
+            "x": 0,
+            "y": 0,
+            "width": 360,
+            "height": 40
+          },
+          "animationCount": 1,
+          "transitioning": false
+        }
+      },
+      {
+        "index": 17,
+        "timestampMs": 283.333,
+        "filename": "frame-017.png",
+        "width": 720,
+        "height": 620,
+        "nonTransparentPixels": 57304,
+        "alphaBounds": {
+          "x": 0,
+          "y": 0,
+          "width": 720,
+          "height": 80
+        },
+        "domGeometry": {
+          "shell": {
+            "x": 0,
+            "y": 0,
+            "width": 360,
+            "height": 40
+          },
+          "animationCount": 0,
+          "transitioning": false
+        }
+      },
+      {
+        "index": 18,
+        "timestampMs": 300,
+        "filename": "frame-018.png",
+        "width": 720,
+        "height": 620,
+        "nonTransparentPixels": 57304,
+        "alphaBounds": {
+          "x": 0,
+          "y": 0,
+          "width": 720,
+          "height": 80
+        },
+        "domGeometry": {
+          "shell": {
+            "x": 0,
+            "y": 0,
+            "width": 360,
+            "height": 40
+          },
+          "animationCount": 0,
+          "transitioning": false,
+          "contentMounted": false
+        }
+      }
+    ]
+  },
+  "dock": {
+    "status": "success",
+    "canvas": {
+      "width": 816,
+      "height": 80
+    },
+    "durationMs": 300,
+    "frameCount": 19,
+    "timingControl": "Element.prototype.animate wrapper pauses the actual dock-shrink-stub WAAPI animation at creation; currentTime seeks source samples; finish() runs the renderer terminal handoff",
+    "frames": [
+      {
+        "index": 0,
+        "timestampMs": 0,
+        "filename": "frame-000.png",
+        "width": 816,
+        "height": 80,
+        "nonTransparentPixels": 57364,
+        "alphaBounds": {
+          "x": 0,
+          "y": 0,
+          "width": 720,
+          "height": 80
+        },
+        "domGeometry": {
+          "stub": {
+            "x": 0,
+            "y": 0,
+            "width": 360,
+            "height": 40
+          },
+          "transform": "matrix(1, 0, 0, 1, 0, 0)",
+          "clipPath": "inset(0px round 8px)",
+          "playState": "paused"
+        }
+      },
+      {
+        "index": 1,
+        "timestampMs": 16.667,
+        "filename": "frame-001.png",
+        "width": 816,
+        "height": 80,
+        "nonTransparentPixels": 50707,
+        "alphaBounds": {
+          "x": 80,
+          "y": 0,
+          "width": 653,
+          "height": 78
+        },
+        "domGeometry": {
+          "stub": {
+            "x": 39.94384002685547,
+            "y": 0,
+            "width": 360,
+            "height": 40
+          },
+          "transform": "matrix(1, 0, 0, 1, 39.9438, 0)",
+          "clipPath": "inset(0px 33.7986px 1.0242px 0px round 8px)",
+          "playState": "paused"
+        }
+      },
+      {
+        "index": 2,
+        "timestampMs": 33.333,
+        "filename": "frame-002.png",
+        "width": 816,
+        "height": 80,
+        "nonTransparentPixels": 44159,
+        "alphaBounds": {
+          "x": 161,
+          "y": 0,
+          "width": 584,
+          "height": 76
+        },
+        "domGeometry": {
+          "stub": {
+            "x": 80.63046264648438,
+            "y": 0,
+            "width": 360,
+            "height": 40
+          },
+          "transform": "matrix(1, 0, 0, 1, 80.6305, 0)",
+          "clipPath": "inset(0px 68.2258px 2.06745px 0px round 8px)",
+          "playState": "paused"
+        }
+      },
+      {
+        "index": 3,
+        "timestampMs": 50,
+        "filename": "frame-003.png",
+        "width": 816,
+        "height": 80,
+        "nonTransparentPixels": 37944,
+        "alphaBounds": {
+          "x": 242,
+          "y": 0,
+          "width": 516,
+          "height": 74
+        },
+        "domGeometry": {
+          "stub": {
+            "x": 121.11735534667969,
+            "y": 0,
+            "width": 360,
+            "height": 40
+          },
+          "transform": "matrix(1, 0, 0, 1, 121.117, 0)",
+          "clipPath": "inset(0px 102.484px 3.10557px 0px round 8px)",
+          "playState": "paused"
+        }
+      },
+      {
+        "index": 4,
+        "timestampMs": 66.667,
+        "filename": "frame-004.png",
+        "width": 816,
+        "height": 80,
+        "nonTransparentPixels": 32224,
+        "alphaBounds": {
+          "x": 319,
+          "y": 0,
+          "width": 451,
+          "height": 72
+        },
+        "domGeometry": {
+          "stub": {
+            "x": 159.7841796875,
+            "y": 0,
+            "width": 360,
+            "height": 40
+          },
+          "transform": "matrix(1, 0, 0, 1, 159.784, 0)",
+          "clipPath": "inset(0px 135.202px 4.09703px 0px round 8px)",
+          "playState": "paused"
+        }
+      },
+      {
+        "index": 5,
+        "timestampMs": 83.333,
+        "filename": "frame-005.png",
+        "width": 816,
+        "height": 80,
+        "nonTransparentPixels": 27521,
+        "alphaBounds": {
+          "x": 389,
+          "y": 0,
+          "width": 391,
+          "height": 71
+        },
+        "domGeometry": {
+          "stub": {
+            "x": 194.57766723632812,
+            "y": 0,
+            "width": 359.9999694824219,
+            "height": 40
+          },
+          "transform": "matrix(1, 0, 0, 1, 194.578, 0)",
+          "clipPath": "inset(0px 164.643px 4.98917px 0px round 8px)",
+          "playState": "paused"
+        }
+      },
+      {
+        "index": 6,
+        "timestampMs": 100,
+        "filename": "frame-006.png",
+        "width": 816,
+        "height": 80,
+        "nonTransparentPixels": 23356,
+        "alphaBounds": {
+          "x": 447,
+          "y": 0,
+          "width": 342,
+          "height": 69
+        },
+        "domGeometry": {
+          "stub": {
+            "x": 223.84298706054688,
+            "y": 0,
+            "width": 360.0000305175781,
+            "height": 40
+          },
+          "transform": "matrix(1, 0, 0, 1, 223.843, 0)",
+          "clipPath": "inset(0px 189.406px 5.73956px 0px round 8px)",
+          "playState": "paused"
+        }
+      },
+      {
+        "index": 7,
+        "timestampMs": 116.667,
+        "filename": "frame-007.png",
+        "width": 816,
+        "height": 80,
+        "nonTransparentPixels": 20347,
+        "alphaBounds": {
+          "x": 494,
+          "y": 0,
+          "width": 303,
+          "height": 68
+        },
+        "domGeometry": {
+          "stub": {
+            "x": 247.0775604248047,
+            "y": 0,
+            "width": 360,
+            "height": 40
+          },
+          "transform": "matrix(1, 0, 0, 1, 247.078, 0)",
+          "clipPath": "inset(0px 209.066px 6.33532px 0px round 8px)",
+          "playState": "paused"
+        }
+      },
+      {
+        "index": 8,
+        "timestampMs": 133.333,
+        "filename": "frame-008.png",
+        "width": 816,
+        "height": 80,
+        "nonTransparentPixels": 18033,
+        "alphaBounds": {
+          "x": 529,
+          "y": 0,
+          "width": 273,
+          "height": 67
+        },
+        "domGeometry": {
+          "stub": {
+            "x": 264.85772705078125,
+            "y": 0,
+            "width": 360,
+            "height": 40
+          },
+          "transform": "matrix(1, 0, 0, 1, 264.858, 0)",
+          "clipPath": "inset(0px 224.11px 6.79122px 0px round 8px)",
+          "playState": "paused"
+        }
+      },
+      {
+        "index": 9,
+        "timestampMs": 150,
+        "filename": "frame-009.png",
+        "width": 816,
+        "height": 80,
+        "nonTransparentPixels": 16263,
+        "alphaBounds": {
+          "x": 556,
+          "y": 0,
+          "width": 250,
+          "height": 66
+        },
+        "domGeometry": {
+          "stub": {
+            "x": 278.2240295410156,
+            "y": 0,
+            "width": 359.9999694824219,
+            "height": 40
+          },
+          "transform": "matrix(1, 0, 0, 1, 278.224, 0)",
+          "clipPath": "inset(0px 235.42px 7.13395px 0px round 8px)",
+          "playState": "paused"
+        }
+      },
+      {
+        "index": 10,
+        "timestampMs": 166.667,
+        "filename": "frame-010.png",
+        "width": 816,
+        "height": 80,
+        "nonTransparentPixels": 15130,
+        "alphaBounds": {
+          "x": 576,
+          "y": 0,
+          "width": 233,
+          "height": 66
+        },
+        "domGeometry": {
+          "stub": {
+            "x": 288.1986083984375,
+            "y": 0,
+            "width": 360,
+            "height": 40
+          },
+          "transform": "matrix(1, 0, 0, 1, 288.199, 0)",
+          "clipPath": "inset(0px 243.86px 7.38971px 0px round 8px)",
+          "playState": "paused"
+        }
+      },
+      {
+        "index": 11,
+        "timestampMs": 183.333,
+        "filename": "frame-011.png",
+        "width": 816,
+        "height": 80,
+        "nonTransparentPixels": 14082,
+        "alphaBounds": {
+          "x": 591,
+          "y": 0,
+          "width": 220,
+          "height": 65
+        },
+        "domGeometry": {
+          "stub": {
+            "x": 295.6111755371094,
+            "y": 0,
+            "width": 360.0000305175781,
+            "height": 40
+          },
+          "transform": "matrix(1, 0, 0, 1, 295.611, 0)",
+          "clipPath": "inset(0px 250.133px 7.57977px 0px round 8px)",
+          "playState": "paused"
+        }
+      },
+      {
+        "index": 12,
+        "timestampMs": 200,
+        "filename": "frame-012.png",
+        "width": 816,
+        "height": 80,
+        "nonTransparentPixels": 13483,
+        "alphaBounds": {
+          "x": 602,
+          "y": 0,
+          "width": 211,
+          "height": 65
+        },
+        "domGeometry": {
+          "stub": {
+            "x": 301.08685302734375,
+            "y": 0,
+            "width": 360,
+            "height": 40
+          },
+          "transform": "matrix(1, 0, 0, 1, 301.087, 0)",
+          "clipPath": "inset(0px 254.766px 7.72018px 0px round 8px)",
+          "playState": "paused"
+        }
+      },
+      {
+        "index": 13,
+        "timestampMs": 216.667,
+        "filename": "frame-013.png",
+        "width": 816,
+        "height": 80,
+        "nonTransparentPixels": 13029,
+        "alphaBounds": {
+          "x": 610,
+          "y": 0,
+          "width": 204,
+          "height": 65
+        },
+        "domGeometry": {
+          "stub": {
+            "x": 305.0828552246094,
+            "y": 0,
+            "width": 360.0000305175781,
+            "height": 40
+          },
+          "transform": "matrix(1, 0, 0, 1, 305.083, 0)",
+          "clipPath": "inset(0px 258.147px 7.82264px 0px round 8px)",
+          "playState": "paused"
+        }
+      },
+      {
+        "index": 14,
+        "timestampMs": 233.333,
+        "filename": "frame-014.png",
+        "width": 816,
+        "height": 80,
+        "nonTransparentPixels": 12736,
+        "alphaBounds": {
+          "x": 615,
+          "y": 0,
+          "width": 200,
+          "height": 65
+        },
+        "domGeometry": {
+          "stub": {
+            "x": 307.93402099609375,
+            "y": 0,
+            "width": 360,
+            "height": 40
+          },
+          "transform": "matrix(1, 0, 0, 1, 307.934, 0)",
+          "clipPath": "inset(0px 260.56px 7.89574px 0px round 8px)",
+          "playState": "paused"
+        }
+      },
+      {
+        "index": 15,
+        "timestampMs": 250,
+        "filename": "frame-015.png",
+        "width": 816,
+        "height": 80,
+        "nonTransparentPixels": 12527,
+        "alphaBounds": {
+          "x": 619,
+          "y": 0,
+          "width": 197,
+          "height": 65
+        },
+        "domGeometry": {
+          "stub": {
+            "x": 309.8878479003906,
+            "y": 0,
+            "width": 359.9999694824219,
+            "height": 40
+          },
+          "transform": "matrix(1, 0, 0, 1, 309.888, 0)",
+          "clipPath": "inset(0px 262.213px 7.94584px 0px round 8px)",
+          "playState": "paused"
+        }
+      },
+      {
+        "index": 16,
+        "timestampMs": 266.667,
+        "filename": "frame-016.png",
+        "width": 816,
+        "height": 80,
+        "nonTransparentPixels": 12360,
+        "alphaBounds": {
+          "x": 622,
+          "y": 0,
+          "width": 194,
+          "height": 65
+        },
+        "domGeometry": {
+          "stub": {
+            "x": 311.12884521484375,
+            "y": 0,
+            "width": 360,
+            "height": 40
+          },
+          "transform": "matrix(1, 0, 0, 1, 311.129, 0)",
+          "clipPath": "inset(0px 263.263px 7.97766px 0px round 8px)",
+          "playState": "paused"
+        }
+      },
+      {
+        "index": 17,
+        "timestampMs": 283.333,
+        "filename": "frame-017.png",
+        "width": 816,
+        "height": 80,
+        "nonTransparentPixels": 12291,
+        "alphaBounds": {
+          "x": 623,
+          "y": 0,
+          "width": 193,
+          "height": 65
+        },
+        "domGeometry": {
+          "stub": {
+            "x": 311.7969970703125,
+            "y": 0,
+            "width": 360,
+            "height": 40
+          },
+          "transform": "matrix(1, 0, 0, 1, 311.797, 0)",
+          "clipPath": "inset(0px 263.828px 7.99479px 0px round 8px)",
+          "playState": "paused"
+        }
+      },
+      {
+        "index": 18,
+        "timestampMs": 300,
+        "filename": "frame-018.png",
+        "width": 816,
+        "height": 80,
+        "nonTransparentPixels": 12140,
+        "alphaBounds": {
+          "x": 624,
+          "y": 0,
+          "width": 192,
+          "height": 64
+        },
+        "domGeometry": {
+          "stub": {
+            "x": 312,
+            "y": 0,
+            "width": 96,
+            "height": 32
+          },
+          "transform": "none",
+          "clipPath": "none",
+          "events": [
+            {
+              "type": "dock-shrink-ready",
+              "transitionId": 1
+            },
+            {
+              "type": "dock-shrink-union-sized",
+              "transitionId": 1
+            },
+            {
+              "type": "dock-animation-created",
+              "options": {
+                "duration": 300,
+                "easing": "cubic-bezier(0.33, 0.75, 0.35, 1)",
+                "fill": "forwards"
+              }
+            },
+            {
+              "type": "dock-shrink-finished",
+              "transitionId": 1
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

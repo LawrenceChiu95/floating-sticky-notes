@@ -1,0 +1,86 @@
+{
+  "source": "Unmodified out/renderer built from version 0.1.21; synthetic IPC fixtures; not native OS recording",
+  "captures": [
+    {
+      "filename": "daily.png",
+      "viewport": {
+        "width": 360,
+        "height": 310
+      },
+      "deviceScaleFactor": 2,
+      "errors": []
+    },
+    {
+      "filename": "ideas.png",
+      "viewport": {
+        "width": 340,
+        "height": 240
+      },
+      "deviceScaleFactor": 2,
+      "errors": []
+    },
+    {
+      "filename": "reference.png",
+      "viewport": {
+        "width": 360,
+        "height": 330
+      },
+      "deviceScaleFactor": 2,
+      "errors": []
+    },
+    {
+      "filename": "green.png",
+      "viewport": {
+        "width": 320,
+        "height": 210
+      },
+      "deviceScaleFactor": 2,
+      "errors": []
+    },
+    {
+      "filename": "white.png",
+      "viewport": {
+        "width": 320,
+        "height": 210
+      },
+      "deviceScaleFactor": 2,
+      "errors": []
+    },
+    {
+      "filename": "collapsed.png",
+      "viewport": {
+        "width": 360,
+        "height": 40
+      },
+      "deviceScaleFactor": 2,
+      "errors": []
+    },
+    {
+      "filename": "tab-yellow.png",
+      "viewport": {
+        "width": 96,
+        "height": 32
+      },
+      "deviceScaleFactor": 2,
+      "errors": []
+    },
+    {
+      "filename": "tab-blue.png",
+      "viewport": {
+        "width": 96,
+        "height": 32
+      },
+      "deviceScaleFactor": 2,
+      "errors": []
+    },
+    {
+      "filename": "tab-pink.png",
+      "viewport": {
+        "width": 96,
+        "height": 32
+      },
+      "deviceScaleFactor": 2,
+      "errors": []
+    }
+  ]
+}

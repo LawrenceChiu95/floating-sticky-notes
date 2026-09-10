@@ -1,0 +1,83 @@
+[
+  {
+    "card": "hero",
+    "width": 1600,
+    "height": 1000,
+    "bytes": 369972,
+    "missingImages": [],
+    "overflow": false,
+    "consoleErrors": []
+  },
+  {
+    "card": "states",
+    "width": 1600,
+    "height": 1000,
+    "bytes": 264151,
+    "missingImages": [],
+    "overflow": false,
+    "consoleErrors": []
+  },
+  {
+    "card": "features",
+    "width": 1600,
+    "height": 1000,
+    "bytes": 286057,
+    "missingImages": [],
+    "overflow": false,
+    "consoleErrors": []
+  },
+  {
+    "card": "01",
+    "width": 1080,
+    "height": 1440,
+    "bytes": 356782,
+    "missingImages": [],
+    "overflow": false,
+    "consoleErrors": []
+  },
+  {
+    "card": "02",
+    "width": 1080,
+    "height": 1440,
+    "bytes": 135749,
+    "missingImages": [],
+    "overflow": false,
+    "consoleErrors": []
+  },
+  {
+    "card": "03",
+    "width": 1080,
+    "height": 1440,
+    "bytes": 225415,
+    "missingImages": [],
+    "overflow": false,
+    "consoleErrors": []
+  },
+  {
+    "card": "04",
+    "width": 1080,
+    "height": 1440,
+    "bytes": 272546,
+    "missingImages": [],
+    "overflow": false,
+    "consoleErrors": []
+  },
+  {
+    "card": "05",
+    "width": 1080,
+    "height": 1440,
+    "bytes": 343032,
+    "missingImages": [],
+    "overflow": false,
+    "consoleErrors": []
+  },
+  {
+    "card": "06",
+    "width": 1080,
+    "height": 1440,
+    "bytes": 261677,
+    "missingImages": [],
+    "overflow": false,
+    "consoleErrors": []
+  }
+]

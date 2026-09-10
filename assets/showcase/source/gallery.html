@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>悬浮便签 · Distribution Showcase</title>
+    <style>
+      :root { --paper:#f6f5f1; --ink:#202722; --muted:#697269; --line:#d9ddd5; --leaf:#566943; --card:#fffefa; }
+      * { box-sizing:border-box; }
+      html,body { margin:0; min-height:100%; background:var(--paper); color:var(--ink); }
+      body { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+      a { color:inherit; }
+      .wrap { width:min(1180px, calc(100% - 48px)); margin:0 auto; }
+      header { padding:42px 0 26px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:flex-end; gap:24px; }
+      .brand { display:flex; align-items:center; gap:14px; }
+      .brand img { width:42px; height:42px; border-radius:11px; box-shadow:0 8px 22px rgba(32,39,34,.14); }
+      .brand-kicker { color:var(--leaf); letter-spacing:.14em; font-size:11px; text-transform:uppercase; font-weight:700; }
+      h1 { font-size:clamp(30px, 5vw, 60px); line-height:1.02; letter-spacing:0; margin:18px 0 10px; font-weight:780; }
+      .intro { max-width:620px; color:var(--muted); font-size:16px; line-height:1.7; margin:0; }
+      .meta { text-align:right; color:var(--muted); font-size:12px; line-height:1.7; }
+      .grid { display:grid; grid-template-columns:repeat(12,1fr); gap:22px; padding:28px 0 56px; }
+      .item { grid-column:span 6; background:var(--card); border:1px solid var(--line); border-radius:8px; overflow:hidden; box-shadow:0 18px 40px rgba(40,53,41,.06); }
+      .item.wide { grid-column:span 12; }
+      .media { position:relative; background:#e8ebe5; min-height:180px; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+      .media img, .media video { display:block; width:100%; height:auto; max-height:620px; object-fit:contain; }
+      .media video { background:#111; aspect-ratio:16/9; }
+      .item-body { padding:18px 20px 20px; display:flex; justify-content:space-between; align-items:flex-start; gap:20px; }
+      .item h2 { margin:0 0 5px; font-size:19px; letter-spacing:0; }
+      .item p { margin:0; color:var(--muted); font-size:13px; line-height:1.6; }
+      .links { display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; }
+      .links a { text-decoration:none; color:var(--leaf); border:1px solid #bdc8b6; border-radius:5px; padding:7px 10px; font-size:12px; white-space:nowrap; }
+      .links a:hover { background:#eef2e9; }
+      .note { margin:0; padding:10px 0 4px; color:#88928a; font-size:11px; }
+      @media (max-width:760px) {
+        .wrap { width:min(100% - 28px, 620px); }
+        header { padding-top:24px; display:block; }
+        .meta { text-align:left; margin-top:14px; }
+        .grid { gap:16px; padding-top:20px; }
+        .item, .item.wide { grid-column:span 12; }
+        .item-body { display:block; }
+        .links { justify-content:flex-start; margin-top:14px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div>
+          <div class="brand"><img src="../../icons/app-icon.png" alt="悬浮便签图标" /><div><div class="brand-kicker">Distribution Showcase</div><strong>悬浮便签</strong></div></div>
+          <h1>用时在眼前，<br />不用靠边站。</h1>
+          <p class="intro">README、社交卡片与界面演示的本地审阅画廊。便签画面来自实际产品界面，使用虚构演示内容。</p>
+        </div>
+        <div class="meta">产品展示素材<br />界面演示 · v0.1.21</div>
+      </header>
+      <p><a href="../../../docs/distribution/xiaohongshu.md">小红书标题与正文</a> · <a href="../../../docs/distribution/README.md">素材使用说明</a></p><p><strong><a href="comparison.html">新方向对照：看见的力量 →</a></strong></p><main class="grid">
+        <article class="item wide"><div class="media"><img src="../github/hero.png" alt="README hero" /></div><div class="item-body"><div><h2>README 首屏</h2><p>主视觉 · 1600 × 1000</p></div><div class="links"><a href="../github/hero.png" download>下载 PNG</a></div></div></article>
+        <article class="item"><div class="media"><img src="../github/states.png" alt="三种分寸" /></div><div class="item-body"><div><h2>三种形态</h2><p>展开、收起、贴边</p></div><div class="links"><a href="../github/states.png" download>下载 PNG</a></div></div></article>
+        <article class="item"><div class="media"><img src="../github/features.png" alt="功能画面" /></div><div class="item-body"><div><h2>使用场景</h2><p>清单与参考图</p></div><div class="links"><a href="../github/features.png" download>下载 PNG</a></div></div></article>
+        <article class="item wide"><div class="media"><video src="../video/edge-dock.mp4" controls muted playsinline preload="metadata"></video></div><div class="item-body"><div><h2>收起、贴边、拖出</h2><p>9.6 秒 · 无声界面演示 · 展开 → 靠边 → 探出</p></div><div class="links"><a href="../video/edge-dock.mp4" download>下载 MP4</a><a href="../github/edge-dock.gif" download>下载 GIF</a></div></div></article>
+<article class="item"><div class="media"><img src="../xhs/01-cover.png" alt="小红书 会靠边站"></div><div class="item-body"><div><h2>01 · 会靠边站</h2><p>1080 × 1440</p></div><a href="../xhs/01-cover.png" download>下载 PNG</a></div></article><article class="item"><div class="media"><img src="../xhs/02-space.png" alt="小红书 三种形态"></div><div class="item-body"><div><h2>02 · 三种形态</h2><p>1080 × 1440</p></div><a href="../xhs/02-space.png" download>下载 PNG</a></div></article><article class="item"><div class="media"><img src="../xhs/03-daily.png" alt="小红书 下一件事"></div><div class="item-body"><div><h2>03 · 下一件事</h2><p>1080 × 1440</p></div><a href="../xhs/03-daily.png" download>下载 PNG</a></div></article><article class="item"><div class="media"><img src="../xhs/04-reference.png" alt="小红书 参考图在手边"></div><div class="item-body"><div><h2>04 · 参考图在手边</h2><p>1080 × 1440</p></div><a href="../xhs/04-reference.png" download>下载 PNG</a></div></article><article class="item"><div class="media"><img src="../xhs/05-local.png" alt="小红书 颜色与本地保存"></div><div class="item-body"><div><h2>05 · 颜色与本地保存</h2><p>1080 × 1440</p></div><a href="../xhs/05-local.png" download>下载 PNG</a></div></article><article class="item"><div class="media"><img src="../xhs/06-download.png" alt="小红书 下载入口"></div><div class="item-body"><div><h2>06 · 下载入口</h2><p>1080 × 1440</p></div><a href="../xhs/06-download.png" download>下载 PNG</a></div></article>
+      </main>
+    </div>
+  </body>
+</html>

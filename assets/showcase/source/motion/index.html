@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=1600,height=900">
+    <title>悬浮便签 · Edge Dock Demo</title>
+    <script src="./gsap.min.js"></script>
+    <style>
+      @font-face{font-family:"Showcase Chinese";src:local("PingFang SC")}
+      :root { --paper:#e9e8e2; --ink:#202722; --muted:#778079; --leaf:#566943; }
+      * { box-sizing:border-box; }
+      html,body { margin:0; width:1600px; height:900px; overflow:hidden; background:#dfe2dd; }
+      body { font-family:"Showcase Chinese",sans-serif; }
+      #edge-dock-demo { position:relative; width:1600px; height:900px; overflow:hidden; background:#dfe2dd; }
+      .wallpaper { position:absolute; inset:0; background:linear-gradient(135deg,#eef0ea 0%,#dfe4dc 42%,#cbd4c8 100%); }
+      .wallpaper::before { content:""; position:absolute; width:1100px; height:560px; left:280px; top:120px; border-radius:50%; background:rgba(255,255,255,.22); filter:blur(30px); }
+      .desk-line { position:absolute; left:0; right:0; bottom:168px; height:1px; background:rgba(32,39,34,.12); }
+      .window { position:absolute; left:300px; top:92px; width:1000px; height:600px; background:rgba(250,251,248,.62); border:1px solid rgba(32,39,34,.16); box-shadow:0 26px 60px rgba(32,39,34,.12); border-radius:14px; }
+      .window-bar { position:absolute; inset:0 0 auto; height:44px; border-bottom:1px solid rgba(32,39,34,.1); }
+      .window-dot { position:absolute; top:16px; left:20px; width:8px; height:8px; border-radius:50%; background:#bdc6bc; box-shadow:14px 0 #cbd1ca,28px 0 #d7dcd5; }
+      .document { position:absolute; left:60px; top:106px; width:500px; color:rgba(32,39,34,.27); }
+      .document h2 { font-size:22px; margin:0 0 30px; font-weight:650; }
+      .document .line { height:11px; background:rgba(86,105,67,.13); margin:18px 0; width:78%; }
+      .document .line.short { width:49%; }
+      .document .block { width:360px; height:126px; margin-top:34px; border:1px solid rgba(86,105,67,.14); }
+      .note { clip-path:inset(0px 0px 0px 0px round 8px); position:absolute; left:866px; top:158px; width:480px; height:413.333333px; object-fit:contain; filter:drop-shadow(0 26px 28px rgba(32,39,34,.22)); transform-origin:50% 0%; z-index:4; }
+      .strip { position:absolute; left:866px; top:158px; width:480px; height:54px; object-fit:contain; filter:drop-shadow(0 18px 18px rgba(32,39,34,.16)); opacity:0; z-index:5; transform-origin:100% 50%; }
+      .tab { position:absolute; left:1536px; top:158px; width:128px; height:43px; object-fit:contain; filter:drop-shadow(0 9px 10px rgba(32,39,34,.2)); opacity:0; z-index:6; }
+      .caption { position:absolute; left:112px; top:789px; opacity:0; color:var(--ink); font-size:37px; letter-spacing:.01em; z-index:10; }
+      .caption strong { color:var(--leaf); font-weight:700; }
+      .caption.first { opacity:1; }
+      .demo-tag { position:absolute; right:70px; bottom:50px; color:#485941; font-size:21px; letter-spacing:.08em; z-index:10; }
+      .cursor { position:absolute; left:650px; top:266px; width:28px; height:36px; z-index:12; opacity:0; }
+      .cursor::before { display:none; content:""; position:absolute; left:2px; top:1px; width:0; height:0; border-left:10px solid transparent; border-right:10px solid transparent; border-bottom:31px solid #202722; transform:rotate(-28deg); filter:drop-shadow(0 2px 3px rgba(0,0,0,.22)); }
+
+      .capture-layer{position:absolute;left:866px;top:158px;width:480px;height:413.333333px;z-index:5;filter:drop-shadow(0 26px 28px rgba(32,39,34,.22))}
+      .capture-layer img{position:absolute;inset:0;width:100%;height:100%;opacity:0}
+      .dock-layer{left:1120px;top:158px;width:544px;height:53.333333px;z-index:6}
+    </style>
+  </head>
+  <body>
+    <div id="edge-dock-demo" data-composition-id="edge-dock" data-start="0" data-duration="9.6" data-width="1600" data-height="900" data-fps="60">
+      <div id="demo-wallpaper" class="wallpaper clip" data-start="0" data-duration="9.6" data-track-index="0"></div><div class="window"><div class="window-bar"><div class="window-dot"></div></div><div class="document"><div style="width:190px;height:18px;background:#64756638;margin-bottom:32px"></div><div class="line"></div><div class="line short"></div><div class="block"></div><div class="line"></div></div></div><div class="desk-line"></div>
+      <img class="note" id="demo-note" src="assets/collapse-frames/frame-000.png" alt="真实展开便签界面">
+      <div id="collapse-layer" class="capture-layer"><img id="collapse-000" src="assets/collapse-frames/frame-000.png" alt="" aria-hidden="true"><img id="collapse-001" src="assets/collapse-frames/frame-001.png" alt="" aria-hidden="true"><img id="collapse-002" src="assets/collapse-frames/frame-002.png" alt="" aria-hidden="true"><img id="collapse-003" src="assets/collapse-frames/frame-003.png" alt="" aria-hidden="true"><img id="collapse-004" src="assets/collapse-frames/frame-004.png" alt="" aria-hidden="true"><img id="collapse-005" src="assets/collapse-frames/frame-005.png" alt="" aria-hidden="true"><img id="collapse-006" src="assets/collapse-frames/frame-006.png" alt="" aria-hidden="true"><img id="collapse-007" src="assets/collapse-frames/frame-007.png" alt="" aria-hidden="true"><img id="collapse-008" src="assets/collapse-frames/frame-008.png" alt="" aria-hidden="true"><img id="collapse-009" src="assets/collapse-frames/frame-009.png" alt="" aria-hidden="true"><img id="collapse-010" src="assets/collapse-frames/frame-010.png" alt="" aria-hidden="true"><img id="collapse-011" src="assets/collapse-frames/frame-011.png" alt="" aria-hidden="true"><img id="collapse-012" src="assets/collapse-frames/frame-012.png" alt="" aria-hidden="true"><img id="collapse-013" src="assets/collapse-frames/frame-013.png" alt="" aria-hidden="true"><img id="collapse-014" src="assets/collapse-frames/frame-014.png" alt="" aria-hidden="true"><img id="collapse-015" src="assets/collapse-frames/frame-015.png" alt="" aria-hidden="true"><img id="collapse-016" src="assets/collapse-frames/frame-016.png" alt="" aria-hidden="true"><img id="collapse-017" src="assets/collapse-frames/frame-017.png" alt="" aria-hidden="true"><img id="collapse-018" src="assets/collapse-frames/frame-018.png" alt="" aria-hidden="true"></div>
+      <div id="dock-layer" class="capture-layer dock-layer"><img id="dock-000" src="assets/dock-frames/frame-000.png" alt="" aria-hidden="true"><img id="dock-001" src="assets/dock-frames/frame-001.png" alt="" aria-hidden="true"><img id="dock-002" src="assets/dock-frames/frame-002.png" alt="" aria-hidden="true"><img id="dock-003" src="assets/dock-frames/frame-003.png" alt="" aria-hidden="true"><img id="dock-004" src="assets/dock-frames/frame-004.png" alt="" aria-hidden="true"><img id="dock-005" src="assets/dock-frames/frame-005.png" alt="" aria-hidden="true"><img id="dock-006" src="assets/dock-frames/frame-006.png" alt="" aria-hidden="true"><img id="dock-007" src="assets/dock-frames/frame-007.png" alt="" aria-hidden="true"><img id="dock-008" src="assets/dock-frames/frame-008.png" alt="" aria-hidden="true"><img id="dock-009" src="assets/dock-frames/frame-009.png" alt="" aria-hidden="true"><img id="dock-010" src="assets/dock-frames/frame-010.png" alt="" aria-hidden="true"><img id="dock-011" src="assets/dock-frames/frame-011.png" alt="" aria-hidden="true"><img id="dock-012" src="assets/dock-frames/frame-012.png" alt="" aria-hidden="true"><img id="dock-013" src="assets/dock-frames/frame-013.png" alt="" aria-hidden="true"><img id="dock-014" src="assets/dock-frames/frame-014.png" alt="" aria-hidden="true"><img id="dock-015" src="assets/dock-frames/frame-015.png" alt="" aria-hidden="true"><img id="dock-016" src="assets/dock-frames/frame-016.png" alt="" aria-hidden="true"><img id="dock-017" src="assets/dock-frames/frame-017.png" alt="" aria-hidden="true"><img id="dock-018" src="assets/dock-frames/frame-018.png" alt="" aria-hidden="true"></div>
+      <div class="caption first" id="caption-1"><strong>用时，在眼前。</strong></div><div class="caption" id="caption-2"><strong>点一下收起，</strong>拖到屏幕边。</div><div class="caption" id="caption-3"><strong>不用时，</strong>只留一枚小书签。</div><div class="caption" id="caption-4"><strong>拖回桌面，</strong>完整便签就展开。</div>
+      <div class="caption" id="caption-hover"><strong>鼠标移上去，</strong>书签探出来。</div><div class="demo-tag">悬浮便签 · 界面演示</div><div class="cursor" id="demo-cursor"><svg width="28" height="36" viewBox="0 0 28 36"><path d="M3 2L3 29L10 22L15 34L21 31L16 19L26 19Z" fill="#202722" stroke="white" stroke-width="2" stroke-linejoin="round"/></svg></div>
+      <script>
+        window.__timelines = window.__timelines || {};
+        const tl = gsap.timeline({paused:true,defaults:{ease:'power2.inOut'}});
+        const nativeEase=p=>{let low=0,high=1,t=.5;for(let i=0;i<22;i++){t=(low+high)/2;const x=3*(1-t)*(1-t)*t*.33+3*(1-t)*t*t*.35+t*t*t;if(x<p)low=t;else high=t;}return 3*(1-t)*(1-t)*t*.75+3*(1-t)*t*t+t*t*t;};
+        const swap=(from,to,t)=>tl.to(from,{opacity:0,duration:.15},t).to(to,{opacity:1,duration:.2},t+.15);
+        // Direct samples of the real renderer, preserving its CSS/WAAPI timing.
+        const sequence=(prefix,start)=>{for(let i=0;i<19;i++){const at=start+i/60;tl.fromTo('#'+prefix+'-'+String(i).padStart(3,'0'),{opacity:0},{opacity:1,duration:0,immediateRender:false},at);if(i)tl.to('#'+prefix+'-'+String(i-1).padStart(3,'0'),{opacity:0,duration:0},at);}};
+        tl.to('#demo-cursor',{opacity:1,x:670,y:-89,duration:.35},.4);
+        sequence('collapse',.85);
+        tl.to('#demo-note',{opacity:0,duration:0},.85);
+        swap('#caption-1','#caption-2',.9);
+        tl.to('#demo-cursor',{x:270,y:-86,duration:.2},1.28);
+        tl.to('#collapse-layer',{x:254,duration:.55},1.6);
+        tl.to('#demo-cursor',{x:524,y:-86,duration:.55},1.6);
+        sequence('dock',2.25);
+        tl.to('#collapse-layer',{opacity:0,duration:0},2.25);
+        tl.to('#demo-cursor',{opacity:0,duration:.15},2.16);
+        swap('#caption-2','#caption-3',2.6);
+        tl.to('#demo-cursor',{opacity:1,x:910,y:-86,duration:.3},3.35);
+        // Native peek: 180ms easeOutCubic. Last dock frame remains the surface.
+        tl.to('#dock-layer',{x:-64,duration:.18,ease:'power2.out'},3.7);
+        swap('#caption-3','#caption-hover',3.6);
+        tl.to('#demo-cursor',{x:880,y:-86,duration:.35},4.3);
+        tl.to('#dock-layer',{x:-670,duration:.9},5.15);
+        tl.to('#demo-cursor',{x:274,y:-86,duration:.9},5.15);
+        swap('#caption-hover','#caption-4',5.2);
+        tl.fromTo('#demo-note',{clipPath:'inset(0px 352px 370.666667px 0px round 8px)'},{clipPath:'inset(0px 0px 0px 0px round 8px)',duration:.34,ease:nativeEase,immediateRender:false},6.12);
+        tl.to('#demo-note',{opacity:1,duration:0},6.12);
+        // Match the real 120ms landing hold followed by a 120ms dissolve.
+        tl.to('#dock-layer',{opacity:0,duration:.12},6.24);
+        tl.to('#demo-cursor',{opacity:0,duration:.2},6.65);
+        swap('#caption-4','#caption-1',8.7);
+        window.__timelines['edge-dock']=tl;
+        tl.seek(0);
+      </script>
+    </div>
+  </body>
+</html>

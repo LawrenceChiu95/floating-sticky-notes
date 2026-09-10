@@ -4,7 +4,7 @@
 
 一张始终置顶的桌面便利贴，让要记的事留在眼前。
 
-![悬浮便签：文档和网页在下面，便签始终留在工作视线里](assets/showcase/seen/hero.png)
+![悬浮便签：文档和网页在下面，便签始终留在工作视线里](../../assets/showcase/seen/hero.png)
 
 <p align="center">
   <a href="https://github.com/LawrenceChiu95/floating-sticky-notes-updates/releases/download/v0.1.21/StickyNotes-Setup-0.1.21.exe"><strong>下载 Windows 版</strong></a>
@@ -20,9 +20,9 @@
 
 悬浮便签把这个习惯带到电脑上：它持续显示在普通工作窗口上方。切换文档、打开网页时，刚才记下的事仍然看得见。
 
-![文档和网页切换时，同一张便签始终留在它们上方的界面演示](assets/showcase/github/visibility.gif)
+![文档和网页切换时，同一张便签始终留在它们上方的界面演示](../../assets/showcase/github/visibility.gif)
 
-[查看清晰版演示](assets/showcase/video/visibility.mp4)
+[查看清晰版演示](../../assets/showcase/video/visibility.mp4)
 
 ## 留在眼前，也懂得让开
 
@@ -30,13 +30,13 @@
 
 **鼠标移上去，书签探出来；拖回桌面，完整便签展开。**
 
-![便签收起、贴到屏幕边缘、再拖回桌面展开的界面演示](assets/showcase/github/edge-dock.gif)
+![便签收起、贴到屏幕边缘、再拖回桌面展开的界面演示](../../assets/showcase/github/edge-dock.gif)
 
-[查看清晰版短视频](assets/showcase/video/edge-dock.mp4)
+[查看清晰版短视频](../../assets/showcase/video/edge-dock.mp4)
 
 ## 让你想记住的，留在眼前
 
-![真实便签里的待办、子任务和参考图](assets/showcase/github/features.png)
+![真实便签里的待办、子任务和参考图](../../assets/showcase/github/features.png)
 
 - **想做的事。** 写成待办，拆一层子任务，边做边勾。
 - **忽然的灵感。** 随手记两句，给每张便签命名，选喜欢的颜色与透明度。
@@ -48,9 +48,9 @@
 
 ## 下载与安装
 
-当前版本免费下载，源码采用 [MIT 许可证](LICENSE) 开放。
+当前版本免费下载，源码采用 [MIT 许可证](../../LICENSE) 开放。
 
-当前版本：**[0.1.21](https://github.com/LawrenceChiu95/floating-sticky-notes/releases/tag/v0.1.21)** · [更新记录](CHANGELOG.md)
+当前版本：**[0.1.21](https://github.com/LawrenceChiu95/floating-sticky-notes/releases/tag/v0.1.21)** · [更新记录](../../CHANGELOG.md)
 
 | 你的电脑 | 安装包 | 首次安装 |
 | --- | --- | --- |
@@ -93,14 +93,14 @@ npm run build
 npx --yes npm@11 audit
 ```
 
-项目使用 npm 10 安装依赖、npm 11 执行安全审计。修改依赖或 `overrides` 时，参见[贡献指南中的依赖维护流程](CONTRIBUTING.md#依赖维护)。当前依赖审计事项见 [Issue #23](https://github.com/LawrenceChiu95/floating-sticky-notes/issues/23)。
+项目使用 npm 10 安装依赖、npm 11 执行安全审计。修改依赖或 `overrides` 时，参见[贡献指南中的依赖维护流程](../../CONTRIBUTING.md#依赖维护)。当前依赖审计事项见 [Issue #23](https://github.com/LawrenceChiu95/floating-sticky-notes/issues/23)。
 
 ```bash
 npm run dist:win  # Windows x64 NSIS Setup
 npm run dist:mac  # Apple Silicon Mac DMG，ad-hoc 签名
 ```
 
-Windows 只维护 Setup 安装包，不提供 portable 便携包。架构和发布流程见 [架构说明](docs/architecture.md)与[发布指南](docs/releasing.md)。
+Windows 只维护 Setup 安装包，不提供 portable 便携包。架构和发布流程见 [架构说明](../../docs/architecture.md)与[发布指南](../../docs/releasing.md)。
 
 更新资源存放在 [floating-sticky-notes-updates](https://github.com/LawrenceChiu95/floating-sticky-notes-updates)；源码、Issue 和变更记录在本仓库维护。
 
@@ -112,6 +112,6 @@ Windows 只维护 Setup 安装包，不提供 portable 便携包。架构和发�
 
 由 [Lawrence](https://github.com/LawrenceChiu95) 制作。欢迎告诉我，你把什么留在了眼前。
 
-欢迎提交 Bug、建议和 Pull Request。[贡献指南](CONTRIBUTING.md) · [安全问题反馈](SECURITY.md) · [产品展示素材](docs/distribution/README.md)
+欢迎提交 Bug、建议和 Pull Request。[贡献指南](../../CONTRIBUTING.md) · [安全问题反馈](../../SECURITY.md) · [产品展示素材](../../docs/distribution/README.md)
 
-本项目采用 MIT 许可证：[原文](LICENSE) · [中文参考译文](LICENSE.zh-CN.md)。
+本项目采用 MIT 许可证：[原文](../../LICENSE) · [中文参考译文](../../LICENSE.zh-CN.md)。

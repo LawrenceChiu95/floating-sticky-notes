@@ -1,0 +1,83 @@
+[
+  {
+    "card": "hero",
+    "width": 1600,
+    "height": 1000,
+    "bytes": 251115,
+    "missingImages": [],
+    "overflow": false,
+    "consoleErrors": []
+  },
+  {
+    "card": "cover",
+    "width": 1080,
+    "height": 1440,
+    "bytes": 237789,
+    "missingImages": [],
+    "overflow": false,
+    "consoleErrors": []
+  },
+  {
+    "card": "philosophy",
+    "width": 1080,
+    "height": 1440,
+    "bytes": 814029,
+    "missingImages": [],
+    "overflow": false,
+    "consoleErrors": []
+  },
+  {
+    "card": "cover",
+    "width": 1080,
+    "height": 1440,
+    "bytes": 237789,
+    "missingImages": [],
+    "overflow": false,
+    "consoleErrors": []
+  },
+  {
+    "card": "philosophy",
+    "width": 1080,
+    "height": 1440,
+    "bytes": 814029,
+    "missingImages": [],
+    "overflow": false,
+    "consoleErrors": []
+  },
+  {
+    "card": "02",
+    "width": 1080,
+    "height": 1440,
+    "bytes": 126207,
+    "missingImages": [],
+    "overflow": false,
+    "consoleErrors": []
+  },
+  {
+    "card": "03",
+    "width": 1080,
+    "height": 1440,
+    "bytes": 223483,
+    "missingImages": [],
+    "overflow": false,
+    "consoleErrors": []
+  },
+  {
+    "card": "04",
+    "width": 1080,
+    "height": 1440,
+    "bytes": 270473,
+    "missingImages": [],
+    "overflow": false,
+    "consoleErrors": []
+  },
+  {
+    "card": "06",
+    "width": 1080,
+    "height": 1440,
+    "bytes": 256408,
+    "missingImages": [],
+    "overflow": false,
+    "consoleErrors": []
+  }
+]
