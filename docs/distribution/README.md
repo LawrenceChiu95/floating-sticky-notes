@@ -8,9 +8,9 @@
 
 ## 给朋友看的分享页
 
-公开地址：<https://lawrence-sticky-notes-review.gzf8cmm4hd.chatgpt.site>。提供中性 A/B 对比、两版完整介绍和修正后的演示视频；没有 Lead 推荐结论或投票表单。产品 GitHub 页面更新仍按选版流程单独决定。
+临时分享地址：<https://96ea5807e0c74a7fb2a93adc71066d19.app.workbuddy.link/seen/>。首页为已采用的 B 版，提供两段清晰演示，也可进入 A/B 对照；没有投票表单。请使用带 `/seen/` 的完整地址，避免旧文件路径的缓存。
 
-国内网络已出现访问失败，旧地址暂不能视为可靠的国内分享入口。改用 WorkBuddy 临时分享地址：<https://96ea5807e0c74a7fb2a93adc71066d19.app.workbuddy.link/>。静态成品位于 `release/workbuddy-deploy/site/`；平台未返回确切有效期，验证与后续状态见项目交接。
+静态成品位于 `release/workbuddy-deploy/site/seen/`，由 WorkBuddy 部署；平台未返回确切有效期，不将此链接当作永久官网。旧 chatgpt.site 分享站存在国内访问失败，不再作为推荐入口。
 
 ## 直接使用
 
