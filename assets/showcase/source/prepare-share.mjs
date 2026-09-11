@@ -37,11 +37,11 @@ for (const [label, source, name] of [['A', 'docs/distribution/README-a.md', 'a.h
   const page = `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>方案 ${label} · 悬浮便签</title><style>${style}</style><nav><a href="comparison.html">← 返回两版对比</a><span>方案 ${label} · 完整介绍</span></nav><article>${html}</article></html>`;
   await fs.writeFile(path.join(output, name), page);
   if (label === 'B') {
-    let selected = html.replace('欢迎点一下右上角的 <strong>Star ⭐</strong>', '欢迎到 <a href="https://github.com/LawrenceChiu95/floating-sticky-notes">GitHub 点一个 Star ⭐</a>');
+    let selected = html.replace('<strong>Star ⭐</strong>', '<a href="https://github.com/LawrenceChiu95/floating-sticky-notes">Star ⭐</a>');
     for (const [gif, video, poster] of [['visibility.gif', 'visibility.mp4', 'visibility-poster.png'], ['demo.gif', 'demo.mp4', 'demo-poster.png']]) {
       selected = selected.replace(new RegExp(`<img src="media/${gif.replace('.', '\\.')}"[^>]*>`), `<video controls playsinline preload="metadata" style="display:block;width:100%;height:auto;border-radius:8px" poster="media/${poster}" src="media/${video}"></video>`);
     }
-    await fs.writeFile(path.join(output, 'index.html'), `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>悬浮便签 · 这是「看见」的力量</title><style>${style}</style><nav><span>悬浮便签</span><a href="comparison.html">查看 A/B 对照</a></nav><article>${selected}</article></html>`);
+    await fs.writeFile(path.join(output, 'index.html'), `<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>悬浮便签 · 这是「看见」的力量</title><style>${style}</style><article>${selected}</article></html>`);
   }
 }
 console.log('Prepared selected B homepage, comparison, A/B introductions and local media.');
